@@ -1,0 +1,79 @@
+{
+    "display_name": "Журнал",
+    "name": "Journal",
+    "alias": "journal",
+    "slug": "journal",
+    "category": 1,
+    "description": "Журнал расходов описание.",
+    "full_description": "<p>Приложение содержит активити для Дизайнера Бизнес-процессов, конвертирующее документ из формата docx в формат pdf. </p><p>В качестве входных параметров подаётся id файла, который нужно сконвертировать, id папки, в которую нужно загрузить результат, и то, как нужно назвать сконвертированный файл. Вы можете не дописывать расширение (.pdf). </p><p>В результате в папку с указанным id будет сохранён сконвертированный файл.</p><p>При помощи вывода дополнительных результатов активити вы получите id получившегося файла, ссылку на его скачивание, ссылку на просмотр и сообщение о успешном завершении конвертации.</p><p>Активити может быть использовано как для бизнес-процессов в CRM, так и в Живой ленте.</p><p>Поскольку модуль запрашивает раздел системы «Бизнес-процессы», он доступен только на бизнес-тарифах \"Команда\" и \"Компания\".</p>",
+    "version": "<p><b>Версия 1.0.0</b></p><p>Выпуск модуля</p>",
+    "support": "<p>По всем вопросам пишите на адрес <a href>mail@mail.ru</a></p>",
+    "install": "<p>Нажмите кнопку установить и радуйтесь</p>",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Journal\\Providers\\JournalServiceProvider"
+    ],
+    "files": [],
+    "is_hidden": 1,
+    "entities": [{
+        "name": "journal_records",
+        "display_name_singular": "Запись",
+        "display_name_plural": "Журнал",
+        "class": "Modules\\Journal\\Entities\\Record",
+        "main": "1",
+        "sections": [{
+            "name": "Информация",
+            "fields": [{
+                "name": "name",
+                "display_name": "Название",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "status",
+                "display_name": "Статус",
+                "type": "status",
+                "visible_always": 1
+            },{
+                "name": "car_id",
+                "display_name": "Автопарк",
+                "table": "cars",
+                "type": "relation",
+                "visible_always": 1
+            },{
+                "name": "user_id",
+                "display_name": "Ответственный",
+                "table": "users",
+                "type": "relation",
+                "visible_always": 1
+            },{
+                "name": "photo",
+                "display_name": "Фото",
+                "type": "file",
+                "visible_always": 1
+            }]
+        }]
+    },{
+        "name": "cars",
+        "display_name_singular": "Автопарк",
+        "display_name_plural": "Автопарк",
+        "class": "App\\Models\\Car",
+        "main": "1",
+        "sections": []
+    },{
+        "name": "employees",
+        "display_name_singular": "Сотрудник",
+        "display_name_plural": "Сотрудники",
+        "class": "App\\Models\\Employee",
+        "main": "1",
+        "sections": []
+    },{
+        "name": "products",
+        "display_name_singular": "Товар",
+        "display_name_plural": "Товар",
+        "class": "Modules\\Products\\Entities\\Product",
+        "main": "1",
+        "sections": []
+    }]
+}
+

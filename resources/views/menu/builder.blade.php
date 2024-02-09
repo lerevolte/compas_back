@@ -1,0 +1,12 @@
+@extends('layouts.base')
+@section('title')
+Меню
+@endsection
+@section('h1')
+Меню
+@endsection
+@section('top_menu')
+@endsection
+@section('content')
+fd
+@endsection

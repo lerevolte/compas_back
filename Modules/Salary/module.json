@@ -1,0 +1,171 @@
+{
+    "display_name": "Зарплата",
+    "name": "Salary",
+    "alias": "salaries",
+    "slug": "salaries",
+    "category": 1,
+    "description": "Позвонляет сохранять популярные адреса разбивая на категории и использовать в Логистике.",
+    "full_description": "<p>Приложение содержит активити для Дизайнера Бизнес-процессов, конвертирующее документ из формата docx в формат pdf. </p><p>В качестве входных параметров подаётся id файла, который нужно сконвертировать, id папки, в которую нужно загрузить результат, и то, как нужно назвать сконвертированный файл. Вы можете не дописывать расширение (.pdf). </p><p>В результате в папку с указанным id будет сохранён сконвертированный файл.</p><p>При помощи вывода дополнительных результатов активити вы получите id получившегося файла, ссылку на его скачивание, ссылку на просмотр и сообщение о успешном завершении конвертации.</p><p>Активити может быть использовано как для бизнес-процессов в CRM, так и в Живой ленте.</p><p>Поскольку модуль запрашивает раздел системы «Бизнес-процессы», он доступен только на бизнес-тарифах \"Команда\" и \"Компания\".</p>",
+    "version": "<p><b>Версия 1.0.0</b></p><p>Выпуск модуля</p>",
+    "support": "<p>По всем вопросам пишите на адрес <a href>mail@mail.ru</a></p>",
+    "install": "<p>Нажмите кнопку установить и радуйтесь</p>",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Salary\\Providers\\SalaryServiceProvider"
+    ],
+    "files": [],
+    "is_hidden": 1,
+    "entities": [{
+        "name": "salaries",
+        "display_name_singular": "Зарплата",
+        "display_name_plural": "Зарплата",
+        "class": "App\\Models\\Salary",
+        "main": "1",
+        "sections": [{
+            "name": "Информация",
+            "fields": [{
+                "name": "name",
+                "display_name": "Название",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "date",
+                "display_name": "Дата",
+                "type": "date",
+                "visible_always": 1
+            },{
+                "name": "timework",
+                "display_name": "Отработано, часов",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "rate",
+                "display_name": "Ставка",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "increase",
+                "display_name": "Надбавка за переработку",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "award",
+                "display_name": "Премия",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "fund_percent",
+                "display_name": "Процент удержания в аварийный фонд",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "fund_sum",
+                "display_name": "Зачислено в аварийный фонд",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "status",
+                "display_name": "Выплата ЗП",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "comment",
+                "display_name": "Примечание",
+                "type": "text",
+                "visible_always": 1,
+                "is_plural": 1
+            },{
+                "name": "driver_id",
+                "display_name": "Сотрудник компании",
+                "table": "drivers",
+                "type": "relation",
+                "visible_always": 1
+            },{
+                "name": "user_id",
+                "display_name": "Ответственный",
+                "table": "users",
+                "type": "relation",
+                "visible_always": 1
+            }]
+        }]
+    },{
+        "name": "employees",
+        "display_name_singular": "Сотрудник",
+        "display_name_plural": "Сотрудники",
+        "class": "App\\Models\\Employee",
+        "description": "Описание сущности сотрудника",
+        "sections": [{
+            "name": "Информация",
+            "fields": [{
+                "name": "name",
+                "display_name": "Имя",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "phone",
+                "display_name": "Телефон",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "car_id",
+                "display_name": "Машины",
+                "type": "relation",
+                "table": "cars",
+                "is_plural": 1,
+                "visible_always": 1
+            },{
+                "name": "company_id",
+                "display_name": "Компания",
+                "table": "companies",
+                "type": "relation",
+                "visible_always": 1
+            },{
+                "name": "photo",
+                "display_name": "Фото",
+                "type": "file",
+                "visible_always": 1
+            },{
+                "name": "carrier_stat",
+                "display_name": "Статистика",
+                "type": "block",
+                "visible_always": 1
+            },{
+                "name": "app_id",
+                "display_name": "Пользователь для доступа в мобильное приложение водителя",
+                "table": "users",
+                "type": "relation",
+                "visible_always": 1
+            }]
+        }]
+    },{
+        "name": "routes",
+        "display_name_singular": "Маршрут",
+        "display_name_plural": "Маршруты",
+        "class": "App\\Models\\Route",
+        "description": "Описание сущности сотрудника",
+        "sections": []
+    }],
+    "changes_entities": [{
+        "class": "Modules\\Logistic\\Entities\\Driver",
+        "sections": [{
+            "name": "Расчет зарплаты",
+            "fields": [{
+                "name": "rate",
+                "display_name": "Ставка",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "increase",
+                "display_name": "Надбавка за переработку, руб",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "timework",
+                "display_name": "Смена часов",
+                "type": "text",
+                "visible_always": 1
+            }]
+        }]
+    }]
+}

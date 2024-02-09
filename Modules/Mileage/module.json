@@ -1,0 +1,94 @@
+{
+    "display_name": "Пробег, км / моточасы",
+    "name": "Mileage",
+    "alias": "mileages",
+    "slug": "mileages",
+    "category": 2,
+    "description": "Логистика описание.",
+    "full_description": "<p>Приложение содержит активити для Дизайнера Бизнес-процессов, конвертирующее документ из формата docx в формат pdf. </p><p>В качестве входных параметров подаётся id файла, который нужно сконвертировать, id папки, в которую нужно загрузить результат, и то, как нужно назвать сконвертированный файл. Вы можете не дописывать расширение (.pdf). </p><p>В результате в папку с указанным id будет сохранён сконвертированный файл.</p><p>При помощи вывода дополнительных результатов активити вы получите id получившегося файла, ссылку на его скачивание, ссылку на просмотр и сообщение о успешном завершении конвертации.</p><p>Активити может быть использовано как для бизнес-процессов в CRM, так и в Живой ленте.</p><p>Поскольку модуль запрашивает раздел системы «Бизнес-процессы», он доступен только на бизнес-тарифах \"Команда\" и \"Компания\".</p>",
+    "version": "<p><b>Версия 1.0.0</b></p><p>Выпуск модуля</p>",
+    "support": "<p>По всем вопросам пишите на адрес <a href>mail@mail.ru</a></p>",
+    "install": "<p>Нажмите кнопку установить и радуйтесь</p>",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Mileage\\Providers\\MileageServiceProvider"
+    ],
+    "files": [],
+    "is_hidden": 1,
+    "entities": [{
+        "name": "mileages",
+        "display_name_singular": "Пробег, км / моточасы",
+        "display_name_plural": "Пробег, км / моточасы",
+        "class": "App\\Models\\Mileage",
+        "main": "1",
+        "sections": [{
+            "name": "Информация",
+            "fields": [{
+                "name": "name",
+                "display_name": "Название",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "date",
+                "display_name": "Дата",
+                "type": "date",
+                "visible_always": 1
+            },{
+                "name": "emergency_fund_start_day",
+                "display_name": "Авариный фонд на начало дня",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "emergency_fund_end_day",
+                "display_name": "Авариный фонд на конец дня",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "emergency_fund_day",
+                "display_name": "Зачислено в аварийный фонд",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "comment",
+                "display_name": "Примечание",
+                "type": "text",
+                "visible_always": 1,
+                "is_plural": 1
+            },{
+                "name": "driver_id",
+                "display_name": "Сотрудник компании",
+                "table": "drivers",
+                "type": "relation",
+                "visible_always": 1
+            },{
+                "name": "user_id",
+                "display_name": "Ответственный",
+                "table": "users",
+                "type": "relation",
+                "visible_always": 1
+            }]
+        }]
+    },{
+        "name": "cars",
+        "display_name_singular": "Автопарк",
+        "display_name_plural": "Автопарк",
+        "class": "App\\Models\\Car",
+        "main": "1",
+        "sections": []
+    },{
+        "name": "employees",
+        "display_name_singular": "Сотрудник",
+        "display_name_plural": "Сотрудники",
+        "class": "App\\Models\\Employee",
+        "main": "1",
+        "sections": []
+    },{
+        "name": "routes",
+        "display_name_singular": "Маршрут",
+        "display_name_plural": "Маршруты",
+        "class": "App\\Models\\Route",
+        "main": "1",
+        "sections": []
+    }]
+}

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="52px" height="52px" viewBox="0 0 52 52" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>Group 20</title>
+    <defs>
+        <circle id="path-1" cx="25" cy="25" r="25"></circle>
+        <filter x="-4.0%" y="-4.0%" width="108.0%" height="108.0%" filterUnits="objectBoundingBox" id="filter-2">
+            <feGaussianBlur stdDeviation="1.5" in="SourceAlpha" result="shadowBlurInner1"></feGaussianBlur>
+            <feOffset dx="0" dy="0" in="shadowBlurInner1" result="shadowOffsetInner1"></feOffset>
+            <feComposite in="shadowOffsetInner1" in2="SourceAlpha" operator="arithmetic" k2="-1" k3="1" result="shadowInnerInner1"></feComposite>
+            <feColorMatrix values="0 0 0 0 0   0 0 0 0 0   0 0 0 0 0  0 0 0 0.5 0" type="matrix" in="shadowInnerInner1"></feColorMatrix>
+        </filter>
+    </defs>
+    <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="null01" transform="translate(-609.000000, -1825.000000)">
+            <g id="Group-20" transform="translate(610.000000, 1826.000000)">
+                <g id="Oval-12">
+                    <use fill="#FEDB75" fill-rule="evenodd" xlink:href="#path-1"></use>
+                    <use fill="black" fill-opacity="1" filter="url(#filter-2)" xlink:href="#path-1"></use>
+                    <use stroke="#E7C45F" stroke-width="1" xlink:href="#path-1"></use>
+                </g>
+                <path d="M17,23.6119787 L19.8070548,23.6119787 L19.8070548,11 L27.0421398,11 C28.38637,11 29.6119732,11.1515531 30.7189863,11.4546638 C31.8259993,11.7577745 32.7748535,12.2190231 33.5655771,12.8384232 C34.3563007,13.4578234 34.9756916,14.2419459 35.4237683,15.1908142 C35.871845,16.1396826 36.09588,17.2730361 36.09588,18.5909088 C36.09588,19.9087815 35.8586665,21.0553136 35.3842323,22.0305394 C34.9097981,23.0057652 34.2640502,23.8162447 33.4469691,24.4620024 C32.6298881,25.10776 31.6678554,25.5887763 30.5608423,25.9050658 C29.4538293,26.2213552 28.2545831,26.3794976 26.9630678,26.3794976 L22.9699335,26.3794976 L22.9699335,30.3726319 L29.3352268,30.3726319 L29.3352268,32.9820068 L22.9699335,32.9820068 L22.9699335,38.5565805 L19.8070548,38.5565805 L19.8070548,32.9820068 L17,32.9820068 L17,30.3726319 L19.8070548,30.3726319 L19.8070548,26.3794976 L17,26.3794976 L17,23.6119787 Z M27.0421398,23.6119787 C28.8608041,23.6119787 30.2906746,23.1968551 31.331794,22.3665953 C32.3729134,21.5363354 32.8934654,20.2777859 32.8934654,18.5909088 C32.8934654,16.9040318 32.3729134,15.6784285 31.331794,14.9140624 C30.2906746,14.1496962 28.8608041,13.7675188 27.0421398,13.7675188 L22.9699335,13.7675188 L22.9699335,23.6119787 L27.0421398,23.6119787 Z" id="₽" fill="#C74923"></path>
+            </g>
+        </g>
+    </g>
+</svg>

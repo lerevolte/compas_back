@@ -1,0 +1,58 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::create('products', function (Blueprint $table) {
+            $table->id();
+            $table->comment('');
+            $table->integer('id_b24')->nullable();
+            $table->string('name')->nullable();
+            $table->float('weight', 10, 0)->nullable();
+            $table->float('price', 10, 0)->nullable();
+            $table->string('link')->nullable();
+            $table->timestamps();
+            $table->integer('quantity')->nullable();
+            $table->string('stores')->nullable();
+            $table->integer('website_id')->nullable();
+            $table->string('brand')->nullable();
+            $table->bigInteger('barcode')->nullable();
+            $table->string('wb_link')->nullable();
+            $table->string('supplier_code')->nullable();
+            $table->string('wb_section')->nullable();
+            $table->string('wb_price')->nullable();
+            $table->string('wb_discount_price')->nullable();
+            $table->integer('wb_3')->nullable();
+            $table->integer('wb_discount')->nullable();
+            $table->timestamp('wb_date_discount')->nullable();
+            $table->string('wb_nm_id')->nullable();
+            $table->string('id1c')->nullable();
+            $table->float('costprice', 10, 0)->nullable();
+            $table->integer('updated_priority')->nullable()->default(0);
+            $table->integer('category_id')->nullable();
+            $table->float('wb_tariff_percent', 10, 0)->nullable();
+            $table->integer('wb_tariff_cost_corob')->nullable();
+            $table->integer('wb_tariff_cost_mono')->nullable();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::dropIfExists('products');
+    }
+};

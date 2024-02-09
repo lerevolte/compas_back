@@ -1,0 +1,23 @@
+{
+    "display_name": "Синхронизация с Битрикс 24",
+    "name": "Bitrix24",
+    "alias": "bitrix24",
+    "slug": "bitrix24",
+    "category": 3,
+    "description": "Модуль позволяет получать данные о сделках с вашего портала  Битрикс24",
+    "full_description": "Модуль позволяет получать данные о сделках с вашего портала  Битрикс24",
+    "version": "<p><b>Версия 1.0.0</b></p><p>Выпуск модуля</p>",
+    "support": "<p>По всем вопросам пишите на адрес <a href>mail@mail.ru</a></p>",
+    "install": "<p>Нажмите кнопку установить и радуйтесь</p>",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Bitrix24\\Providers\\Bitrix24ServiceProvider"
+    ],
+    "logo": "img/bitrix24.jpg",
+    "files": [],
+    "menu": [{
+        "name": "Битрикс24",
+        "link": "/bitrix24"
+    }]
+}

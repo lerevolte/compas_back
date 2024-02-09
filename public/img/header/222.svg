@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="163px" height="154px" viewBox="0 0 163 154" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>Group 42</title>
+    <defs>
+        <circle id="path-1" cx="8.5" cy="8.5" r="8.5"></circle>
+        <filter x="-323.5%" y="-329.4%" width="758.8%" height="758.8%" filterUnits="objectBoundingBox" id="filter-2">
+            <feMorphology radius="3.5" operator="dilate" in="SourceAlpha" result="shadowSpreadOuter1"></feMorphology>
+            <feOffset dx="1" dy="0" in="shadowSpreadOuter1" result="shadowOffsetOuter1"></feOffset>
+            <feGaussianBlur stdDeviation="15" in="shadowOffsetOuter1" result="shadowBlurOuter1"></feGaussianBlur>
+            <feColorMatrix values="0 0 0 0 0.843137255   0 0 0 0 0.435294118   0 0 0 0 0  0 0 0 0.413207154 0" type="matrix" in="shadowBlurOuter1"></feColorMatrix>
+        </filter>
+        <circle id="path-3" cx="78" cy="69" r="11"></circle>
+        <filter x="-250.0%" y="-254.5%" width="609.1%" height="609.1%" filterUnits="objectBoundingBox" id="filter-4">
+            <feMorphology radius="3.5" operator="dilate" in="SourceAlpha" result="shadowSpreadOuter1"></feMorphology>
+            <feOffset dx="1" dy="0" in="shadowSpreadOuter1" result="shadowOffsetOuter1"></feOffset>
+            <feGaussianBlur stdDeviation="15" in="shadowOffsetOuter1" result="shadowBlurOuter1"></feGaussianBlur>
+            <feColorMatrix values="0 0 0 0 0.843137255   0 0 0 0 0.435294118   0 0 0 0 0  0 0 0 0.279443701 0" type="matrix" in="shadowBlurOuter1"></feColorMatrix>
+        </filter>
+    </defs>
+    <g id="лендинг" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd" fill-opacity="1">
+        <g id="Desktop-HD-Copy-8" transform="translate(-410.000000, -498.000000)" fill="black">
+            <g id="Group-11" transform="translate(142.000000, 499.000000)">
+                <g id="Group-9-Copy" transform="translate(297.000000, 0.000000)">
+                    <g id="Group-42" transform="translate(7.000000, 36.000000)">
+                        <g id="Oval">
+                            <use filter="url(#filter-2)" xlink:href="#path-1"></use>
+                        </g>
+                        <g id="Oval-Copy-2">
+                            <use filter="url(#filter-4)" xlink:href="#path-3"></use>
+                        </g>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

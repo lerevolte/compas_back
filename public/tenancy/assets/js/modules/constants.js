@@ -1,0 +1,12 @@
+export const EDIT_CLASS = 'edit';
+export const ACTIVE_CLASS = 'active';
+export const SELECT_CLASS = 'selected';
+export const DRAGGABLE_CLASS = 'draggable';
+export const EXPANDED_CLASS = 'expanded';
+export const SHOWED_CLASS = 'showed';
+export const SHOW_CLASS = 'show';
+export const HIDDEN_CLASS = 'hidden';
+export const STICKY_CLASS = 'sticky';
+export const SORTED_CLASS = 'sorted';
+export const TABLE_CLASS = 'table__inner';
+export const TABLE_ROW_CLASS = 'table-body__row';

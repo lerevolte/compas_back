@@ -1,0 +1,106 @@
+{
+    "display_name": "Штрафы ГИБДД",
+    "name": "Gibdd",
+    "alias": "gibdd",
+    "slug": "gibdd",
+    "category": 3,
+    "description": "Штрафы Гибдд описание.",
+    "full_description": "<p>Приложение содержит активити для Дизайнера Бизнес-процессов, конвертирующее документ из формата docx в формат pdf. </p><p>В качестве входных параметров подаётся id файла, который нужно сконвертировать, id папки, в которую нужно загрузить результат, и то, как нужно назвать сконвертированный файл. Вы можете не дописывать расширение (.pdf). </p><p>В результате в папку с указанным id будет сохранён сконвертированный файл.</p><p>При помощи вывода дополнительных результатов активити вы получите id получившегося файла, ссылку на его скачивание, ссылку на просмотр и сообщение о успешном завершении конвертации.</p><p>Активити может быть использовано как для бизнес-процессов в CRM, так и в Живой ленте.</p><p>Поскольку модуль запрашивает раздел системы «Бизнес-процессы», он доступен только на бизнес-тарифах \"Команда\" и \"Компания\".</p>",
+    "version": "<p><b>Версия 1.0.0</b></p><p>Выпуск модуля</p>",
+    "support": "<p>По всем вопросам пишите на адрес <a href>mail@mail.ru</a></p>",
+    "install": "<p>Нажмите кнопку установить и радуйтесь</p>",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Gibdd\\Providers\\GibddServiceProvider"
+    ],
+    "logo": "img/logo.png",
+    "files": [],
+    "entities": [{
+        "name": "cars",
+        "display_name_singular": "Автопарк",
+        "display_name_plural": "Автопарк",
+        "class": "App\\Models\\Car",
+        "description": "Описание сущности машины",
+        "sections": [{
+            "name": "Информация",
+            "fields": [{
+                "name": "name",
+                "display_name": "Название",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "color_status",
+                "display_name": "Цвет",
+                "type": "status",
+                "visible_always": 1
+            },{
+                "name": "employee_id",
+                "display_name": "Сотрудник",
+                "table": "employees",
+                "type": "relation",
+                "visible_always": 1
+            },{
+                "name": "company_id",
+                "display_name": "Компания",
+                "table": "companies",
+                "type": "relation",
+                "visible_always": 1
+            },{
+                "name": "photo",
+                "display_name": "Фото",
+                "type": "file",
+                "visible_always": 1
+            }]
+        }]
+    },{
+        "name": "fines_gibdd",
+        "display_name_singular": "Штрафы ГИБДД",
+        "display_name_plural": "Штрафы ГИБДД",
+        "class": "App\\Models\\GibddFine",
+        "sections": [{
+            "name": "Информация",
+            "fields": [{
+                "name": "name",
+                "display_name": "Имя",
+                "type": "text",
+                "visible_always": 1
+            }]
+        }]
+    }],
+    "changes_entities": [{
+        "class": "App\\Models\\Car",
+        "entity": "cars",
+        "fields": [{
+            "name": "number",
+            "display_name": "Рег номер",
+            "type": "text",
+            "visible_always": 1
+        },{
+            "name": "sts_number",
+            "display_name": "СТС",
+            "type": "text",
+            "visible_always": 1
+        }],
+        "need_check": 1
+    },{
+        "class": "App\\Models\\Employee",
+        "entity": "employees",
+        "fields": [{
+            "name": "driver_license",
+            "display_name": "ВУ",
+            "type": "text",
+            "visible_always": 1
+        }],
+        "need_check": 1
+    },{
+        "class": "App\\Models\\GibddFine",
+        "entity": "fines_gibdd",
+        "fields": [],
+        "need_check": 0,
+        "buttons":[{
+            "name": "Проверить штрафы",
+            "action": "gibdd/check"
+        }]
+    }]
+}

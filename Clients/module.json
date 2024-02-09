@@ -1,0 +1,77 @@
+{
+    "display_name": "Клиенты",
+    "name": "Clients",
+    "alias": "clients",
+    "category": 1,
+    "description": "Клиенты описание.",
+    "full_description": "<p>Приложение содержит активити для Дизайнера Бизнес-процессов, конвертирующее документ из формата docx в формат pdf. </p><p>В качестве входных параметров подаётся id файла, который нужно сконвертировать, id папки, в которую нужно загрузить результат, и то, как нужно назвать сконвертированный файл. Вы можете не дописывать расширение (.pdf). </p><p>В результате в папку с указанным id будет сохранён сконвертированный файл.</p><p>При помощи вывода дополнительных результатов активити вы получите id получившегося файла, ссылку на его скачивание, ссылку на просмотр и сообщение о успешном завершении конвертации.</p><p>Активити может быть использовано как для бизнес-процессов в CRM, так и в Живой ленте.</p><p>Поскольку модуль запрашивает раздел системы «Бизнес-процессы», он доступен только на бизнес-тарифах \"Команда\" и \"Компания\".</p>",
+    "version": "<p><b>Версия 1.0.0</b></p><p>Выпуск модуля</p>",
+    "support": "<p>По всем вопросам пишите на адрес <a href>mail@mail.ru</a></p>",
+    "install": "<p>Нажмите кнопку установить и радуйтесь</p>",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+         "Modules\\Clients\\Providers\\ClientsServiceProvider"
+    ],
+    "files": [],
+    "main": "1",
+    "entities": [{
+        "name": "clients",
+        "display_name_singular": "Клиент",
+        "display_name_plural": "Клиенты",
+        "class": "Modules\\Clients\\Entities\\Client",
+        "sections": [{
+            "name": "Информация",
+            "fields": [{
+                "name": "id",
+                "display_name": "ID",
+                "type": "text",
+                "visible_always": 1,
+                "read_only": 1
+            },{
+                "name": "created_at",
+                "display_name": "Дата создания",
+                "type": "text",
+                "visible_always": 1,
+                "read_only": 1
+            },{
+                "name": "updated_at",
+                "display_name": "Дата изменения",
+                "type": "text",
+                "visible_always": 1,
+                "read_only": 1
+            },{
+                "name": "name",
+                "display_name": "Имя",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "last_name",
+                "display_name": "Фамилия",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "middle_name",
+                "display_name": "Отчество",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "phone",
+                "display_name": "Телефон",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "email",
+                "display_name": "Email",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "user_id",
+                "display_name": "Ответственный",
+                "table": "users",
+                "type": "relation",
+                "visible_always": 1
+            }]
+        }]
+    }]
+}

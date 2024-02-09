@@ -1,0 +1,115 @@
+{
+    "display_name": "Аварийный фонд",
+    "name": "EmergencyFund",
+    "alias": "emergencyfund",
+    "slug": "emergencyfund",
+    "category": 1,
+    "description": "Позвонляет сохранять популярные адреса разбивая на категории и использовать в Логистике.",
+    "full_description": "<p>Приложение содержит активити для Дизайнера Бизнес-процессов, конвертирующее документ из формата docx в формат pdf. </p><p>В качестве входных параметров подаётся id файла, который нужно сконвертировать, id папки, в которую нужно загрузить результат, и то, как нужно назвать сконвертированный файл. Вы можете не дописывать расширение (.pdf). </p><p>В результате в папку с указанным id будет сохранён сконвертированный файл.</p><p>При помощи вывода дополнительных результатов активити вы получите id получившегося файла, ссылку на его скачивание, ссылку на просмотр и сообщение о успешном завершении конвертации.</p><p>Активити может быть использовано как для бизнес-процессов в CRM, так и в Живой ленте.</p><p>Поскольку модуль запрашивает раздел системы «Бизнес-процессы», он доступен только на бизнес-тарифах \"Команда\" и \"Компания\".</p>",
+    "version": "<p><b>Версия 1.0.0</b></p><p>Выпуск модуля</p>",
+    "support": "<p>По всем вопросам пишите на адрес <a href>mail@mail.ru</a></p>",
+    "install": "<p>Нажмите кнопку установить и радуйтесь</p>",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\EmergencyFund\\Providers\\EmergencyFundServiceProvider"
+    ],
+    "logo": "img/fund.jpg",
+    "files": [],
+    "is_hidden": 1,
+    "entities": [{
+        "name": "emergencyfund",
+        "display_name_singular": "Аварийный фонд",
+        "display_name_plural": "Аварийный фонд",
+        "class": "App\\Models\\FundRecord",
+        "main": "1",
+        "sections": [{
+            "name": "Информация",
+            "fields": [{
+                "name": "name",
+                "display_name": "Название",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "date",
+                "display_name": "Дата",
+                "type": "date",
+                "visible_always": 1
+            },{
+                "name": "emergency_fund_start_day",
+                "display_name": "Авариный фонд на начало дня",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "emergency_fund_end_day",
+                "display_name": "Авариный фонд на конец дня",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "emergency_fund_day",
+                "display_name": "Зачислено в аварийный фонд",
+                "type": "text",
+                "visible_always": 1
+            },{
+                "name": "comment",
+                "display_name": "Примечание",
+                "type": "text",
+                "visible_always": 1,
+                "is_plural": 1
+            },{
+                "name": "driver_id",
+                "display_name": "Сотрудник компании",
+                "table": "drivers",
+                "type": "relation",
+                "visible_always": 1
+            },{
+                "name": "user_id",
+                "display_name": "Ответственный",
+                "table": "users",
+                "type": "relation",
+                "visible_always": 1
+            }]
+        }]
+    },{
+        "name": "cars",
+        "display_name_singular": "Автопарк",
+        "display_name_plural": "Автопарк",
+        "class": "App\\Models\\Car",
+        "main": "1",
+        "sections": []
+    },{
+        "name": "employees",
+        "display_name_singular": "Сотрудник",
+        "display_name_plural": "Сотрудники",
+        "class": "App\\Models\\Employee",
+        "main": "1",
+        "sections": []
+    },{
+        "name": "salaries",
+        "display_name_singular": "Зарплата",
+        "display_name_plural": "Зарплаты",
+        "class": "App\\Models\\Salary",
+        "main": "1",
+        "sections": []
+    }],
+    "changes_entities": [{
+        "class": "App\\Models\\Employee",
+        "entity": "employees",
+        "fields": [{
+            "name": "fund_percent",
+            "display_name": "Процент удержания в аварийный фонд",
+            "type": "text",
+            "visible_always": 1
+        },{
+            "name": "fund_calculate_type",
+            "display_name": "Удерживать аварийный фонд",
+            "type": "select_dropdown",
+            "visible_always": 1,
+            "options": {
+                "От ставки": "От ставки",
+                "От премии": "От премии",
+                "От общей суммы": "От общей суммы"
+            }
+        }]
+    }]
+}

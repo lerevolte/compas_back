@@ -1,0 +1,15 @@
+{
+    "Addresses": false,
+    "Bitrix24": false,
+    "Products": true,
+    "Logistic": true,
+    "Journal": false,
+    "Clients": true,
+    "Salary": false,
+    "EmergencyFund": true,
+    "Wialon": false,
+    "Tasks": true,
+    "Instructions": true,
+    "Mileage": false,
+    "Gibdd": true
+}
