@@ -29,7 +29,7 @@ class LogisticController extends Controller
             ])->first();
             \DB::table('settings')->insert([
                 'key' => $item->key,
-                'display_name' => $item->display_name,
+                'title' => $item->title,
                 'value' => $item->value,
                 'entity' => 'logistic',
                 'type' => 'logistic',
@@ -60,6 +60,31 @@ class LogisticController extends Controller
         return response()->json($request->menu);
     }
 
+    public function day_statistic(Request $request)
+    {
+        if($request->date)
+            $routes = \App\Models\Route::where('date', $request->date)->get();
+        else
+            $routes = \App\Models\Route::get();
+
+        $mileage = $time = $delivery_price = $reserve_for_delivery = $weight = 0;
+        foreach ($routes as $route) {
+            $mileage+= $route->mileage;
+            $time+= $route->time;
+            $delivery_price+= $route->delivery_price;
+            $reserve_for_delivery+= $route->reserve_for_delivery;
+            $weight+= $route->weight;
+        }
+
+        return response()->json([
+            'count_cars' => $routes->count(),
+            'mileage' => $mileage,
+            'time' => $time,
+            'delivery_price' => $delivery_price,
+            'reserve_for_delivery' => $reserve_for_delivery,
+            'weight' => $weight
+        ]);
+    }
     /**
      * Show the form for creating a new resource.
      * @return Renderable

@@ -40,7 +40,7 @@
                                 <ul class="dropdown-menu start-0">
                                     @if($hidden_fields = $active_filter->hidden_fields())
                                         @foreach($hidden_fields as $field)
-                                        <li><a class="dropdown-item js-filter-field-add" href="javascript:;" data-filter="{{ $active_filter->id }}" data-type="{{ $active_filter->data_type }}" data-field="{{ $field->field }}">{{ $field->display_name }}</a></li>
+                                        <li><a class="dropdown-item js-filter-field-add" href="javascript:;" data-filter="{{ $active_filter->id }}" data-type="{{ $active_filter->data_type }}" data-field="{{ $field->field }}">{{ $field->title }}</a></li>
                                         @endforeach
                                     @endif
                                 </ul>
@@ -249,14 +249,14 @@
                                     foreach($model_fields as $field) {
                                         $start_columns[] = array(
                                             'name' => $field->field,
-                                            'display_name' => ($field->display_parent_name ? $field->display_parent_name.'<br> ':'').$field->display_name,
+                                            'title' => ($field->display_parent_name ? $field->display_parent_name.'<br> ':'').$field->title,
                                             
                                         );
                                     }
                                     @endphp
                                     @foreach($start_columns as $col)
                                     <th class="text-center" data-name="{{ $col['name'] }}">
-                                        {!! $col['display_name'] !!}
+                                        {!! $col['title'] !!}
                                     </th>
                                     @endforeach
                                     <th class="text-center" data-name="actions">Действия</th>
@@ -272,13 +272,13 @@
                                     foreach($model_fields as $field) {
                                         $start_columns[] = array(
                                             'name' => $field->field,
-                                            'display_name' => ($field->display_parent_name ? $field->display_parent_name.'<br> ':'').$field->display_name,
+                                            'title' => ($field->display_parent_name ? $field->display_parent_name.'<br> ':'').$field->title,
                                             
                                         );
                                     }
                                     $start_columns[] = array(
                                         'name' => 'actions',
-                                        'display_name' => 'Действия',
+                                        'title' => 'Действия',
                                     );
                                     @endphp
                                     @foreach($start_columns as $col)

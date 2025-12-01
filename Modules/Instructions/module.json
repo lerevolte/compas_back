@@ -1,5 +1,5 @@
 {
-    "display_name": "Должностные инструкции",
+    "title": "Должностные инструкции",
     "name": "Instructions",
     "alias": "instructions",
     "slug": "instructions",
@@ -19,31 +19,31 @@
     "is_hidden": 1,
     "entities": [{
         "name": "instructions",
-        "display_name_singular": "Инструкция",
-        "display_name_plural": "Инструкции",
+        "title_singular": "Инструкция",
+        "title_plural": "Инструкции",
         "class": "Modules\\Instructions\\Entities\\Instruction",
         "description": "Должностные инструкции",
         "sections": [{
             "name": "Информация",
             "fields": [{
                 "name": "name",
-                "display_name": "Название",
+                "title": "Название",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "fine",
-                "display_name": "Штраф",
+                "title": "Штраф",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "user_id",
-                "display_name": "Сотрудник",
+                "title": "Сотрудник",
                 "table": "users",
                 "type": "relation",
                 "visible_always": 1
             },{
                 "name": "group_id",
-                "display_name": "Группа",
+                "title": "Группа",
                 "table": "instruction_group",
                 "type": "relation",
                 "visible_always": 1
@@ -51,48 +51,48 @@
         }]
     },{
         "name": "employees",
-        "display_name_singular": "Сотрудник",
-        "display_name_plural": "Сотрудники",
+        "title_singular": "Сотрудник",
+        "title_plural": "Сотрудники",
         "class": "App\\Models\\Employee",
         "description": "Описание сущности сотрудника",
         "sections": [{
             "name": "Информация",
             "fields": [{
                 "name": "name",
-                "display_name": "Имя",
+                "title": "Имя",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "phone",
-                "display_name": "Телефон",
+                "title": "Телефон",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "car_id",
-                "display_name": "Машины",
+                "title": "Машины",
                 "type": "relation",
                 "table": "cars",
                 "is_plural": 1,
                 "visible_always": 1
             },{
                 "name": "company_id",
-                "display_name": "Компания",
+                "title": "Компания",
                 "table": "companies",
                 "type": "relation",
                 "visible_always": 1
             },{
                 "name": "photo",
-                "display_name": "Фото",
+                "title": "Фото",
                 "type": "file",
                 "visible_always": 1
             },{
                 "name": "carrier_stat",
-                "display_name": "Статистика",
+                "title": "Статистика",
                 "type": "block",
                 "visible_always": 1
             },{
                 "name": "app_id",
-                "display_name": "Пользователь для доступа в мобильное приложение водителя",
+                "title": "Пользователь для доступа в мобильное приложение водителя",
                 "table": "users",
                 "type": "relation",
                 "visible_always": 1

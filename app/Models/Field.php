@@ -13,7 +13,7 @@ class Field extends Model
 
     public static function list($slug)
     {
-        $settings = get_settings();
+        $settings = app('settings');
 
         $entity = $settings['models'][$slug];
         $entity_class = $entity->model_name;
@@ -32,27 +32,26 @@ class Field extends Model
             if($field->type == 'status')
                 $fields_values[$field->field] = \App\Models\Field::getStatusesVisible($field->id);
             $field_colors[$field->field] = $field->label_color ? $field->label_color : null;
-            $perms['read'][$field->field] = '';//(!optional($request->user())->canRead($field->field, $slug) ? 'disabled':'');
-            $perms['write'][$field->field] = '';//(!optional($request->user())->canWrite($field->field, $slug) ? 'disabled':'');
-            if(!array_key_exists($field->field, $data) && $field->type != 'text_group') {
+            if(!array_key_exists($field->field, $data) && $field->type != 'text_group' && (!isset($settings[$slug]['perms'][$field->field]['read']) || $settings[$slug]['perms'][$field->field]['read'])) {
                 $data[$field->field] = array(
                     'id' => $field->id,
-                    'title' => $field->display_name,//.' '.($field->required ? '*' : ''),
+                    'title' => $field->title,//.' '.($field->required ? '*' : ''),
                     'type' => $field->type,
                     'read_only' => $field->only_read,
-                    'can_edit' => !$settings[$slug]['perms'][$field->field]['write'] ? 1 : 0,
+                    'can_read' => 1,
+                    'can_edit' => $field->only_read || !$settings[$slug]['perms'][$field->field]['write'] && !\Auth::user()->is_admin ? 0 : 1,//!$settings[$slug]['perms'][$field->field]['write'] ? 1 : 0,
                     'color' => $field_colors[$field->field],
                     'is_plural' => $field->is_plural,
                     'required' => $field->required
                 );
-                if(isset($settings[$slug]['list_values'][$field->field])) {
+                if(isset($settings['list_values'][$field->id])) {
                     if($field->type == 'relation') {
-                        $field_values = array_slice($settings[$slug]['list_values'][$field->field], 0, 19, true);
+                        $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true);
                     } else {
                         if(isset($settings[$slug]['options'][$field->field]))
                             $field_values = $settings[$slug]['options'][$field->field];
                         else
-                            $field_values = $settings[$slug]['list_values'][$field->field];
+                            $field_values = $settings['list_values'][$field->id];
                     }
                     $data[$field->field]['options'] = array_values($field_values);
                 };
@@ -226,10 +225,10 @@ class Field extends Model
                         $table_objects = \DB::table($details['table'])->whereNull('deleted_at')->get();
                 }
                 foreach ($table_objects as $object) {
-                    if(isset($object->display_name)) {
+                    if(isset($object->title)) {
                         $field_values[$object->id] = array(
                             'value' => $object->id,
-                            'label' => $object->display_name,
+                            'label' => $object->title,
                             'color' => isset($object->color) ? $object->color : '',
                             'file' => isset($object->avatar) ? $object->avatar : '',
                         );
@@ -241,7 +240,6 @@ class Field extends Model
                             'file' => isset($object->avatar) ? $object->avatar : '',
                         );
                     } elseif(isset($object->name)) {
-                        info($details['table'].' '.$object->id);
                         $field_values[$object->id] = array(
                             'value' => $object->id,
                             'label' => $object->name.(isset($object->last_name) ? ' '.$object->last_name:''),
@@ -276,7 +274,7 @@ class Field extends Model
 
     public static function getDataByObjectForList($field, $slug, $current)
     {
-        $settings = get_settings();
+        $settings = app('settings');
 
         $value = $current->{$field->field};
         $data = ValueHelper::isJson($value) && $field->field != 'products' && is_array(json_decode($value, true)) ? json_decode($value, true) : $value;
@@ -287,12 +285,12 @@ class Field extends Model
             $data = array();
             if(is_array($values)) {
                 foreach($values as $val) {
-                    if(isset($settings[$slug]['list_values'][$field->field][$val]))
-                        $data[] = $settings[$slug]['list_values'][$field->field][$val]['value'];
+                    if(isset($settings['list_values'][$field->id][$val]))
+                        $data[] = $settings['list_values'][$field->id][$val]['value'];
                 }
             }
-        } elseif($field->type == 'relation' && isset($settings[$slug]['list_values'][$field->field][$value])) {
-            $data = array($settings[$slug]['list_values'][$field->field][$value]['value']);
+        } elseif($field->type == 'relation' && isset($settings['list_values'][$field->id][$value])) {
+            $data = array($settings['list_values'][$field->id][$value]['value']);
         } elseif($field->type == 'relation') {
             $data = null;
         };
@@ -302,80 +300,60 @@ class Field extends Model
 
     public static function getDataByObject($field, $slug, $current)
     {
-        $settings = get_settings();
+        $settings = app('settings');
+        $entity = $settings['models'][$slug];
+
+        $permissions = \Auth::user()->role->permissions()->select([
+                'read_p',
+                'create_p',
+                'update_p',
+                'delete_p',
+                'export_p',
+                'import_p'
+            ])->where('entity_id', $entity->id)->first()->toArray();
 
         if($field->type == 'status')
             $fields_values[$field->field] = \App\Models\Field::getStatusesVisible($field->id);
-        $field_colors[$field->field] = $field->label_color ? $field->label_color : null;
         
         $val = (string)$current->{$field->field};
         $field_value = ValueHelper::isJson($val) && $field->field != 'products' && is_array(json_decode($val, true)) ? json_decode($val, true) : $val;
-        $fields_data[$field->field] = array(
-            'id' => $field->id,
-            'title' => $field->display_name,
-            'key' => $field->field,
-            'type' => $field->type,
-            'visible_always' => $field->visible_always,
-            'is_hidden' => $field->hide,
-            'is_plural' => $field->is_plural,
-            'show_file_name' => $field->show_file_name,
-            'is_external_link' => $field->is_external_link,
-            'is_link' => $field->is_link,
-            'external_link' => $field->external_link,
-            'required' => $field->required,
-            'read_only' => $field->only_read,
-            'permanent_required' => $field->permanent_required,
-            'permanent_name' => $field->permanent_name,
-            'is_permanent' => $field->is_permanent,
-            'can_edit' => !$settings[$slug]['perms'][$field->field]['write'] ? 1 : 0,
-            'color' => $field_colors[$field->field],
-            'group_id' => $field->group_id,
-            'button_name' => $field->button_name,
-            'value' => $field_value,
-            //'value' => $current->{$field->field},
-            'sort' => $field->sort,
-            'unit' => $field->unit,
-            'module' => $field->module,
-            'used_in_modules' => $settings[$slug]['used_in_modules'][$field->field],
-            'mask' => $field->mask,
-            'comparison' => $comparisons[$field->id] ?? null,
-            'editableFields' => array(
-                'id' => $field->id,
-                'model' => $slug,
-                'title' => $field->display_name,
-                'type' => $field->type,
-                'is_plural' => $field->is_plural,
-                'show_file_name' => $field->show_file_name,
-                'is_external_link' => $field->is_external_link,
-                'is_link' => $field->is_link,
-                'external_link' => $field->external_link,
-                'required' => $field->required,
-                'permanent_required' => $field->permanent_required,
-                'permanent_name' => $field->permanent_name,
-                'visible_always' => $field->visible_always,
-                'section_id' => $field->section_id,
-                'module_section_id' => $field->module_section_id,
-                'values' => array(
-                    array('value' => 0, 'label' => '')
-                ),
-                'set_color' => ($field->label_color ? $field->label_color : 0),
-                'color' => ($field->label_color ? $field->label_color : '#000'),
-                'button_name' => $field->button_name,
-                'has_roles_read' => ($field->roles_read ? 1 : 0),
-                'has_roles_write' => ($field->roles_write ? 1 : 0),
-                'roles_read' => ($field->roles_read ? json_decode($field->roles_read, true) : array()),
-                'roles_write' => ($field->roles_write ? json_decode($field->roles_write, true) : array()),
-                'show_in_mobile' => ($field->mobile_pages ? 1 : 0),
-                'blocked_changes' => $field->blocked_changes,
-                'mobile_pages' => ($field->mobile_pages ? json_decode($field->mobile_pages, true) : array()),
-                'unit' => $field->unit,
-                'statuses' => array()
-            )
+        if($field->type == 'relation' && $field->is_plural && $field->relation_table) {
+            $relation_table = $field->relation_table;
 
-        );
+            $field_value = $current->{$relation_table}->pluck('id')->toArray();
+        }
+
+        $fields_data[$field->field] = $settings[$slug]['field_data'][$field->field];//Field::getData($field);
+        $fields_data[$field->field]['can_read'] = $settings[$slug]['perms'][$field->field]['read'] || \Auth::user()->is_admin ? 1 : 0;
+        $fields_data[$field->field]['can_edit'] = isset($data['deleted_at']) || $field->only_read || !$settings[$slug]['perms'][$field->field]['write'] && !\Auth::user()->is_admin ? 0 : 1;
+        if($permissions['create_p'] == 'Y' && $field->field == 'user_id' && !\Auth::user()->is_admin) {
+            $fields_data[$field->field]['can_edit'] = 0;
+        }
+        if($permissions['update_p'] == 'Y' && $current->user_id != \Auth::user()->id && !\Auth::user()->is_admin && $slug != 'users' || 
+            $permissions['update_p'] == 'N' && !\Auth::user()->is_admin || $field->field == 'payment') {
+                $fields_data[$field->field]['can_edit'] = 0;
+        }
+
+        //$fields_data[$field->field]['can_edit'] = $field->only_read ? 0 : 1;//!$settings[$slug]['perms'][$field->field]['write'] ? 1 : 0;
+        $fields_data[$field->field]['value'] = $field->field == 'password' ? '' : $field_value;
+        $fields_data[$field->field]['used_in_modules'] = $settings[$slug]['used_in_modules'][$field->field];
+        //$fields_data[$field->field]['comparison'] = $comparisons[$field->id] ?? null;
+        //$fields_data[$field->field]['editableFields']['model'] = $slug;
+
+        if($field->type == 'file' && !isset($field_value[0]) && $field_value) {
+            $fields_data[$field->field]['value'] = array($field_value);
+        } elseif($field->type == 'file' && !isset($field_value[0]) && !$field_value) {
+            $fields_data[$field->field]['value'] = array();
+        } elseif($field->type == 'file') {
+            $fields_data[$field->field]['value'] = array();
+            foreach($field_value as $fval) {
+                if($fval)
+                    $fields_data[$field->field]['value'][] = $fval;
+            }
+        }
         $list_values = array();
-        if(isset($settings[$slug]['list_values'][$field->field]))
-            $list_values = $settings[$slug]['list_values'][$field->field];
+        if(isset($settings['list_values'][$field->id]))
+            $list_values = $settings['list_values'][$field->id];
         if($field->type == 'relation' && $field->is_plural) {
             $values = $field_value;
             $fields_data[$field->field]['value'] = array(
@@ -404,43 +382,50 @@ class Field extends Model
                 'localOptions' => array()
             );
         }
-        // if($field->type == 'relation' && $field->is_plural) {
-        //     $values = $fields_data[$field->field]['value'];
-        //     $fields_data[$field->field]['value'] = array();
-        //     if(is_array($values)) {
-        //         foreach($values as $val) {
-        //             if(isset($settings[$slug]['list_values'][$field->field][$val]))
-        //                 $fields_data[$field->field]['value'][] = $settings[$slug]['list_values'][$field->field][$val]['value'];
-        //         }
-        //     }
-        // } elseif($field->type == 'relation' && isset($settings[$slug]['list_values'][$field->field][$fields_data[$field->field]['value']])) {
-        //     $fields_data[$field->field]['value'] = array($settings[$slug]['list_values'][$field->field][$fields_data[$field->field]['value']]['value']);
-        // } elseif($field->type == 'relation') {
-        //     $fields_data[$field->field]['value'] = null;
+
+        // if($field->type == 'relation') {
+        //     if($field->field == 'category_id' || $field->field == 'role_id')
+        //         $fields_data[$field->field]['can_create'] = 0;
+        //     else
+        //         $fields_data[$field->field]['can_create'] = 1;
         // }
 
-        if($field->type == 'relation') {
-            if($field->field == 'category_id' || $field->field == 'role_id')
-                $fields_data[$field->field]['can_create'] = 0;
-            else
-                $fields_data[$field->field]['can_create'] = 1;
+
+        if($field->type == 'relation' && $field->field != 'role_id') {
+
+            $fields_data[$field->field]['can_create'] = 1;
+
+            if(isset($permissions_all[$settings['models'][$field->relation_table]->id]['create_p']) && !\Auth::user()->is_admin)
+                
+                $fields_data[$field->field]['can_create'] = $permissions_all[$settings['models'][$field->relation_table]->id]['create_p'] == 'N' ? 0 : 1;
+            if(isset($permissions_all[$settings['models'][$field->relation_table]->id]['update_p']) && !\Auth::user()->is_admin)
+                $fields_data[$field->field]['can_edit'] = $permissions_all[$settings['models'][$field->relation_table]->id]['update_p'] == 'N' ? 0 : 1;
+
         }
-        if(isset($settings[$slug]['list_values'][$field->field])) {
+
+        if($field->type == 'relation' && $field->relation_table && isset($restrictions_tariff['objects'][$field->relation_table]['count'])) {
+            if($restrictions_tariff['objects'][$field->relation_table]['count'] <= \DB::table($field->relation_table)->whereNull('deleted_at')->count()) {
+                $fields_data[$field->field]['can_create'] = 0;
+            };
+        }
+        if(isset($settings['list_values'][$field->id])) {
             $values = array();
             if($field->type == 'relation') {
-                $field_values = array_slice($settings[$slug]['list_values'][$field->field], 0, 19, true);
-                if($field->is_plural && is_array($fields_data[$field->field]['value'])) {
-                    if(isset($fields_data[$field->field]['value']['value']))
-                        foreach($fields_data[$field->field]['value']['value'] as $field_val) {
-                            $field_values[$field_val] = $settings[$slug]['list_values'][$field->field][$field_val];
-                        }
-                } elseif($current->{$field->field} && isset($settings[$slug]['list_values'][$field->field][$current->{$field->field}])) {
-                    $field_values[$current->{$field->field}] = $settings[$slug]['list_values'][$field->field][$current->{$field->field}];
+                $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true);
+                if($field->is_plural && isset($fields_data[$field->field]['value']['value'])) {
+                    foreach($fields_data[$field->field]['value']['value'] as $field_val) {
+                        $field_values[$field_val] = $settings['list_values'][$field->id][$field_val];
+                    }
+                } elseif($current->{$field->field} && isset($settings['list_values'][$field->id][$current->{$field->field}])) {
+                    $field_values[$current->{$field->field}] = $settings['list_values'][$field->id][$current->{$field->field}];
                 } elseif($current->{$field->field}) {
                     $field_values[$current->{$field->field}] = null;
                 }
             } else {
-                $field_values = $settings[$slug]['list_values'][$field->field];
+                if(isset($settings[$slug]['options'][$field->field]))
+                    $field_values = $settings[$slug]['options'][$field->field];
+                else
+                    $field_values = $settings['list_values'][$field->id];
             }
             $fields_data[$field->field]['options'] = array_values($field_values);
             $fields_data[$field->field]['choosed'] = [];
@@ -449,39 +434,62 @@ class Field extends Model
             if($field->type == 'status') {
                 $simple_options = array();
                 foreach($field_values as $option) {
-                    $simple_options[$option['value']] = $option['label']['text'];
-                    $values[] = array(
-                        'value' => $option['value'],
-                        'label' => $option['label']['text'],
-                        'sort' => $option['label']['sort']
-                    );
+                    if(isset($settings[$slug]['options'][$field->field])) {
+                        $simple_options[$option['value']] = $option['label']['text'];
+                        $values[] = array(
+                            'value' => $option['value'],
+                            'label' => $option['label']['text'],
+                            'sort' => $option['label']['sort']
+                        );
+                    } else {
+                        $simple_options[$option->id] = $option->value;
+                        $values[] = array(
+                            'value' => $option->id,
+                            'label' => $option->value,
+                            'sort' => $option->sort
+                        );
+                    }
+                    
                 }
             } else {
                 if($field->type == 'relation') {
-                    if($field->is_plural && isset($fields_data[$field->field]['value']['value'])) {
+                    if($field->is_plural && is_array($fields_data[$field->field]['value'])) {
                         foreach($fields_data[$field->field]['value']['value'] as $field_val) {
-                            $field_values[$field_val] = $settings[$slug]['list_values'][$field->field][$field_val];
+                            $field_values[$field_val] = $settings['list_values'][$field->id][$field_val]['value'];
                         }
-                    } elseif($current->{$field->field} && isset($settings[$slug]['list_values'][$field->field][$current->{$field->field}])) {
-                        $field_values[$current->{$field->field}] = $settings[$slug]['list_values'][$field->field][$current->{$field->field}];
+                    } elseif($current->{$field->field} && isset($settings['list_values'][$field->id][$current->{$field->field}])) {
+                        $field_values[$current->{$field->field}] = $settings['list_values'][$field->id][$current->{$field->field}];
                     } elseif($current->{$field->field}) {
                         $field_values[$current->{$field->field}] = null;
                     }
                 } else {
-                    $field_values = $settings[$slug]['list_values'][$field->field];
+                    $field_values = $settings['list_values'][$field->id];
                 }
                 foreach($field_values as $k => $option) {
                     $simple_options[$k] = $option;
-                    $values[] = array(
-                        'value' => $k,
-                        'label' => is_array($option) ? $option['label'] : $option,
-                        'sort' => is_array($option) && isset($option['sort']) ? $option['sort'] : $k
-                    );
+                    $values[] = $option;
+                    // $values[] = array(
+                    //     'label' => [    
+                    //         'id' => $k,
+                    //         'sort' => is_array($option) && isset($option['sort']) ? $option['sort'] : $k,
+                    //         'file' => $avatar,
+                    //         'is_hidden' => 0,
+                    //         'field_id' => $field->id,
+                    //         'color' => isset($current->color) && !$current->color ? $current->getColor() : ($current->color ?? ''),
+                    //         'text' => is_array($option) ? $option['label'] : $option
+                    //     ],
+                    //     'value' => $k
+                    // );
+                    // $values[] = array(
+                    //     'value' => $k,
+                    //     'label' => is_array($option) ? $option['label'] : $option,
+                    //     'sort' => is_array($option) && isset($option['sort']) ? $option['sort'] : $k
+                    // );
                 }
             }
-            $fields_data[$field->field]['editableFields']['values'] = $values;
-            if($field->type == 'status')
-                $fields_data[$field->field]['editableFields']['statuses'] = $settings[$slug]['list_values'][$field->field];
+            // $fields_data[$field->field]['editableFields']['values'] = $values;
+            // if($field->type == 'status')
+            //     $fields_data[$field->field]['editableFields']['statuses'] = $settings['list_values'][$field->id];
         };
         if($field->type == 'relation' && $t = json_decode($field->details, true)) {
             if(isset($t['table']))
@@ -492,19 +500,19 @@ class Field extends Model
             $values = array();
             $fields_data[$field->field]['options'] = array();
             foreach($subfields as $subfield) {
-                $fields_data[$field->field]['options'][$subfield->id] = $subfield->display_name;
+                //$fields_data[$field->field]['options'][$subfield->id] = $subfield->title;
                 $values[] = array(
                     'value' => $subfield->id,
-                    'label' => $subfield->display_name,
+                    'label' => $subfield->title,
                     'sort' => $subfield->sort
                 );
             };
-            $fields_data[$field->field]['editableFields']['values'] = $values;
+            $fields_data[$field->field]['options'] = $values;
             $fields_data[$field->field]['subfields'] = array();
             foreach($subfields as $subfield) {
                 $fields_data[$field->field]['subfields'][] = array(
                     'id' => $subfield->id,
-                    'title' => $subfield->display_name,
+                    'title' => $subfield->title,
                     'key' => $subfield->field,
                     'type' => $subfield->type,
                     'visible_always' => $field->visible_always,
@@ -512,8 +520,10 @@ class Field extends Model
                     'is_plural' => $field->is_plural,
                     'required' => $field->required,
                     'read_only' => $field->only_read,
-                    'can_edit' => !$settings[$slug]['perms'][$field->field]['write'] ? 1 : 0,
-                    'color' => $field_colors[$field->field],
+                    'can_read' => $settings[$slug]['perms'][$field->field]['read'] || \Auth::user()->is_admin ? 1 : 0,
+                    'can_edit' => $field->only_read || !$settings[$slug]['perms'][$field->field]['write'] && !\Auth::user()->is_admin ? 0 : 1,
+                    //'can_edit' => $field->only_read ? 0 : 1,//!$settings[$slug]['perms'][$field->field]['write'] ? 1 : 0,
+                    'color' => $field->label_color ? $field->label_color : null,
                     'group_id' => $subfield->group_id,
                     'value' => $current->{$subfield->field},
                     'sort' => $subfield->sort
@@ -522,5 +532,156 @@ class Field extends Model
         }
 
         return $fields_data[$field->field];
+    }
+
+    public function getData()
+    {
+        $data = array(
+            'id' => $this->id,
+            'has_roles_read' => ($this->roles_read ? 1 : 0),
+            'has_roles_write' => ($this->roles_write ? 1 : 0),
+            'roles_read' => ($this->roles_read ? json_decode($this->roles_read, true) : array()),
+            'roles_write' => ($this->roles_write ? json_decode($this->roles_write, true) : array()),
+            'subfields' => ($this->subfields ? json_decode($this->subfields, true) : array()),
+            'set_color' => $this->set_color,
+            'title' => $this->title,
+            'key' => $this->field,
+            'type' => $this->type,
+            'visible_always' => $this->visible_always,
+            'is_hidden' => $this->hide,
+            'is_plural' => $this->is_plural,
+            'is_external_link' => $this->is_external_link,
+            'required' => $this->required,
+            'read_only' => $this->only_read,
+            'permanent_required' => $this->permanent_required,
+            'permanent_name' => $this->permanent_name,
+            'is_permanent' => $this->is_permanent,
+            'color' => $this->label_color ? $this->label_color : null,
+            'value' => '',
+            'unit' => $this->unit,
+            'module' => $this->module,
+            'mask' => $this->mask,
+            'show_file_name' => $this->show_file_name,
+            'button_name' => $this->button_name,
+            'is_program' => $this->is_program,
+            'dependency_fields' => isset($this->dependency_fields) ? json_decode($this->dependency_fields, true) : null
+
+        );
+        return $data;
+    }
+
+    public static function getHumanValue($field, $value)
+    {
+        $settings = app('settings');
+        $res = '';
+        $arr_res = array();
+        $values_res = array();
+        if($field->type == 'status' && isset($settings['list_values'][$field->id])) {
+            $statuses = collect($settings['list_values'][$field->id]);
+            $visible_statuses = $statuses->filter(function ($status) {
+                    return !$status['label']['is_hidden'];
+                })->pluck('value')->toArray();
+            $status = $statuses->firstWhere('value', $value);
+
+
+            if($status && $status['label']['is_hidden']) {
+                $res = $status['label']['color'];
+            } elseif($status) {
+                $res = $status['label']['text'] ? $status['label']['text'] : ($status['label']['color'] ? $status['label']['color'] : '');
+            }
+            if(!$status) {
+                $status = \DB::table('field_values')->where('id', $value)->first();
+                if($status)
+                    $res = $status->color;
+            }
+        } elseif(isset($settings['list_values'][$field->id])) {
+
+            $list_values = $settings['list_values'][$field->id];
+            foreach($list_values as $k => $item) {
+                if(isset($item['label']))
+                    $list_values[$item['value']] = $item['label'];
+            }
+            if($field->is_plural) {
+                $res = array();
+                $value = is_array($value) ? $value : json_decode($value, true);
+                if($value && is_int($value))
+                    $value = array($value);
+                if($value) {
+                    foreach($value as $k => $val) {
+                        if(isset($list_values[$val])) {
+                            $v = is_array($list_values[$val]) && array_key_exists('text', $list_values[$val]) ? $list_values[$val]['text'] : $list_values[$val];
+                            $v = $v ? $v : $val;
+                            if($field->type == 'relation' && $field->relation_table && $val) 
+                                $v = "<span data-slug='$field->relation_table' data-id='$val'>$v</span>";
+                            $res[$k] = $v;
+                            $values_res[] = $val;
+                        } else {
+                            $new_ob = \DB::table($field->relation_table)->where('id', $val)->first();
+                            if(!$new_ob) {
+                                unset($res[$k]);
+                            } else {
+                                $v = "<span data-slug='$field->relation_table' data-id='$val'>$new_ob->name</span>";
+                                $res[$k] = $v;
+                                $values_res[] = $val;
+                            }
+                        }
+                    }
+                    $arr_res = $res;
+                    
+
+                    $res = implode(', ', $res);
+                } else {
+                    $res = '';
+                }
+            } else {
+                if(is_array($value)) {
+                    $value = array_pop($value);
+                }
+
+                $v = isset($list_values[$value]['text']) ? $list_values[$value]['text'] : '';
+                $v = isset($list_values[$value]) && !is_array($list_values[$value]) ? $list_values[$value] : $v;
+                $v = $v ? $v : $value;
+                if($field->type == 'relation' && $field->relation_table && $value) {
+                    $v = "<span data-slug='$field->relation_table' data-id='$value'>$v</span>";
+                    $arr_res = array($v);
+                    $values_res[] = $value;
+                };
+                $res = $v;
+            }
+        } else {
+            if($value && !is_int($value) && !is_array($value) && is_array($list = json_decode($value, true)) || is_array($value) && $list = $value) {
+                if($field->type == 'address' && is_array($list)) {
+                    $res = $list['text'];
+                } elseif($field->field== 'products' && is_array($list)) {
+                    $res = array();
+                    foreach($list as $product) {
+                        $res[] = $product['name'].' <b>'.$product['count'].'шт.</b>';
+                    }
+                    $res = implode(', ', $res);
+                } elseif($field->type == 'file' && is_array($list)) {
+                    $file_values = array();
+                    foreach($list as $v) {
+                        if(isset($v['name']))
+                            $file_values[] = $v['name'];
+                    }
+                    $res = implode(', ', $file_values);
+                } elseif(is_array($list)) {
+                    if(isset($list['value']) && isset($list['external_link'])) {
+                        $res = implode(', ', array_values($list));
+                    } elseif(isset($list['value'])) {
+                        $res = $list['value'];
+                    }
+                }
+            } elseif($field->type == 'date') {
+                $res = $value ? date('d.m.Y', strtotime($value)) : '';
+            } else {
+                $res = $value;
+                if(is_array($res))
+                    $res = implode(',',$res);
+            }
+        }
+        $object[$field->field] = $res;
+
+        return array('res' => $res, 'arr_res' => $arr_res, 'values' => $values_res);
     }
 }

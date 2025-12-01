@@ -1,5 +1,5 @@
 {
-    "display_name": "Штрафы ГИБДД",
+    "title": "Штрафы ГИБДД",
     "name": "Gibdd",
     "alias": "gibdd",
     "slug": "gibdd",
@@ -18,67 +18,279 @@
     "files": [],
     "entities": [{
         "name": "cars",
-        "display_name_singular": "Автопарк",
-        "display_name_plural": "Автопарк",
+        "title_singular": "Автопарк",
+        "title_plural": "Автопарк",
         "class": "App\\Models\\Car",
         "description": "Описание сущности машины",
         "sections": [{
             "name": "Информация",
             "fields": [{
-                "name": "name",
-                "display_name": "Название",
+                "name": "number",
+                "title": "Регистрационный номер",
                 "type": "text",
                 "visible_always": 1
             },{
-                "name": "color_status",
-                "display_name": "Цвет",
-                "type": "status",
-                "visible_always": 1
-            },{
-                "name": "employee_id",
-                "display_name": "Сотрудник",
-                "table": "employees",
-                "type": "relation",
+                "name": "sts_number",
+                "title": "СТС",
+                "type": "text",
                 "visible_always": 1
             },{
                 "name": "company_id",
-                "display_name": "Компания",
+                "title": "Компания",
                 "table": "companies",
                 "type": "relation",
-                "visible_always": 1
-            },{
-                "name": "photo",
-                "display_name": "Фото",
-                "type": "file",
                 "visible_always": 1
             }]
         }]
     },{
         "name": "fines_gibdd",
-        "display_name_singular": "Штрафы ГИБДД",
-        "display_name_plural": "Штрафы ГИБДД",
+        "title_singular": "Штрафы ГИБДД",
+        "title_plural": "Штрафы ГИБДД",
         "class": "App\\Models\\GibddFine",
         "sections": [{
             "name": "Информация",
             "fields": [{
                 "name": "name",
-                "display_name": "Имя",
+                "title": "Имя",
                 "type": "text",
                 "visible_always": 1
             }]
         }]
     }],
+    "settings": {
+        "fields": [{
+                "id": 1,
+                "has_roles_read": 0,
+                "has_roles_write": 0,
+                "roles_read": [],
+                "roles_write": [],
+                "set_color": 0,
+                "visible_always": 1,
+                "is_hidden": 0,
+                "is_plural": 0,
+                "is_external_link": 0,
+                "required": 0,
+                "read_only": 0,
+                "permanent_required": 0,
+                "permanent_name": 0,
+                "is_permanent": null,
+                "color": null,
+                "unit": "",
+                "module": null,
+                "mask": null,
+                "show_file_name": 0,
+                "button_name": "Загрузить",
+                "can_read": 1,
+                "can_edit": 1,
+                "used_in_module": [],
+                "choosed": [],
+                "key": "email",
+                "title": "E-mail для уведомлений о новых штрафах",
+                "type": "text",
+                "value": ""
+            },{
+                "id": 2,
+                "has_roles_read": 0,
+                "has_roles_write": 0,
+                "roles_read": [],
+                "roles_write": [],
+                "set_color": 0,
+                "visible_always": 1,
+                "is_hidden": 0,
+                "is_plural": 0,
+                "is_external_link": 0,
+                "required": 1,
+                "read_only": 0,
+                "permanent_required": 0,
+                "permanent_name": 0,
+                "is_permanent": null,
+                "color": null,
+                "unit": "",
+                "module": null,
+                "mask": null,
+                "show_file_name": 0,
+                "button_name": "Загрузить",
+                "can_read": 1,
+                "can_edit": 1,
+                "used_in_module": [],
+                "choosed": [],
+                "key": "update_rate",
+                "title": "Частота обновлений штрафов",
+                "type": "select_dropdown",
+                "value": 1,
+                "options": [{
+                    "label": "Каждый день",
+                    "value": 1
+                },{
+                    "label": "Каждые 3 дня",
+                    "value": 3
+                },{
+                    "label": "Каждые 5 дней",
+                    "value": 5
+                }]
+            },{
+                "id": 3,
+                "has_roles_read": 0,
+                "has_roles_write": 0,
+                "roles_read": [],
+                "roles_write": [],
+                "set_color": 0,
+                "visible_always": 1,
+                "is_hidden": 0,
+                "is_plural": 0,
+                "is_external_link": 0,
+                "required": 1,
+                "read_only": 0,
+                "permanent_required": 0,
+                "permanent_name": 0,
+                "is_permanent": null,
+                "color": null,
+                "unit": "",
+                "module": null,
+                "mask": null,
+                "show_file_name": 0,
+                "button_name": "Загрузить",
+                "can_read": 1,
+                "can_edit": 1,
+                "used_in_module": [],
+                "choosed": [],
+                "key": "load_photo",
+                "title": "Загрузка фотографии штрафа ",
+                "type": "select_dropdown",
+                "value": 0,
+                "options": [{
+                    "label": "Да - 1,5 руб",
+                    "value": 1
+                },{
+                    "label": "Нет",
+                    "value": 0
+                }]
+            },{
+                "id": 4,
+                "has_roles_read": 0,
+                "has_roles_write": 0,
+                "roles_read": [],
+                "roles_write": [],
+                "set_color": 0,
+                "visible_always": 1,
+                "is_hidden": 0,
+                "is_plural": 0,
+                "is_external_link": 0,
+                "required": 1,
+                "read_only": 0,
+                "permanent_required": 0,
+                "permanent_name": 0,
+                "is_permanent": null,
+                "color": null,
+                "unit": "",
+                "modul": null,
+                "mas": null,
+                "show_file_name": 0,
+                "button_name": "Загрузить",
+                "can_read": 1,
+                "can_edit": 1,
+                "used_in_module": [],
+                "choosed": [],
+                "key": "fines_distribution",
+                "title": "Распределение штрафов",
+                "type": "select_dropdown",
+                "value": 1,
+                "options": [{
+                    "label": "Равномерно всем",
+                    "value": 1
+                },{
+                    "label": "Определенному пользователю",
+                    "value": 2
+                },{
+                    "label": "Определенной роли",
+                    "value": 3
+                }]
+            },{
+                "id": 2024,
+                "has_roles_read": 0,
+                "has_roles_write": 0,
+                "roles_read": [],
+                "roles_write": [],
+                "set_color": 0,
+                "visible_always": 1,
+                "is_hidden": 0,
+                "is_plural": 0,
+                "is_external_link": 0,
+                "required": 0,
+                "read_only": 0,
+                "permanent_required": 0,
+                "permanent_name": 0,
+                "is_permanent": null,
+                "color": null,
+                "unit": "",
+                "module": null,
+                "mask": null,
+                "show_file_name": 0,
+                "button_name": "Загрузить",
+                "can_read": 1,
+                "can_edit": 1,
+                "used_in_module": [],
+                "choosed": [],
+                "key": "user_id",
+                "title": "Пользователь",
+                "type": "relation",
+                "value": {
+                    "value": [],
+                    "localOptions": []
+                },
+                "dependence_key": "fines_distribution",
+                "dependence_value": 2,
+                "related_table": "users"
+            },{
+                "id": 2025,
+                "has_roles_read": 0,
+                "has_roles_write": 0,
+                "roles_read": [],
+                "roles_write": [],
+                "set_color": 0,
+                "visible_always": 1,
+                "is_hidden": 0,
+                "is_plural": 0,
+                "is_external_link": 0,
+                "required": 0,
+                "read_only": 0,
+                "permanent_required": 0,
+                "permanent_name": 0,
+                "is_permanent": null,
+                "color": null,
+                "unit": "",
+                "module": null,
+                "mask": null,
+                "show_file_name": 0,
+                "button_name": "Загрузить",
+                "can_read": 1,
+                "can_edit": 1,
+                "used_in_module": [],
+                "choosed": [],
+                "key": "role_id",
+                "title": "Роль",
+                "type": "relation",
+                "value": {
+                    "value": [],
+                    "localOptions": []
+                },
+                "dependence_key": "fines_distribution",
+                "dependence_value": 3,
+                "related_table": "roles"
+        }]
+    },
+
     "changes_entities": [{
         "class": "App\\Models\\Car",
         "entity": "cars",
         "fields": [{
             "name": "number",
-            "display_name": "Рег номер",
+            "title": "Рег номер",
             "type": "text",
             "visible_always": 1
         },{
             "name": "sts_number",
-            "display_name": "СТС",
+            "title": "СТС",
             "type": "text",
             "visible_always": 1
         }],
@@ -88,7 +300,7 @@
         "entity": "employees",
         "fields": [{
             "name": "driver_license",
-            "display_name": "ВУ",
+            "title": "ВУ",
             "type": "text",
             "visible_always": 1
         }],
@@ -101,6 +313,18 @@
         "buttons":[{
             "name": "Проверить штрафы",
             "action": "gibdd/check"
+        },{
+            "name": "По номеру постановления",
+            "action": "gibdd/find_by_num"
+        }]
+    },{
+        "class": "App\\Models\\Autodor",
+        "entity": "autodor",
+        "fields": [],
+        "need_check": 0,
+        "buttons":[{
+            "name": "Проверить начисления",
+            "action": "gibdd/check_autodor"
         }]
     }]
 }

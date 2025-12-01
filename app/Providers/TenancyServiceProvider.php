@@ -94,7 +94,7 @@ class TenancyServiceProvider extends ServiceProvider
 
     public function register()
     {
-        //
+        
     }
 
     public function boot()
@@ -103,6 +103,7 @@ class TenancyServiceProvider extends ServiceProvider
         $this->mapRoutes();
 
         $this->makeTenancyMiddlewareHighestPriority();
+        
     }
 
     protected function bootEvents()

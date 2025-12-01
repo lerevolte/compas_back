@@ -1,0 +1,37 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::connection('seeds')->create('translations', function (Blueprint $table) {
+            $table->comment('');
+            $table->bigIncrements('id');
+            $table->string('table_name');
+            $table->string('column_name');
+            $table->unsignedInteger('foreign_key');
+            $table->string('locale');
+            $table->text('value');
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::connection('seeds')->dropIfExists('translations');
+    }
+};

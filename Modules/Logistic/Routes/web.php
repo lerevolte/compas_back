@@ -12,13 +12,13 @@ use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
 |
 */
 
-Route::middleware([
-    'web',
-    InitializeTenancyByDomain::class,
-    PreventAccessFromCentralDomains::class,
-])->group(function () {
-    Route::prefix('logistic')->group(function() {
-        Route::get('/', 'LogisticController@index');
-    });
+// Route::middleware([
+//     'web',
+//     InitializeTenancyByDomain::class,
+//     PreventAccessFromCentralDomains::class,
+// ])->group(function () {
+//     Route::prefix('logistic')->group(function() {
+//         Route::get('/', 'LogisticController@index');
+//     });
 
-});
+// });

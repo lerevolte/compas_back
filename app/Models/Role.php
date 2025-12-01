@@ -15,19 +15,6 @@ class Role extends \TCG\Voyager\Models\Role
 
     protected $guarded = [];
 
-    public function fines()
-    {
-        $roles = json_decode($this->role_id, true);
-        $fines = Fine::get();
-        $fine_ids = array();
-        foreach ($fines as $fine) {
-            if(strstr($fine->role_id, '"'.$this->id.'"'))
-                $fine_ids[] = $fine->id;
-            
-        }
-        return Fine::whereIn('id', $fine_ids)->orderBy('name')->get();
-    }
-
     public function users()
     {
 
@@ -36,7 +23,7 @@ class Role extends \TCG\Voyager\Models\Role
 
     public function permissions()
     {
-        return $this->belongsToMany(Permission::class);
+        return $this->hasMany(Permission::class);
     }
 
     public function permissions_tables()
@@ -48,7 +35,7 @@ class Role extends \TCG\Voyager\Models\Role
     {
         $data = array();
 
-        $items = Role::get();
+        $items = Role::orderBy('display_name', 'asc')->get();
         foreach($items as $item) {
             $data[] = array(
                 'id' => $item->id,
@@ -60,6 +47,11 @@ class Role extends \TCG\Voyager\Models\Role
         }
 
         return $data;
+    }
+
+    public function tabs()
+    {
+        return $this->belongsToMany(Tab::class, 'tab_roles');
     }
 
     // public function permissions_fields()

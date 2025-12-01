@@ -1,1 +1,0 @@
-import{_ as e}from"./_plugin-vue_export-helper.c27b6911.js";import{a as t,o}from"./entry.e3c99202.js";const r={};function c(n,s){return o(),t("p",null," Студенты ")}const f=e(r,[["render",c]]);export{f as default};

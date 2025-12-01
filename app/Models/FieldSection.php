@@ -11,7 +11,7 @@ class FieldSection extends Model
     use NodeTrait;
 
 	protected $guarded = ['id'];
-	protected $fillable = ['name', 'page', 'column_id', 'sort'];
+	protected $fillable = ['name', 'page', 'column_id', 'sort', 'is_short'];
     protected $hidden = [
         '_lft',
         '_rgt'
@@ -22,8 +22,15 @@ class FieldSection extends Model
     }
 
     public function module_fields() {
-        return \DB::table('data_rows')->whereJsonContains('module_section_id', $this->id)->where(['hide' => 0, 'is_remove' => 0])->orderBy('sort')->get();
-        //return $this->hasMany(Field::class, 'module_section_id')->where(['hide' => 0, 'is_remove' => 0])->whereNull('group_id')/*->where('hide', 0)*/->orderBy('sort');
+        $sorted_fields = \DB::table('section_fields_sort')->where('section_id', $this->id)->orderBy('sort')->get()->pluck('field_id')->toArray();
+        if(count($sorted_fields)) {
+            $sorted_fields = implode(',', $sorted_fields);
+            $data = \DB::table('data_rows')->whereJsonContains('module_section_id', $this->id)->where([/*'hide' => 0, */'is_remove' => 0])->orderByRaw("FIELD(id, $sorted_fields)")->get();
+        } else {
+            $data = \DB::table('data_rows')->whereJsonContains('module_section_id', $this->id)->where([/*'hide' => 0, */'is_remove' => 0])->orderBy('sort')->get();
+        }
+                
+        return $data;
     }
     //->whereJsonContains($field, (int)$val);
 
@@ -40,22 +47,22 @@ class FieldSection extends Model
     }
 
     public static function get(string $model, int $column_id = 1, $module = null) {
-        if($module)
-            $name = tenant('id').':section-'.$model.'-'.$column_id.'-'.$module;
-        else
-            $name = tenant('id').':section-'.$model.'-'.$column_id;
-        $sections = cache()->getMemcached()->get($name);
+        // if($module)
+        //     $name = tenant('id').':section-'.$model.'-'.$column_id.'-'.$module;
+        // else
+        //     $name = tenant('id').':section-'.$model.'-'.$column_id;
+        // $sections = cache()->getMemcached()->get($name);
         
-        if(!$sections) {
+        // if(!$sections) {
             //$sections = cache()->rememberForever($name, function() use ($model, $column_id, $module) {
             	$data = \App\Models\FieldSection::orderBy('sort');
                 $data = $data->where(['page' => $model, 'column_id' => $column_id, 'module' => $module]);  
                 $data = $data->get()->toTree();
                 $sections = $data;
-                cache()->getMemcached()->add($name, $sections);
+                //cache()->getMemcached()->add($name, $sections);
                // return $data;
             //});
-        }
+        //}
 
     	return $sections;
     }

@@ -46,7 +46,7 @@ class SidebarController extends Controller
         else
             \DB::table('local_cache')->insert(['url' => 'sidebar', 'user_id' => \Auth::user()->id, 'created_at' => $now, 'updated_at' => $now]);
 
-        cache()->getMemcached()->delete(tenant('id').':sidebar-'.\Auth::user()->id);
+        cache()->getMemcached()->delete(tenant('id').':sidebarmenu-'.\Auth::user()->id);
 
         // $keys = cache()->getMemcached()->getAllKeys();
         // $regex = tenant('id').':sidebar-'.$item->page.'-*';
@@ -72,9 +72,7 @@ class SidebarController extends Controller
 
     public function set(Request $request)
     {
-        info('SET SIDEBAR');
         $menu = json_encode($request->menu, JSON_UNESCAPED_UNICODE);
-        info($request->menu);
         \DB::table('settings')->where([
             'type' => 'sidebar',
             'user_id' => \Auth::user()->id
@@ -86,11 +84,62 @@ class SidebarController extends Controller
         else
             \DB::table('local_cache')->insert(['url' => "sidebar/get", 'user_id' => \Auth::user()->id, 'created_at' => $now, 'updated_at' => $now]);
 
-        $cache_name = tenant('id').':sidebar-'.\Auth::user()->id;
+        $cache_name = tenant('id').':sidebarmenu-'.\Auth::user()->id;
         cache()->getMemcached()->delete($cache_name);
         //$entity = \DB::table('data_types')->where('slug', $slug)->first();
 
         return response()->json($request->menu);
+    }
+
+    public function set_group(Request $request)
+    {
+        $sidebar = \DB::table('settings')->where([
+            'type' => 'sidebar',
+            'user_id' => \Auth::user()->id
+        ])->first();
+        $menu = json_decode($sidebar->value, true);
+        foreach($menu as $i => $item) {
+            if($item['id'] == $request->id && $item['is_group']) {
+                $menu[$i] = $request->data;
+            }
+        }
+        if(!$request->id) {
+            $menu[] = $request->data;
+        }
+        info('set_group');
+        info($request->data);
+        info($menu);
+        $menu = json_encode($menu, JSON_UNESCAPED_UNICODE);
+        $sidebar = \DB::table('settings')->where([
+            'type' => 'sidebar',
+            'user_id' => \Auth::user()->id
+        ])->update(['value' => $menu]);
+        info($menu);
+
+        $now = Carbon::now();
+        if(\DB::table('local_cache')->where(['url' => "sidebar/get", 'user_id' => \Auth::user()->id])->exists())
+            \DB::table('local_cache')->where(['url' => "sidebar/get", 'user_id' => \Auth::user()->id])->update(['updated_at' => $now]);
+        else
+            \DB::table('local_cache')->insert(['url' => "sidebar/get", 'user_id' => \Auth::user()->id, 'created_at' => $now, 'updated_at' => $now]);
+
+        $cache_name = tenant('id').':sidebarmenu-'.\Auth::user()->id;
+        cache()->getMemcached()->delete($cache_name);
+        //$entity = \DB::table('data_types')->where('slug', $slug)->first();
+
+        return response()->json($request->menu);
+    }
+
+    public function reset(Request $request)
+    {
+        $tenant = \App\Models\Tenant::find('seeds');
+        $menu = $tenant->run(function ($tenant) {
+            $user = \App\Models\User::find(1);
+            $menu = $user->getSidebar();
+
+            return $menu;
+        });
+
+        return response()->json($menu);
     }
 
     public function set_role($role_id, Request $request)
@@ -123,7 +172,7 @@ class SidebarController extends Controller
             else
                 \DB::table('local_cache')->insert(['url' => "sidebar/get", 'user_id' => $user->id, 'created_at' => $now, 'updated_at' => $now]);
 
-            $cache_name = tenant('id').':sidebar-'.$user->id;
+            $cache_name = tenant('id').':sidebarmenu-'.$user->id;
             cache()->getMemcached()->delete($cache_name);
         }
 
@@ -152,7 +201,7 @@ class SidebarController extends Controller
                 \DB::table('local_cache')->where(['url' => "sidebar/get", 'user_id' => $user->id])->update(['updated_at' => $now]);
             else
                 \DB::table('local_cache')->insert(['url' => "sidebar/get", 'user_id' => $user->id, 'created_at' => $now, 'updated_at' => $now]);
-            $cache_name = tenant('id').':sidebar-'.$user->id;
+            $cache_name = tenant('id').':sidebarmenu-'.$user->id;
             cache()->getMemcached()->delete($cache_name);
         }
 

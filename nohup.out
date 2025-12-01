@@ -1,0 +1,151 @@
+Cannot load Zend OPcache - it was already loaded
+PHP Warning:  PHP Startup: Unable to load dynamic library 'memcached.so' (tried: /usr/lib/php/20220829/memcached.so (/usr/lib/php/20220829/memcached.so: undefined symbol: igbinary_serialize), /usr/lib/php/20220829/memcached.so.so (/usr/lib/php/20220829/memcached.so.so: cannot open shared object file: No such file or directory)) in Unknown on line 0
+PHP Warning:  PHP Startup: Unable to load dynamic library 'php_memcache.dll' (tried: /usr/lib/php/20220829/php_memcache.dll (/usr/lib/php/20220829/php_memcache.dll: cannot open shared object file: No such file or directory), /usr/lib/php/20220829/php_memcache.dll.so (/usr/lib/php/20220829/php_memcache.dll.so: cannot open shared object file: No such file or directory)) in Unknown on line 0
+  2024-11-25 13:01:15 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:15 App\Events\ObjectUpdated ................. 111.34ms DONE
+  2024-11-25 13:01:15 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:16 App\Events\ObjectUpdated .................. 32.07ms DONE
+  2024-11-25 13:01:16 App\Jobs\SettingsClearJob ...................... RUNNING
+  2024-11-25 13:01:16 App\Jobs\SettingsClearJob ................. 25.62ms DONE
+  2024-11-25 13:01:16 App\Jobs\AddCameraJob .......................... RUNNING
+  2024-11-25 13:01:16 App\Jobs\AddCameraJob .................... 168.83ms DONE
+  2024-11-25 13:01:16 App\Jobs\SettingsClearJob ...................... RUNNING
+  2024-11-25 13:01:16 App\Jobs\SettingsClearJob ................. 19.47ms DONE
+  2024-11-25 13:01:16 App\Jobs\AddCameraJob .......................... RUNNING
+  2024-11-25 13:01:16 App\Jobs\AddCameraJob .................... 130.48ms DONE
+  2024-11-25 13:01:16 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:16 App\Events\ObjectUpdated .................. 39.41ms DONE
+  2024-11-25 13:01:16 App\Jobs\SettingsClearJob ...................... RUNNING
+  2024-11-25 13:01:16 App\Jobs\SettingsClearJob .................. 9.95ms DONE
+  2024-11-25 13:01:16 App\Jobs\AddCameraJob .......................... RUNNING
+  2024-11-25 13:01:16 App\Jobs\AddCameraJob .................... 114.19ms DONE
+  2024-11-25 13:01:16 App\Jobs\SettingsClearJob ...................... RUNNING
+  2024-11-25 13:01:16 App\Jobs\SettingsClearJob ................. 13.38ms DONE
+  2024-11-25 13:01:16 App\Jobs\AddCameraJob .......................... RUNNING
+  2024-11-25 13:01:16 App\Jobs\AddCameraJob .................... 118.21ms DONE
+  2024-11-25 13:01:16 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:16 App\Events\ObjectUpdated .................. 32.71ms DONE
+  2024-11-25 13:01:16 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:16 App\Events\ObjectUpdated .................. 27.88ms DONE
+  2024-11-25 13:01:16 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:16 App\Events\ObjectUpdated .................. 30.96ms DONE
+  2024-11-25 13:01:16 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:16 App\Events\ObjectUpdated .................. 28.87ms DONE
+  2024-11-25 13:01:16 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:16 App\Events\ObjectUpdated .................. 28.85ms DONE
+  2024-11-25 13:01:16 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:16 App\Events\ObjectUpdated .................. 42.21ms DONE
+  2024-11-25 13:01:16 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:17 App\Events\ObjectUpdated .................. 26.03ms DONE
+  2024-11-25 13:01:17 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:17 App\Events\ObjectUpdated .................. 29.61ms DONE
+  2024-11-25 13:01:17 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:17 App\Events\ObjectUpdated .................. 53.02ms DONE
+  2024-11-25 13:01:17 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:17 App\Events\ObjectUpdated .................. 31.21ms DONE
+  2024-11-25 13:01:17 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:17 App\Events\ObjectUpdated .................. 31.38ms DONE
+  2024-11-25 13:01:17 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:17 App\Events\ObjectUpdated .................. 30.97ms DONE
+  2024-11-25 13:01:17 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:17 App\Events\ObjectUpdated .................. 29.08ms DONE
+  2024-11-25 13:01:17 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:17 App\Events\ObjectUpdated .................. 30.07ms DONE
+  2024-11-25 13:01:17 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:17 App\Events\ObjectUpdated .................. 30.51ms DONE
+  2024-11-25 13:01:17 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:17 App\Events\ObjectUpdated .................. 28.69ms DONE
+  2024-11-25 13:01:17 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:17 App\Events\ObjectUpdated .................. 26.67ms DONE
+  2024-11-25 13:01:17 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:17 App\Events\ObjectUpdated .................. 26.25ms DONE
+  2024-11-25 13:01:17 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:17 App\Events\ObjectUpdated .................. 27.56ms DONE
+  2024-11-25 13:01:17 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:17 App\Events\ObjectUpdated .................. 31.55ms DONE
+  2024-11-25 13:01:17 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:17 App\Events\ObjectUpdated .................. 31.75ms DONE
+  2024-11-25 13:01:17 App\Jobs\SettingsClearJob ...................... RUNNING
+  2024-11-25 13:01:17 App\Jobs\SettingsClearJob ................. 10.56ms DONE
+  2024-11-25 13:01:17 App\Jobs\AddCameraJob .......................... RUNNING
+  2024-11-25 13:01:17 App\Jobs\AddCameraJob .................... 105.72ms DONE
+  2024-11-25 13:01:17 App\Events\FieldUpdated ........................ RUNNING
+  2024-11-25 13:01:17 App\Events\FieldUpdated ................... 25.78ms DONE
+  2024-11-25 13:01:17 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  RUNNING
+  2024-11-25 13:01:17 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  137.47ms DONE
+  2024-11-25 13:01:17 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  RUNNING
+  2024-11-25 13:01:17 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  96.93ms DONE
+  2024-11-25 13:01:17 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:18 App\Events\ObjectUpdated .................. 25.46ms DONE
+  2024-11-25 13:01:18 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:18 App\Events\ObjectUpdated .................. 30.70ms DONE
+  2024-11-25 13:01:18 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  RUNNING
+  2024-11-25 13:01:18 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  92.13ms DONE
+  2024-11-25 13:01:18 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:18 App\Events\ObjectUpdated .................. 32.22ms DONE
+  2024-11-25 13:01:18 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:18 App\Events\ObjectUpdated .................. 41.42ms DONE
+  2024-11-25 13:01:18 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:18 App\Events\ObjectUpdated .................. 31.59ms DONE
+  2024-11-25 13:01:18 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:18 App\Events\ObjectUpdated .................. 34.54ms DONE
+  2024-11-25 13:01:18 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  RUNNING
+  2024-11-25 13:01:18 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  95.52ms DONE
+  2024-11-25 13:01:18 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:18 App\Events\ObjectUpdated .................. 31.82ms DONE
+  2024-11-25 13:01:18 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:18 App\Events\ObjectUpdated .................. 37.50ms DONE
+  2024-11-25 13:01:18 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  RUNNING
+  2024-11-25 13:01:18 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  80.60ms DONE
+  2024-11-25 13:01:18 App\Jobs\ThumbCreateJob ........................ RUNNING
+  2024-11-25 13:01:21 App\Jobs\ThumbCreateJob ................ 3,129.75ms DONE
+  2024-11-25 13:01:21 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:21 App\Events\ObjectUpdated .................. 30.10ms DONE
+  2024-11-25 13:01:21 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:21 App\Events\ObjectUpdated .................. 29.79ms DONE
+  2024-11-25 13:01:21 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  RUNNING
+  2024-11-25 13:01:21 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  149.88ms DONE
+  2024-11-25 13:01:21 App\Jobs\ThumbCreateJob ........................ RUNNING
+  2024-11-25 13:01:24 App\Jobs\ThumbCreateJob ................ 3,020.50ms DONE
+  2024-11-25 13:01:24 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:25 App\Events\ObjectUpdated .................. 28.19ms DONE
+  2024-11-25 13:01:25 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:25 App\Events\ObjectUpdated .................. 28.77ms DONE
+  2024-11-25 13:01:25 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  RUNNING
+  2024-11-25 13:01:25 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  117.50ms DONE
+  2024-11-25 13:01:25 App\Jobs\ThumbCreateJob ........................ RUNNING
+  2024-11-25 13:01:28 App\Jobs\ThumbCreateJob ................ 3,013.88ms DONE
+  2024-11-25 13:01:28 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:28 App\Events\ObjectUpdated .................. 28.68ms DONE
+  2024-11-25 13:01:28 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:28 App\Events\ObjectUpdated .................. 29.07ms DONE
+  2024-11-25 13:01:28 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  RUNNING
+  2024-11-25 13:01:28 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  112.22ms DONE
+  2024-11-25 13:01:28 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:28 App\Events\ObjectUpdated .................. 29.95ms DONE
+  2024-11-25 13:01:28 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 13:01:28 App\Events\ObjectUpdated .................. 33.47ms DONE
+  2024-11-25 13:01:28 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  RUNNING
+  2024-11-25 13:01:28 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  112.21ms DONE
+  2024-11-25 13:01:28 App\Jobs\ThumbCreateJob ........................ RUNNING
+  2024-11-25 13:01:31 App\Jobs\ThumbCreateJob ................ 3,019.94ms DONE
+  2024-11-25 13:01:31 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  RUNNING
+  2024-11-25 13:01:31 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  106.81ms DONE
+  2024-11-25 13:01:31 App\Jobs\ThumbCreateJob ........................ RUNNING
+  2024-11-25 15:24:57 App\Jobs\ThumbCreateJob ............ 8,606,031.23ms FAIL
+  2024-11-25 15:27:10 App\Events\FieldUpdated ........................ RUNNING
+  2024-11-25 15:27:10 App\Events\FieldUpdated ................... 84.46ms DONE
+  2024-11-25 16:22:34 App\Jobs\ThumbCreateJob ........................ RUNNING
+  2024-11-25 16:22:38 App\Jobs\ThumbCreateJob ................ 3,134.43ms FAIL
+  2024-11-25 16:22:38 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 16:22:38 App\Events\ObjectUpdated .................. 93.06ms DONE
+  2024-11-25 16:22:38 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  RUNNING
+  2024-11-25 16:22:41 Spatie\MediaLibrary\Conversions\Jobs\PerformConversionsJob  2,533.03ms DONE
+  2024-11-25 16:27:59 App\Events\FieldUpdated ........................ RUNNING
+  2024-11-25 16:27:59 App\Events\FieldUpdated ................... 85.24ms DONE
+  2024-11-25 19:19:03 App\Events\ObjectUpdated ....................... RUNNING
+  2024-11-25 19:19:03 App\Events\ObjectUpdated ................. 117.53ms DONE
+  2024-11-25 21:58:44 App\Jobs\SettingsClearJob ...................... RUNNING
+  2024-11-25 21:58:44 App\Jobs\SettingsClearJob .................. 6.72ms DONE
+  2024-11-25 22:30:24 App\Jobs\AddCameraJob .......................... RUNNING
+  2024-11-25 22:30:30 App\Jobs\AddCameraJob .................. 6,334.05ms DONE

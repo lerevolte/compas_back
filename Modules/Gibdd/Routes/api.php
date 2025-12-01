@@ -14,7 +14,16 @@ use Modules\Gibdd\Http\Controllers\Api\GibddController;
 | is assigned the "api" middleware group. Enjoy building your API!
 |
 */
-
+Route::prefix('gibdd')->group(function () {
+    Route::get(
+        'check_by_req', 
+        [GibddController::class, 'check_by_req']
+    )->name('gibdd.check_by_req');
+    Route::post(
+        'moneta_pay', 
+        [GibddController::class, 'moneta_pay']
+    );
+});
 Route::middleware([
     'auth:api',
     InitializeTenancyByDomain::class,
@@ -24,10 +33,24 @@ Route::middleware([
         'check', 
         [GibddController::class, 'check']
     )->name('gibdd.check');
+    Route::post(
+        'check_autodor', 
+        [GibddController::class, 'check_autodor']
+    )->name('gibdd.check_autodor');
 
     Route::get(
         'find_by_num/{num}', 
         [GibddController::class, 'findByNum']
     )->name('gibdd.find_by_num');
+
+    Route::post(
+        'pay/{id}', 
+        [GibddController::class, 'pay']
+    );
+
+    Route::post(
+        'moneta_pay/{id}', 
+        [GibddController::class, 'moneta_pay']
+    );
 
 });

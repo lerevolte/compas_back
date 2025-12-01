@@ -34,7 +34,7 @@ class FieldSectionController extends Controller
     //     return response()->json($item);
     // }
 
-	public function store(Request $request)
+    public function store(Request $request)
     {
         $request->validate([
             'name' => 'required',
@@ -59,14 +59,14 @@ class FieldSectionController extends Controller
 
     public function update(int $id, Request $request)
     {
-
         $field_section = FieldSection::find($id);
         $field_section->update($request->all());
         $data = array(
             'name' => $field_section->name,
             'page' => $field_section->page,
             'column_id' => $field_section->column_id,
-            'sort' => $field_section->sort
+            'sort' => $field_section->sort,
+            'is_short' => $field_section->is_short
         );
 
         \App\Events\FieldUpdated::dispatch('SectionUpdated', $data);
@@ -136,7 +136,11 @@ class FieldSectionController extends Controller
     public function delete($id, Request $request)
     {
         $section = FieldSection::find($id);
-        cache()->getMemcached()->delete(tenant('id').':section-'.$section->page.'-'.$section->column_id);
+        if($section->module)
+            $name = tenant('id').':section-'.$section->page.'-'.$section->column_id.'-'.$section->module;
+        else
+            $name = tenant('id').':section-'.$section->page.'-'.$section->column_id;
+        cache()->getMemcached()->delete($name);
         if(!$section->fields()->count()){
             FieldSection::destroy($id);
             \App\Events\FieldUpdated::dispatch('SectionDeleted', array('id' => $id));

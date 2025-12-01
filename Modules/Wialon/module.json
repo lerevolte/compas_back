@@ -1,5 +1,5 @@
 {
-    "display_name": "Интеграция Wialon",
+    "title": "Интеграция Wialon",
     "name": "Wialon",
     "alias": "wialon",
     "slug": "wialon",
@@ -22,8 +22,8 @@
     }],
     "entities": [{
         "name": "cars",
-        "display_name_singular": "Автопарк",
-        "display_name_plural": "Автопарк",
+        "title_singular": "Автопарк",
+        "title_plural": "Автопарк",
         "class": "App\\Models\\Car",
         "main": "1",
         "sections": []

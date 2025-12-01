@@ -1,0 +1,49 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use Illuminate\Http\Request;
+use App\Http\Controllers\Controller;
+use App\Models\Tenant;
+
+class TenantController extends Controller
+{
+    public function check(Request $request) 
+    {
+        if(!$request->domain)
+            return response()->json([
+                'success' => false,
+                'error' => 'Неправильный адрес портала'
+            ], 200);
+        $domain = strtolower($request->domain);
+        $account = \App\Models\Account::where('name', $domain)->first();
+        if(!$account)
+            $account = \App\Models\Account::whereJsonContains('name->value', $domain)->first();
+
+        if(Tenant::find($domain) && $account || $domain == 'admin')
+            return response()->json([
+                'success' => true
+            ], 200);
+
+
+        return response()->json([
+                'success' => false,
+                'error' => 'Неправильный адрес портала'
+            ], 200);
+    }
+
+    public function delete(Request $request) 
+    {
+        $tenant = tenant('id');
+        \DB::table('users')->update(['api_token' => null]);
+
+        tenancy()->central(function () use ($tenant) {
+            $account = \App\Models\Account::where('name', $tenant)->first();
+            if(!$account)
+                $account = \App\Models\Account::whereJsonContains('name->value', $tenant)->first();
+            $account->delete();
+        });
+        
+    }
+
+}

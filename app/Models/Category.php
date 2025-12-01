@@ -6,7 +6,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
 use App\Traits\FieldValue, App\Traits\ModelActions;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Modules\Instructions\Entities\InstructionGroup;
 use Kalnoy\Nestedset\NodeTrait;
 
 class Category extends Model

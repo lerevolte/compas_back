@@ -20,9 +20,15 @@ class BroadcastServiceProvider extends ServiceProvider
         //[ "middleware" => ["web", "auth", "tenant"] ]
         Broadcast::routes(['middleware' => [
             'auth:api',
-            InitializeTenancyByDomain::class,
-            PreventAccessFromCentralDomains::class
+            //'universal', 
+            InitializeTenancyByDomain::class
         ]]);
+        // Broadcast::routes(['middleware' => [
+        //     'auth:api',
+        //     InitializeTenancyByDomain::class,
+        //     //PreventAccessFromCentralDomains::class
+        // ]]);
+        
         
         require base_path('routes/channels.php');
     }

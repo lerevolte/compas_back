@@ -45,4 +45,9 @@ class Route extends Model
         return $this->hasMany(Task::class, 'route_id')->orderBy('sort');
     }
 
+    public function logistic_tasks()
+    {
+        return $this->hasMany(Task::class, 'route_id')->orderBy('sort');
+    }
+
 }

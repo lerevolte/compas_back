@@ -55,42 +55,38 @@ class Filter extends Model
                             $field_key = $value['key'];
                             if(isset($fields_data[$field_key])) {
                                 $options = null;
-                                if(isset($settings[$entity->slug]['list_values'][$field_key])) {
-                                    $options = $settings[$entity->slug]['list_values'][$field_key];
+
+                                if(isset($settings['list_values'][$fields_data[$field_key]->id])) {
+                                    $options = $settings['list_values'][$fields_data[$field_key]->id];
                                     if($fields_data[$field_key]->type == 'relation') {
-                                        $options = array_slice($settings[$entity->slug]['list_values'][$field_key], 0, 19, true);
-                                        info('FSLUG '.$slug);
-                                        info('FKEY '.$field_key);
-                                        info('FVAL '.$value['value']);
+                                        $options = array_slice($settings['list_values'][$fields_data[$field_key]->id], 0, 19, true);
                                         if($fields_data[$field_key]->is_plural && is_array($value)) {
                                             // info('VALUE');
                                             // info($value);
                                             if(is_array($value['value']))
                                                 foreach($value['value'] as $field_val) {
-                                                    $options[$field_val['value']] = $settings[$slug]['list_values'][$field_key][$field_val];
+                                                    $options[$field_val['value']] = $settings['list_values'][$fields_data[$field_key]->id][$field_val];
                                                 }
-                                        } elseif($value['value'] && isset($settings[$slug]['list_values'][$field_key])) {
+                                        } elseif($value['value'] && isset($settings['list_values'][$fields_data[$field_key]->id]) && isset($options[$value['value']])) {
                                             //info($settings[$slug]['list_values'][$field_key]);
-                                            $options[$value['value']] = $settings[$slug]['list_values'][$field_key][$value['value']];
+                                            $options[$value['value']] = $settings['list_values'][$fields_data[$field_key]->id][$value['value']];
                                         }
                                     } else {
                                         if(isset($settings[$entity->slug]['options'][$field_key]))
                                             $options = $settings[$entity->slug]['options'][$field_key];
                                         else
-                                            $options = $settings[$entity->slug]['list_values'][$field_key];
+                                            $options = $settings['list_values'][$fields_data[$field_key]->id];
                                     }
                                 }
                                 
                                 $fdata = array(
                                     'id' => $fields_data[$field_key]->id,
-                                    'title' => $fields_data[$field_key]->display_name,
+                                    'title' => $fields_data[$field_key]->title,
                                     'key' => $field_key,
                                     'type' =>  $fields_data[$field_key]->type,
                                     'options' => $options ? array_values($options) : array(),
                                     'value' =>  $value['value']
                                 );
-                                // if($fields_data[$field_key]->type == 'relation' && isset($settings[$slug]['list_values'][$field_key][$value]))
-                                //     $fdata['value'] = $settings[$slug]['list_values'][$field_key][$value];
                                 $fields[] = $fdata;
                             }
                         }

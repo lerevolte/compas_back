@@ -1,5 +1,5 @@
 {
-    "display_name": "Товары",
+    "title": "Товары",
     "name": "Products",
     "alias": "products",
     "slug": "products",
@@ -19,29 +19,29 @@
     "is_hidden": 1,
     "entities": [{
         "name": "products",
-        "display_name_singular": "Товар",
-        "display_name_plural": "Товары",
+        "title_singular": "Товар",
+        "title_plural": "Товары",
         "class": "Modules\\Products\\Entities\\Product",
         "sections": [{
             "name": "Информация",
             "fields": [{
                 "name": "name",
-                "display_name": "Название",
+                "title": "Название",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "quantity",
-                "display_name": "Количество",
+                "title": "Количество",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "price",
-                "display_name": "Цена",
+                "title": "Цена",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "category_id",
-                "display_name": "Категория",
+                "title": "Категория",
                 "type": "select_dropdown",
                 "visible_always": 1,
                 "table": "categories"
@@ -49,19 +49,19 @@
         }]
     },{
         "name": "remnants",
-        "display_name_singular": "Остаток",
-        "display_name_plural": "Остатки",
+        "title_singular": "Остаток",
+        "title_plural": "Остатки",
         "class": "Modules\\Products\\Entities\\Remnant",
         "sections": [{
             "name": "Информация",
             "fields": [{
                 "name": "name",
-                "display_name": "Название",
+                "title": "Название",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "price",
-                "display_name": "Цена",
+                "title": "Цена",
                 "type": "text",
                 "visible_always": 1
             }]

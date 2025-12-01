@@ -25,9 +25,6 @@ class StoreOrderRequest extends FormRequest
      */
     public function rules()
     {
-        $account_id = 1;
-        if(\Auth::user())
-            $account_id = \Auth::user()->account_id;
         $fields = Order::getFields();
         foreach ($fields as $key => $field) {
             $rule = array();
@@ -40,7 +37,7 @@ class StoreOrderRequest extends FormRequest
                 $options = array();
                 if(isset($field_details['table'])) {
 
-                    $rule[] = Rule::exists($field_details['table'], 'id')->where('account_id', $account_id);
+                    $rule[] = Rule::exists($field_details['table'], 'id');
                 } elseif(isset($field_details['options'])) {
                     $rule[] = Rule::in(array_keys($field_details['options']));
                 }

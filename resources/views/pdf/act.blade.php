@@ -355,7 +355,7 @@
 					</td>
 					<td colspan="31" style="width:491.25pt; border-bottom:1.25pt solid #000000; vertical-align:middle">
 						<p style="margin-bottom:0pt; line-height:108%; font-size:14pt">
-							<strong><span style="font-family:Arial; ">Акт № 7760 от 09 ноября 2023 г.</span></strong>
+							<strong><span style="font-family:Arial; ">Акт № {{ $invoice->id }} от {{ date('d.m.Y') }}</span></strong>
 						</p>
 					</td>
 					<td style="width:15.75pt; vertical-align:bottom">
@@ -728,7 +728,7 @@
 					</td>
 					<td colspan="28" style="width:441pt; vertical-align:top">
 						<p style="margin-bottom:0pt; line-height:108%; font-size:10pt">
-							<strong><span style="font-family:Arial; ">ООО "ГКМ", ИНН 5047140637, 141402, Московская область, г.о. Химки, г Химки, ш Международное, дом 1, офис 1103</span></strong>
+							<strong><span style="font-family:Arial; ">{{ $payer->name }}, ИНН {{ $payer->inn }}, {{ $payer->address }}</span></strong>
 						</p>
 					</td>
 				</tr>
@@ -1127,6 +1127,7 @@
 						</p>
 					</td>
 				</tr>
+				@foreach($services as $k => $service)
 				<tr>
 					<td style="width:15.75pt; vertical-align:bottom">
 						<p style="margin-bottom:0pt">
@@ -1135,17 +1136,17 @@
 					</td>
 					<td colspan="2" style="width:30.88pt; border-top:0.75pt solid #000000; border-left:1.25pt solid #000000; vertical-align:top">
 						<p style="margin-bottom:0pt; text-align:center; line-height:108%; font-size:8pt">
-							<span style="font-family:Arial">1</span>
+							<span style="font-family:Arial">{{ $k+1 }}</span>
 						</p>
 					</td>
 					<td colspan="17" style="width:270.38pt; border-top:0.75pt solid #000000; border-left:0.75pt solid #000000; vertical-align:top">
 						<p style="margin-bottom:0pt; line-height:108%; font-size:8pt">
-							<span style="font-family:Arial">Доставка товара и разгрузка</span>
+							<span style="font-family:Arial">{{ $service['name'] }}</span>
 						</p>
 					</td>
 					<td colspan="3" style="width:46.88pt; border-top:0.75pt solid #000000; border-left:0.75pt solid #000000; vertical-align:top">
 						<p style="margin-bottom:0pt; text-align:right; line-height:108%; font-size:8pt">
-							<span style="font-family:Arial">1</span>
+							<span style="font-family:Arial">{{ $service['count'] }}</span>
 						</p>
 					</td>
 					<td colspan="2" style="width:31.12pt; border-top:0.75pt solid #000000; border-left:0.75pt solid #000000; vertical-align:top">
@@ -1155,15 +1156,16 @@
 					</td>
 					<td colspan="4" style="width:62.62pt; border-top:0.75pt solid #000000; border-left:0.75pt solid #000000; vertical-align:top">
 						<p style="margin-bottom:0pt; text-align:right; line-height:108%; font-size:8pt">
-							<span style="font-family:Arial">28</span><span style="font-family:Arial">&#xa0;</span><span style="font-family:Arial">490,00</span>
+							<span style="font-family:Arial">&#xa0;</span><span style="font-family:Arial">{{ $service['price'] }}</span>
 						</p>
 					</td>
 					<td colspan="4" style="width:62pt; border-top:0.75pt solid #000000; border-right:1.25pt solid #000000; border-left:0.75pt solid #000000; vertical-align:top">
 						<p style="margin-bottom:0pt; text-align:right; line-height:108%; font-size:8pt">
-							<span style="font-family:Arial">28</span><span style="font-family:Arial">&#xa0;</span><span style="font-family:Arial">490,00</span>
+							<span style="font-family:Arial">&#xa0;</span><span style="font-family:Arial">{{ $service['price']*$service['count'] }}</span>
 						</p>
 					</td>
 				</tr>
+				@endforeach
 				<tr style="height:5.25pt">
 					<td style="width:15.75pt; vertical-align:bottom">
 						<p style="margin-bottom:0pt">
@@ -1469,11 +1471,11 @@
 					</td>
 					<td colspan="4" style="width:63pt; vertical-align:top">
 						<p style="margin-bottom:0pt; text-align:right; line-height:108%; font-size:9.5pt">
-							<strong><span style="font-family:Arial; ">28</span></strong><strong><span style="font-family:Arial; ">&#xa0;</span></strong><strong><span style="font-family:Arial; ">490,00</span></strong>
+							<strong><span style="font-family:Arial; ">&#xa0;</span></strong><strong><span style="font-family:Arial; ">{{ $invoice->sum }}</span></strong>
 						</p>
 					</td>
 				</tr>
-				<tr>
+				<!-- <tr>
 					<td style="width:15.75pt; vertical-align:bottom">
 						<p style="margin-bottom:0pt">
 							&#xa0;
@@ -1586,10 +1588,10 @@
 					</td>
 					<td colspan="4" style="width:63pt; vertical-align:top">
 						<p style="margin-bottom:0pt; text-align:right; line-height:108%; font-size:9.5pt">
-							<strong><span style="font-family:Arial; ">4</span></strong><strong><span style="font-family:Arial; ">&#xa0;</span></strong><strong><span style="font-family:Arial; ">748,33</span></strong>
+							<strong><span style="font-family:Arial; ">4</span></strong><strong><span style="font-family:Arial; ">&#xa0;</span></strong><strong><span style="font-family:Arial; ">{{ $invoice->sum*0.2 }} руб.</span></strong>
 						</p>
 					</td>
-				</tr>
+				</tr> -->
 				<tr style="height:5.25pt">
 					<td style="width:15.75pt; vertical-align:bottom">
 						<p style="margin-bottom:0pt">
@@ -1765,11 +1767,11 @@
 					</td>
 					<td colspan="32" style="width:507pt; vertical-align:bottom">
 						<p style="margin-bottom:0pt; line-height:108%; font-size:8pt">
-							<span style="font-family:Arial">Всего оказано услуг 1, на сумму 28</span><span style="font-family:Arial">&#xa0;</span><span style="font-family:Arial">490,00 руб.</span>
+							<span style="font-family:Arial">Всего оказано услуг 1, на сумму 28</span><span style="font-family:Arial">&#xa0;</span><span style="font-family:Arial">{{ $invoice->sum }} руб.</span>
 						</p>
 					</td>
 				</tr>
-				<tr>
+				<!-- <tr>
 					<td style="width:15.75pt; vertical-align:bottom">
 						<p style="margin-bottom:0pt">
 							&#xa0;
@@ -1785,7 +1787,7 @@
 							&#xa0;
 						</p>
 					</td>
-				</tr>
+				</tr> -->
 				<tr>
 					<td style="width:15.75pt; vertical-align:bottom">
 						<p style="margin-bottom:0pt">

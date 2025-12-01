@@ -1,0 +1,39 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::connection('seeds')->create('settings', function (Blueprint $table) {
+            $table->comment('');
+            $table->bigIncrements('id');
+            $table->string('key');
+            $table->string('display_name')->nullable();
+            $table->longText('value')->nullable();
+            $table->string('type')->nullable();
+            $table->string('entity')->nullable();
+            $table->integer('user_id')->nullable();
+
+            $table->unique(['type', 'entity', 'user_id'], 'type');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::connection('seeds')->dropIfExists('settings');
+    }
+};

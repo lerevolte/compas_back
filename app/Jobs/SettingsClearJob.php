@@ -30,6 +30,8 @@ class SettingsClearJob implements ShouldQueue
      */
     public function handle()
     {
-        \App\Models\Settings::get();
+        info('SettingsClearJob');
+        \App\Models\Settings::clear_cache();
+        //\App\Models\Settings::get();
     }
 }

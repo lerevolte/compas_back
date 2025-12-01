@@ -16,6 +16,7 @@ class FieldUpdated implements ShouldBroadcast
 
     public $data;
     public $action;
+    public $tenant;
 
     /**
      * Create a new event instance.
@@ -26,6 +27,7 @@ class FieldUpdated implements ShouldBroadcast
     {
         $this->action = $action;
         $this->data = $data;
+        $this->tenant = tenant('id');
     }
 
     // public function broadcastWith(): array
@@ -40,6 +42,13 @@ class FieldUpdated implements ShouldBroadcast
      */
     public function broadcastOn()
     {
-        return new PrivateChannel('object-updated');
+        $channels = [];
+        
+        // foreach (\App\Models\Tenant::get() as $tenant) {
+        //     $channels[] = new PrivateChannel('tenant.'.$tenant->id);
+        // }
+        $channels[] = new PrivateChannel('tenant.'.tenant('id'));
+        $channels[] = new PrivateChannel('object-updated');
+        return $channels;
     }
 }

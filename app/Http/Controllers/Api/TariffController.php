@@ -16,15 +16,14 @@ class TariffController extends Controller
 {
     public function list(Request $request) 
     {
-        $data = array();
-        $items = Tariff::get();
-        foreach ($items as $item) {
-            $data[] = array(
-                'name' => $item->name,
-                'sort' => $item->sort,
-                'prices' => json_decode($item->prices, true)
-            );
-        }
+        $data = Tariff::list();
+
+        return response()->json($data);
+    }
+
+    public function set($id) 
+    {
+        $data = Tariff::set($id);
 
         return response()->json($data);
     }

@@ -1,5 +1,5 @@
 {
-    "display_name": "Журнал расходов",
+    "title": "Журнал расходов",
     "name": "Journal",
     "alias": "journal",
     "description": "Журнал расходов описание.",
@@ -19,120 +19,120 @@
     }],
     "entities": [{
         "name": "journal_records",
-        "display_name_singular": "Запись",
-        "display_name_plural": "Журнал",
+        "title_singular": "Запись",
+        "title_plural": "Журнал",
         "class": "Modules\\Journal\\Entities\\Record",
         "main": "1",
         "sections": [{
             "name": "Информация",
             "fields": [{
                 "name": "name",
-                "display_name": "Название",
+                "title": "Название",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "status",
-                "display_name": "Статус",
+                "title": "Статус",
                 "type": "status",
                 "visible_always": 1
             },{
                 "name": "car_id",
-                "display_name": "Автопарк",
+                "title": "Автопарк",
                 "table": "cars",
                 "type": "relation",
                 "visible_always": 1
             },{
                 "name": "user_id",
-                "display_name": "Ответственный",
+                "title": "Ответственный",
                 "table": "users",
                 "type": "relation",
                 "visible_always": 1
             },{
                 "name": "photo",
-                "display_name": "Фото",
+                "title": "Фото",
                 "type": "file",
                 "visible_always": 1
             }]
         }]
     },{
         "name": "mileages",
-        "display_name_singular": "Пробег, км и моточасы",
-        "display_name_plural": "Пробег, км и моточасы",
+        "title_singular": "Пробег, км и моточасы",
+        "title_plural": "Пробег, км и моточасы",
         "class": "Modules\\Journal\\Entities\\Mileage",
         "main": "1",
         "sections": [{
             "name": "Информация",
             "fields": [{
                 "name": "name",
-                "display_name": "Название",
+                "title": "Название",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "date",
-                "display_name": "Дата",
+                "title": "Дата",
                 "type": "date",
                 "visible_always": 1
             },{
                 "name": "mileage_start_day",
-                "display_name": "Пробег на начало дня, км",
+                "title": "Пробег на начало дня, км",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "mileage_end_day",
-                "display_name": "Пробег на конец дня, км",
+                "title": "Пробег на конец дня, км",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "mileage_day",
-                "display_name": "Пробег за день, км",
+                "title": "Пробег за день, км",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "engine_hours_start_day",
-                "display_name": "Моточасы на начало дня",
+                "title": "Моточасы на начало дня",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "engine_hours_end_day",
-                "display_name": "Моточасы на конец дня",
+                "title": "Моточасы на конец дня",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "auto_day_mileage",
-                "display_name": "Автоматический ежедневный пробег",
+                "title": "Автоматический ежедневный пробег",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "auto_day_engine_hours",
-                "display_name": "Автоматические ежедневные моточасы",
+                "title": "Автоматические ежедневные моточасы",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "engine_hours_day",
-                "display_name": "Моточасы за день",
+                "title": "Моточасы за день",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "comment",
-                "display_name": "Примечание",
+                "title": "Примечание",
                 "type": "text",
                 "visible_always": 1,
                 "is_plural": 1
             },{
                 "name": "car_id",
-                "display_name": "Автопарк",
+                "title": "Автопарк",
                 "table": "cars",
                 "type": "relation",
                 "visible_always": 1
             },{
                 "name": "driver_id",
-                "display_name": "Сотрудник компании",
+                "title": "Сотрудник компании",
                 "table": "drivers",
                 "type": "relation",
                 "visible_always": 1
             }, {
                 "name": "user_id",
-                "display_name": "Ответственный",
+                "title": "Ответственный",
                 "table": "users",
                 "type": "relation",
                 "visible_always": 1
@@ -140,57 +140,57 @@
         }]
     },{
         "name": "emergency_fund_records",
-        "display_name_singular": "Аварийный фонд",
-        "display_name_plural": "Аварийный фонд",
+        "title_singular": "Аварийный фонд",
+        "title_plural": "Аварийный фонд",
         "class": "Modules\\Journal\\Entities\\FundRecord",
         "main": "1",
         "sections": [{
             "name": "Информация",
             "fields": [{
                 "name": "name",
-                "display_name": "Название",
+                "title": "Название",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "date",
-                "display_name": "Дата",
+                "title": "Дата",
                 "type": "date",
                 "visible_always": 1
             },{
                 "name": "emergency_fund_start_day",
-                "display_name": "Авариный фонд на начало дня",
+                "title": "Авариный фонд на начало дня",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "emergency_fund_end_day",
-                "display_name": "Авариный фонд на конец] дня",
+                "title": "Авариный фонд на конец] дня",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "emergency_fund_day",
-                "display_name": "Зачислено в аварийный фонд",
+                "title": "Зачислено в аварийный фонд",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "emergency_fund_day",
-                "display_name": "Зачислено в аварийный фонд",
+                "title": "Зачислено в аварийный фонд",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "comment",
-                "display_name": "Примечание",
+                "title": "Примечание",
                 "type": "text",
                 "visible_always": 1,
                 "is_plural": 1
             },{
                 "name": "driver_id",
-                "display_name": "Сотрудник компании",
+                "title": "Сотрудник компании",
                 "table": "drivers",
                 "type": "relation",
                 "visible_always": 1
             },{
                 "name": "user_id",
-                "display_name": "Ответственный",
+                "title": "Ответственный",
                 "table": "users",
                 "type": "relation",
                 "visible_always": 1
@@ -198,72 +198,72 @@
         }]
     },{
         "name": "salaries",
-        "display_name_singular": "Зарплата",
-        "display_name_plural": "Зарплата",
+        "title_singular": "Зарплата",
+        "title_plural": "Зарплата",
         "class": "Modules\\Journal\\Entities\\Salary",
         "main": "1",
         "sections": [{
             "name": "Информация",
             "fields": [{
                 "name": "name",
-                "display_name": "Название",
+                "title": "Название",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "date",
-                "display_name": "Дата",
+                "title": "Дата",
                 "type": "date",
                 "visible_always": 1
             },{
                 "name": "timework",
-                "display_name": "Отработано, часов",
+                "title": "Отработано, часов",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "rate",
-                "display_name": "Ставка",
+                "title": "Ставка",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "increase",
-                "display_name": "Надбавка за переработку",
+                "title": "Надбавка за переработку",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "award",
-                "display_name": "Премия",
+                "title": "Премия",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "fund_percent",
-                "display_name": "Процент удержания в аварийный фонд",
+                "title": "Процент удержания в аварийный фонд",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "fund_sum",
-                "display_name": "Зачислено в аварийный фонд",
+                "title": "Зачислено в аварийный фонд",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "status",
-                "display_name": "Выплата ЗП",
+                "title": "Выплата ЗП",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "comment",
-                "display_name": "Примечание",
+                "title": "Примечание",
                 "type": "text",
                 "visible_always": 1,
                 "is_plural": 1
             },{
                 "name": "driver_id",
-                "display_name": "Сотрудник компании",
+                "title": "Сотрудник компании",
                 "table": "drivers",
                 "type": "relation",
                 "visible_always": 1
             },{
                 "name": "user_id",
-                "display_name": "Ответственный",
+                "title": "Ответственный",
                 "table": "users",
                 "type": "relation",
                 "visible_always": 1

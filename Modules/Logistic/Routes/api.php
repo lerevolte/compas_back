@@ -22,6 +22,11 @@ Route::middleware([
     PreventAccessFromCentralDomains::class
 ])->prefix('logistic')->group(function () {
     Route::get(
+        'day_statistic', 
+        [LogisticController::class, 'day_statistic']
+    );
+
+    Route::get(
         'tables/{slug}', 
         [TableController::class, 'get']
     )->name('tables.get');

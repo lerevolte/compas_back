@@ -25,10 +25,41 @@ class Kernel extends ConsoleKernel
         $tenants = \App\Models\Tenant::get();
         //info('SCHEDULER');
         foreach ($tenants as $tenant) {
-            $tenant->run(function () use ($tenant, $schedule) {
+            $time = $tenant->run(function () use ($tenant) {
+                $local_module = \DB::table('modules')->where('slug', 'gibdd')->first();
+                if($local_module) {
+                    $data = json_decode($local_module->config, true);
+                    if(isset($data['fields'])) {
+                        foreach($data['fields'] as $item) {
+                            if($item['key'] == 'update_rate') {
+                                return $item['value'];
+                            }
+                        }
+                    }
+                }
+            });
+            if(!$time) {
+                $time = 1;
+            }
+           // $tenant->run(function () use ($tenant, $schedule) {
                 $schedule->call(function () use ($tenant) {
-                    \Modules\Gibdd\Entities\Module::updateFines($tenant);
-                })->cron("0 0 */1 * *");
+                    // \Modules\Gibdd\Entities\Module::importDrivers($tenant);
+                    // \Modules\Gibdd\Entities\Module::importCars($tenant);
+                    $tenant->run(function () {
+                        \Modules\Gibdd\Entities\Module::findFines();
+                        //\Modules\Gibdd\Entities\Module::updateFines();
+                    });
+                })->cron("30 6 */$time * *");
+                $schedule->call(function () use ($tenant) {
+                    info('calculateDaily '.$tenant);
+                    // \Modules\Gibdd\Entities\Module::importDrivers($tenant);
+                    // \Modules\Gibdd\Entities\Module::importCars($tenant);
+                    $tenant->run(function () {
+                        $balance = \App\Models\Balance::first();
+                        if($balance)
+                            $balance->calculateDaily();
+                    });
+                })->cron("5 0 * * *");
                 // $local_module = \DB::table('modules')->where('slug', 'gibdd')->first();
                 // if($local_module && $local_module->config) {
                 //     $config = json_decode($local_module->config, true);
@@ -39,7 +70,7 @@ class Kernel extends ConsoleKernel
                 //     })->cron("0 0 */1 * *");
                 //     //})->cron("0 0 */".$config[0]['value']." * *");
                 // }
-            });
+            //});
         }
         
         

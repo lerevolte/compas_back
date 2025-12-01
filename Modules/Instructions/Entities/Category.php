@@ -38,4 +38,9 @@ class Category extends Model
         });
     }
 
+    public function instructions()
+    {
+        return $this->hasMany(Instruction::class, 'category_id');
+    }
+
 }

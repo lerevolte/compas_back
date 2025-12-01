@@ -62,6 +62,11 @@ return [
                 env('MEMCACHED_PASSWORD'),
             ],
             'options' => [
+                \Memcached::OPT_NO_BLOCK => true,
+                \Memcached::OPT_BUFFER_WRITES => true,
+                \Memcached::OPT_TCP_NODELAY => true,
+                \Memcached::OPT_CONNECT_TIMEOUT => 20,
+                 Memcached::OPT_DISTRIBUTION => Memcached::DISTRIBUTION_CONSISTENT,
                 // Memcached::OPT_CONNECT_TIMEOUT => 2000,
             ],
             'servers' => [
@@ -71,6 +76,12 @@ return [
                     'weight' => 100,
                 ],
             ],
+        ],
+        'settings' => [
+            'driver' => 'two_level',
+            'level1' => 'array',  // Быстрый in-memory кэш
+            'level2' => 'memcached',
+            'ttl' => 3600,
         ],
 
         'redis' => [

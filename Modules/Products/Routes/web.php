@@ -30,14 +30,14 @@ Route::middleware([
     InitializeTenancyByDomain::class,
     PreventAccessFromCentralDomains::class,
 ])->group(function () {
-    Route::prefix('products')->group(function() {
-        Route::get('/', 'ProductsController@index');
-        Route::get('/find', 'ProductsController@find');
-        Route::get('/search', 'ProductsController@search');
-    });
-    Route::prefix('categories')->group(function() {
-        Route::get('/', 'CategoryController@index')->name('products.categories');
-        Route::post('/', 'CategoryController@store')->name('products.categories.store');
-        Route::get('/{category}', 'CategoryController@show')->name('categories.show');
-    });
+    // Route::prefix('products')->group(function() {
+    //     Route::get('/', 'ProductsController@index');
+    //     Route::get('/find', 'ProductsController@find');
+    //     Route::get('/search', 'ProductsController@search');
+    // });
+    // Route::prefix('categories')->group(function() {
+    //     Route::get('/', 'CategoryController@index')->name('products.categories');
+    //     Route::post('/', 'CategoryController@store')->name('products.categories.store');
+    //     Route::get('/{category}', 'CategoryController@show')->name('categories.show');
+    // });
 });

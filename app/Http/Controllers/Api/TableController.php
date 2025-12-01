@@ -36,6 +36,7 @@ class TableController extends Controller
                 if(isset($role_tables[$slug])) {
                     $tables[$slug] = $role_tables[$slug];
                     $user->tables = json_encode($tables);
+                    $user->timestamps = false;
                     $user->saveQuietly();
                 }
             }
@@ -47,15 +48,18 @@ class TableController extends Controller
                     if(isset($tables_all[$slug])) {
                         $tables[$slug] = $tables_all[$slug];
                         $user->tables = json_encode($tables);
+                        $user->timestamps = false;
                         $user->saveQuietly();
                     }
                 }
             }
         }
-        $settings = get_settings();
+        $settings = app('settings');
 
         if(isset($tables[$slug])) {
             $entity = \DB::table('data_types')->where('slug', $slug)->first();
+            if(!$entity)
+                return response()->json($tables[$slug]['fields']);
             $entity_class = $entity->model_name;
             $model_fields = $entity_class::getFields();
             $table_columns = collect($tables[$slug]);
@@ -100,19 +104,17 @@ class TableController extends Controller
             foreach ($model_fields as $field) {
                 $field_values = array();
                 $field_colors[$field->field] = $field->label_color ? $field->label_color : null;
-                if(isset($settings[$slug]['list_values'][$field->field])) {
+                if(isset($settings['list_values'][$field->id])) {
                     if($field->type == 'relation') {
-                        $field_values = array_slice($settings[$slug]['list_values'][$field->field], 0, 19, true); 
-                        // if($item->{$field->field})
-                        //     $field_values[$item->{$field->field}] = $settings[$slug]['list_values'][$field->field][$item->{$field->field}];
+                        $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true); 
                     } else {
-                        $field_values = $settings[$slug]['list_values'][$field->field];
+                        $field_values = $settings['list_values'][$field->id];
                     }
                 };
                 if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->type != 'password') {
                     $table_columns[$field->field] = array(
                         'id' => $field->id,
-                        'title' => $field->display_name,
+                        'title' => $field->title,
                         'key' => $field->field,
                         'width' => '200px',
                         'enabled' => ($field->is_default ? true : false),
@@ -151,7 +153,7 @@ class TableController extends Controller
                 } elseif($field->type != 'text_group' && $field->type != 'password') {
                     $table_columns[$field->field] = array(
                         'id' => $field->id,
-                        'title' => $field->display_name,
+                        'title' => $field->title,
                         'key' => $field->field,
                         'width' => $table_columns[$field->field]['width'],
                         'enabled' => $table_columns[$field->field]['enabled'],
@@ -231,19 +233,17 @@ class TableController extends Controller
             foreach ($model_fields as $field) {
                 $field_values = array();
                 $field_colors[$field->field] = $field->label_color ? $field->label_color : null;
-                if(isset($settings[$slug]['list_values'][$field->field])) {
+                if(isset($settings['list_values'][$field->id])) {
                     if($field->type == 'relation') {
-                        $field_values = array_slice($settings[$slug]['list_values'][$field->field], 0, 19, true); 
-                        // if($item->{$field->field})
-                        //     $field_values[$item->{$field->field}] = $settings[$slug]['list_values'][$field->field][$item->{$field->field}];
+                        $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true); 
                     } else {
-                        $field_values = $settings[$slug]['list_values'][$field->field];
+                        $field_values = $settings['list_values'][$field->id];
                     }
                 };
                 if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->type != 'password') {
                     $table_columns[$field->field] = array(
                         'id' => $field->id,
-                        'title' => $field->display_name,
+                        'title' => $field->title,
                         'key' => $field->field,
                         'width' => '200px',
                         'enabled' => ($field->is_default ? true : false),
@@ -296,9 +296,14 @@ class TableController extends Controller
             $tables = json_decode($tables, true);
         if(!is_array($tables))
             $tables = array();
-        $tables[$slug] = $request->fields;
+        $tables[$slug] = array(
+            'fields' => $request->fields, 
+            'sort_field' => $request->sort_field ? $request->sort_field : 'id', 
+            'sort_order' => $request->sort_order ? $request->sort_order : 'desc'
+        );
         $user->tables = json_encode($tables);
-        $user->save();
+        $user->timestamps = false;
+        $user->saveQuietly();
         $now = Carbon::now();
         if(\DB::table('local_cache')->where(['url' => "tables/$slug", 'user_id' => \Auth::user()->id])->exists())
             \DB::table('local_cache')->where(['url' => "tables/$slug", 'user_id' => \Auth::user()->id])->update(['updated_at' => $now]);
@@ -308,20 +313,22 @@ class TableController extends Controller
         return response()->json($tables[$slug]);
     }
 
+    public function reset($slug, Request $request)
+    {
+        $tenant = \App\Models\Tenant::find('seeds');
+        $table = $tenant->run(function ($tenant) use ($slug) {
+            $user = \App\Models\User::find(1);
+            $tables = $user->tables;
+            if($tables)
+                $tables = json_decode($tables, true);
+            if(isset($tables[$slug]))
+                return isset($tables[$slug]) ? $tables[$slug] : [];
+        });
+        return response()->json($table);
+    }
+
     public function set_role($slug, $role_id, Request $request)
     {
-        // $role = \Auth::user()->role;
-        // $role_tables = $role->tables;
-        // if($role_tables)
-        //     $role_tables = json_decode($role_tables, true);
-        // if(!is_array($role_tables))
-        //     $role_tables = array();
-
-        // $role_tables[$slug] = $request->fields;
-        // $role->tables = json_encode($role_tables);
-        // $role->save();
-
-        
         $users = \App\Models\User::where('role_id', $role_id)->get();
         foreach($users as $user) {
             $tables = $user->tables;
@@ -329,8 +336,13 @@ class TableController extends Controller
                 $tables = json_decode($tables, true);
             if(!is_array($tables))
                 $tables = array();
-            $tables[$slug] = $request->fields;
+            $tables[$slug] = array(
+                'fields' => $request->fields, 
+                'sort_field' => $request->sort_field ? $request->sort_field : 'id', 
+                'sort_order' => $request->sort_order ? $request->sort_order : 'desc'
+            );
             $user->tables = json_encode($tables);
+            $user->timestamps = false;
             $user->saveQuietly();
         }
 
@@ -356,20 +368,27 @@ class TableController extends Controller
     public function set_all($slug, Request $request)
     {
         $users = \App\Models\User::get();
+        $tables = null;
         foreach($users as $user) {
             $tables = $user->tables;
             if($tables)
                 $tables = json_decode($tables, true);
             if(!is_array($tables))
                 $tables = array();
-            $tables[$slug] = $request->fields;
+            $tables[$slug] = array(
+                'fields' => $request->fields, 
+                'sort_field' => $request->sort_field ? $request->sort_field : 'id', 
+                'sort_order' => $request->sort_order ? $request->sort_order : 'desc'
+            );
             $user->tables = json_encode($tables);
-            $user->save();
+            $user->timestamps = false;
+            $user->saveQuietly();
         }
 
         $settings = \DB::table('settings')->where('key', 'tables')->first();
-        $tables = $settings->value;
-        if($tables)
+        if($settings)
+            $tables = $settings->value;
+        if(ValueHelper::isJson($tables) && !is_array($tables))
             $tables = json_decode($tables, true);
         if(!is_array($tables))
             $tables = array();
@@ -392,11 +411,10 @@ class TableController extends Controller
             $tables = json_decode($tables, true);
 
         if(isset($tables['order_products'])) {
-            //$entity = \DB::table('data_types')->where('slug', 'remnants')->first();
             $entity = \DB::table('data_types')->where('slug', 'products')->first();
             $entity_class = $entity->model_name;
             $model_fields = $entity_class::getFields();
-            $table_columns = collect($tables['order_products']);
+            $table_columns = collect($tables['order_products']['fields']);
             $table_columns = $table_columns->keyBy('key')->toArray();
             foreach($table_columns as $key => $column) {
                 if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'remnant_name' && $key != 'product_name' && $key != 'product_price' && $key != 'product_count' && $key != 'product_weight' && $key != 'product_sum' && $key != 'iconDrag' && $key != 'iconDelete' || $key == 'price' || $key == 'name')
@@ -406,7 +424,7 @@ class TableController extends Controller
                 if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $key != 'price' && $key == 'name') {
                     $table_columns[$field->field] = array(
                         'id' => $field->id,
-                        'title' => $field->display_name,
+                        'title' => $field->title,
                         'key' => $field->field,
                         'width' => '200px',
                         'enabled' => 0,
@@ -429,7 +447,7 @@ class TableController extends Controller
                     'width' => '200px',
                     'enabled' => 1,
                     'sort_order' => '',
-                    'type' => 'text',
+                    'type' => 'relation',
                     'fixed' => '',
                     'index' => 0,
                     'fixTarget' => '0px',
@@ -497,36 +515,21 @@ class TableController extends Controller
                     'read_only' => 1,
                     "mask" => ""
                 );
-            // if(!isset($table_columns['isChoose'])) {
-            //     $table_columns['isChoose'] = array(
-            //         "id" => 0,
-            //         "title" => "Выделение",
-            //         "key" => "isChoose",
-            //         "width" => "40.00px",
-            //         "enabled" => true,
-            //         "hover" => false,
-            //         "sort_order" => null,
-            //         "type" => "checkbox",
-            //         "fixed" => true,
-            //         "fixTarget" => "0px",
-            //         "index" => 0
-            //     );
-            // }
-            // if(!isset($table_columns['actions'])) {
-            //     $table_columns['actions'] = array(
-            //         "id" => 2,
-            //         "title" => "Действие",
-            //         "key" => "actions",
-            //         "width" => "40.00px",
-            //         "enabled" => true,
-            //         "hover" => false,
-            //         "sort_order" => null,
-            //         "type" => "actions",
-            //         "fixed" => true,
-            //         "index" => 1,
-            //         "fixTarget" => "40px"
-            //     );
-            // }
+            if(!isset($table_columns['actions']))
+                $table_columns['actions'] = array(
+                    "id" => null,
+                    "title" => "Действие",
+                    "key" => "actions",
+                    "width" => "40.00px",
+                    "enabled" => true,
+                    "hover" => false,
+                    "sort_order" => null,
+                    "type" => "actions",
+                    "fixed" => true,
+                    "index" => 5,
+                    "fixTarget" => "40px",
+                    "mask" => ""
+                );
             if(!isset($table_columns['iconDrag'])) {
                 $table_columns['iconDrag'] = array(
                     "id" => null,
@@ -565,19 +568,6 @@ class TableController extends Controller
         } else {
 
             $table_columns = array();
-            // $table_columns['remnant_name'] = array(
-            //     'id' => null,
-            //     'title' => 'Наименование единицы',
-            //     'key' => 'remnant_name',
-            //     'width' => '200px',
-            //     'enabled' => 1,
-            //     'sort_order' => '',
-            //     'type' => 'text',
-            //     'fixed' => '',
-            //     'index' => 0,
-            //     'fixTarget' => '0px',
-            //     'read_only' => 0
-            // );
             $table_columns['product_name'] = array(
                 'id' => null,
                 'title' => 'Наименование товара',
@@ -585,7 +575,7 @@ class TableController extends Controller
                 'width' => '200px',
                 'enabled' => 1,
                 'sort_order' => '',
-                'type' => 'text',
+                'type' => 'relation',
                 'fixed' => '',
                 'index' => 0,
                 'fixTarget' => '0px',
@@ -682,7 +672,66 @@ class TableController extends Controller
                     "mask" => ""
                 );
             }
+            if(!isset($table_columns['actions']))
+                $table_columns['actions'] = array(
+                    "id" => null,
+                    "title" => "Действие",
+                    "key" => "actions",
+                    "width" => "40.00px",
+                    "enabled" => true,
+                    "hover" => false,
+                    "sort_order" => null,
+                    "type" => "actions",
+                    "fixed" => true,
+                    "index" => 5,
+                    "fixTarget" => "40px",
+                    "mask" => ""
+                );
             return response()->json(array_values($table_columns));
         }
     }
+
+    public function public_fines(Request $request)
+    {
+        $tenant = \App\Models\Tenant::find('seeds');
+        $table = $tenant->run(function ($tenant) {
+            $user = \App\Models\User::find(1);
+            $tables = $user->tables;
+            if($tables)
+                $tables = json_decode($tables, true);
+            if(isset($tables['admin_fines']))
+                return isset($tables['admin_fines']) ? $tables['admin_fines'] : [];
+        });
+
+        return response()->json($table);
+    }
+
+    public function set_per_page($slug, Request $request)
+    {
+        $data = \DB::table('settings')->where([
+            'key' => 'per_page',
+            'entity' => $slug,
+            'user_id' => \Auth::user()->id
+        ])->first();
+
+        if($data) {
+            \DB::table('settings')->where([
+                'key' => 'per_page',
+                'entity' => $slug,
+                'user_id' => \Auth::user()->id
+            ])->update(['value' => $request->per_page]);
+        } else {
+            \DB::table('settings')->insert([
+                'key' => 'per_page',
+                'entity' => $slug,
+                'user_id' => \Auth::user()->id,
+                'value' => $request->per_page
+            ]);
+        }
+
+        return response()->json(array('per_page' => $request->per_page));
+    }
+
+
+
 }

@@ -10,45 +10,43 @@ use Auth;
 use App\Helpers\ValueHelper;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
+use App\Models\Entity;
+use App\Models\Permission;
+use App\Models\Role;
 
 class EntityController extends Controller
 {
 	public function list(Request $request)
     {
-    	$entities = \DB::table('data_types')->select(['slug', 'display_name_singular', 'display_name_plural', 'color'])->get();
+    	$entities = \DB::table('data_types')->select(['slug', 'title_singular', 'title_plural', 'color'])->get();
 
     	return response()->json($entities);
     }
 
+    public function compose_list(Request $request)
+    {
+        $entities = \DB::table('data_types')->select(['id', 'title_singular', 'title_plural', 'enable'])->where('hidden', 0)->get();
+        $list = array();
+        foreach($entities as $entity) {
+            $list[] = array(
+                'id' => $entity->id,
+                'name' => $entity->title_plural,
+                'enable' => $entity->enable
+            );
+        }
+        $table = \App\Models\Table::entities();
+
+        $data = array(
+            'list' => $list,
+            'table' => $table,
+        );
+        info($data);
+        return response()->json($data);
+    }
+
     public function get_menu($slug, Request $request)
     {
-        // $item = \DB::table('settings')->where([
-        //     'entity' => $slug,
-        //     'type' => 'menu',
-        //     'user_id' => \Auth::user()->id
-        // ])->first();
-        // if(!$item) {
-        //     $item = \DB::table('settings')->where([
-        //         'entity' => $slug,
-        //         'type' => 'menu',
-        //         'user_id' => 1
-        //     ])->first();
-        //     \DB::table('settings')->insert([
-        //         'key' => $item->key,
-        //         'display_name' => $item->display_name,
-        //         'value' => $item->value,
-        //         'entity' => $slug,
-        //         'type' => 'menu',
-        //         'user_id' => \Auth::user()->id
-        //     ]);
-        //     $item = \DB::table('settings')->where([
-        //         'entity' => $slug,
-        //         'type' => 'menu',
-        //         'user_id' => \Auth::user()->id
-        //     ])->first();
-        // }
-        // $menu = json_decode($item->value, true);
-        $s = get_settings();
+        $s = app('settings');
         $item = \DB::table('settings')->where([
             'entity' => $slug,
             'type' => 'menu',
@@ -58,11 +56,10 @@ class EntityController extends Controller
             $item = \DB::table('settings')->where([
                 'entity' => $slug,
                 'type' => 'menu',
-                //'user_id' => \Auth::user()->id
             ])->first();
             \DB::table('settings')->insert([
                 'key' => $item->key,
-                'display_name' => $item->display_name,
+                'title' => $item->title,
                 'value' => $item->value,
                 'entity' => $slug,
                 'type' => 'menu',
@@ -75,9 +72,6 @@ class EntityController extends Controller
             ])->first();
         }
         $menu = json_decode($item->value, true);
-        // echo '<pre>';
-        // print_r($menu);
-        // echo '</pre>';
         $max_id = 0;
         foreach($menu as $k => $menu_item) {
             if($menu_item['id'] > $max_id)
@@ -99,7 +93,7 @@ class EntityController extends Controller
                     if(isset($details['table'])) {
                         $max_id++;
                         $menu[] = array(
-                            'title' => $field->display_name,
+                            'title' => $field->title,
                             'tab' => $field->field,
                             'slug' => $details['table'],
                             'sort' => $max_id,
@@ -132,9 +126,26 @@ class EntityController extends Controller
             \DB::table('local_cache')->where(['url' => "entities/$slug/menu", 'user_id' => \Auth::user()->id])->update(['updated_at' => $now]);
         else
             \DB::table('local_cache')->insert(['url' => "entities/$slug/menu", 'user_id' => \Auth::user()->id, 'created_at' => $now, 'updated_at' => $now]);
-        //$entity = \DB::table('data_types')->where('slug', $slug)->first();
 
         return response()->json($request->menu);
+    }
+
+    public function reset_menu($slug, Request $request)
+    {
+        $tenant = \App\Models\Tenant::find('seeds');
+        $menu = $tenant->run(function ($tenant) use ($slug) {
+            $menu = \DB::table('settings')->where([
+                'entity' => $slug,
+                'type' => 'menu',
+                'user_id' => 1
+            ])->first();
+            
+
+            return json_decode($menu->value,true);
+        });
+        
+
+        return response()->json($menu);
     }
 
     public function set_menu_role($slug, $role_id, Request $request)
@@ -163,12 +174,6 @@ class EntityController extends Controller
                     'user_id' => $user->id,
                     'value' => $menu
                 ]);
-            // \DB::table('settings')->where([
-            //     'entity' => $slug,
-            //     'type' => 'menu',
-            //     'user_id' => $user->id
-            // ])->update(['value' => $menu]);
-
             $now = Carbon::now();
             if(\DB::table('local_cache')->where(['url' => "entities/$slug/menu", 'user_id' => $user->id])->exists())
                 \DB::table('local_cache')->where(['url' => "entities/$slug/menu", 'user_id' => $user->id])->update(['updated_at' => $now]);
@@ -233,33 +238,95 @@ class EntityController extends Controller
         return response()->json($request->menu);
     }
 
+    public function update(Request $request)
+    {
+        if($request->rows) {
+            $ids = array();
+            foreach($request->rows as $entity)
+                $ids[] = $entity['id'];
+            $entities = \DB::table('data_types')->whereIntegerInRaw('id', $ids)->get()->keyBy('id');
+            foreach($request->rows as $entity) {
+                \DB::table('data_types')->where('id', $entity['id'])->update(['enable' => $entity['enable']]);
+                
+                if($entity['enable']) {
+                    $roles = Role::get();
+                    $permissions = array();
+                    foreach($roles as $role) {
+                        if(!Permission::where(['entity_id' => $entity['id'], 'role_id' => $role->id])->exists())
+                            $permissions[] = array(
+                                'role_id' => $role->id,
+                                'entity_id' => $entity['id'],
+                                'read_p' => $role->id == 1 ? 'A' : 'N',
+                                'create_p' => $role->id == 1 ? 'A' : 'N',
+                                'update_p' => $role->id == 1 ? 'A' : 'N',
+                                'delete_p' => $role->id == 1 ? 'A' : 'N',
+                                'export_p' => $role->id == 1 ? 'A' : 'N',
+                                'import_p' => $role->id == 1 ? 'A' : 'N'
+                            );
+                       
+                    }
+                    Permission::insert($permissions);
+                } else {
+                    Permission::where('entity_id', $entity['id'])->delete();
+                }
+                if($entity['enable'] && !$entities[$entity['id']]->hidden) {
+                    if(!\App\Models\SidebarItem::where('slug', $entities[$entity['id']]->slug)->exists()) {
+                        $side_item = new \App\Models\SidebarItem;
+                        $side_item->name = $entities[$entity['id']]->title_plural;
+                        $side_item->slug = $entities[$entity['id']]->slug;
+                        $side_item->link = "/objects/".$entities[$entity['id']]->slug;
+                        $side_item->enabled = 1;
+                        $side_item->save();
+                    }
+                    
+                    
+                } else {
+                    
+                    \App\Models\SidebarItem::where('slug', $entities[$entity['id']]->slug)->delete();
+                }
+            }
+            $entities = \DB::table('data_types')->select(['id', 'slug', 'title_singular', 'title_plural', 'color'])->get();
+            
+            \App\Models\SidebarItem::fixTree();
+
+            $now = Carbon::now();
+            if(\DB::table('local_cache')->where(['url' => 'sidebar', 'user_id' => \Auth::user()->id])->exists())
+                \DB::table('local_cache')->where(['url' => 'sidebar', 'user_id' => \Auth::user()->id])->update(['updated_at' => $now]);
+            else
+                \DB::table('local_cache')->insert(['url' => 'sidebar', 'user_id' => \Auth::user()->id, 'created_at' => $now, 'updated_at' => $now]);
+            if(\DB::table('local_cache')->where(['url' => 'entities', 'user_id' => \Auth::user()->id])->exists())
+                \DB::table('local_cache')->where(['url' => 'entities', 'user_id' => \Auth::user()->id])->update(['updated_at' => $now]);
+            else
+                \DB::table('local_cache')->insert(['url' => 'entities', 'user_id' => \Auth::user()->id, 'created_at' => $now, 'updated_at' => $now]);
+
+            \App\Models\Settings::clear_cache();
+            
+            $table = \App\Models\Table::entities();
+
+            $data = array(
+                'list' => $entities,
+                'table' => $table,
+            );
+
+            return response()->json($data);
+        }
+        
+    }
+
     public function enable(Request $request)
     {
         $query = \DB::table('data_types')->whereIntegerInRaw('id', $request->ids);
         $query->update(['enable' => 1]);
         $entities = $query->get(); 
-        // $entity = \DB::table('data_types')->where([
-        //     'name' => $slug,
-        //     'enable' => 0,
-        // ])->first();
-        // if(!$entity) {
-        //     return response()->json(
-        //         array(
-        //             'code' => 404,
-        //             'error' => 'Сущность не найдена',
-        //         )
-        //     );
-        // }
         foreach ($entities as $entity) {
             $side_item = new \App\Models\SidebarItem;
-            $side_item->name = $entity->display_name_plural;
+            $side_item->name = $entity->title_plural;
             $side_item->slug = $entity->name;
             $side_item->link = "/objects/".$entity->name;
             $side_item->save();
         }
         
         \App\Models\SidebarItem::fixTree();
-        //\DB::table('data_types')->where('name', $slug)->update(['enable' => 1]);
 
         $now = Carbon::now();
         if(\DB::table('local_cache')->where(['url' => 'sidebar', 'user_id' => \Auth::user()->id])->exists())
@@ -282,18 +349,6 @@ class EntityController extends Controller
 
     public function disable(Request $request)
     {
-        // $entity = \DB::table('data_types')->where([
-        //     'name' => $slug,
-        //     'enable' => 1,
-        // ])->first();
-        // if(!$entity) {
-        //     return response()->json(
-        //         array(
-        //             'code' => 404,
-        //             'error' => 'Сущность не найдена',
-        //         )
-        //     );
-        // }
         $query = \DB::table('data_types')->whereIntegerInRaw('id', $request->ids);
         $query->update(['enable' => 0]);
         $entities = $query->get();
@@ -321,5 +376,24 @@ class EntityController extends Controller
                 'code' => 200
             )
         );
+    }
+
+    public function last_modified()
+    {
+        $last_modified = [];
+        $articles_modified = \DB::table('articles')->select('updated_at')->orderBy('updated_at','DESC')->first();
+        $faq_modified = \DB::table('faq')->select('updated_at')->orderBy('updated_at','DESC')->first();
+        $knowledge_modified = \DB::table('knowledge')->select('updated_at')->orderBy('updated_at','DESC')->first();
+        $guides_modified = \DB::table('guides')->select('updated_at')->orderBy('updated_at','DESC')->first();
+        if($articles_modified)
+            $last_modified['articles'] = $articles_modified->updated_at;
+        if($faq_modified)
+            $last_modified['faq'] = $faq_modified->updated_at;
+        if($knowledge_modified)
+            $last_modified['knowledge'] = $knowledge_modified->updated_at;
+        if($guides_modified)
+            $last_modified['guides'] = $guides_modified->updated_at;
+
+        return response()->json($last_modified);
     }
 }

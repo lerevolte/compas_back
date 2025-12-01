@@ -1,5 +1,5 @@
 {
-    "display_name": "Зарплата",
+    "title": "Зарплата",
     "name": "Salary",
     "alias": "salaries",
     "slug": "salaries",
@@ -18,72 +18,72 @@
     "is_hidden": 1,
     "entities": [{
         "name": "salaries",
-        "display_name_singular": "Зарплата",
-        "display_name_plural": "Зарплата",
+        "title_singular": "Зарплата",
+        "title_plural": "Зарплата",
         "class": "App\\Models\\Salary",
         "main": "1",
         "sections": [{
             "name": "Информация",
             "fields": [{
                 "name": "name",
-                "display_name": "Название",
+                "title": "Название",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "date",
-                "display_name": "Дата",
+                "title": "Дата",
                 "type": "date",
                 "visible_always": 1
             },{
                 "name": "timework",
-                "display_name": "Отработано, часов",
+                "title": "Отработано, часов",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "rate",
-                "display_name": "Ставка",
+                "title": "Ставка",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "increase",
-                "display_name": "Надбавка за переработку",
+                "title": "Надбавка за переработку",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "award",
-                "display_name": "Премия",
+                "title": "Премия",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "fund_percent",
-                "display_name": "Процент удержания в аварийный фонд",
+                "title": "Процент удержания в аварийный фонд",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "fund_sum",
-                "display_name": "Зачислено в аварийный фонд",
+                "title": "Зачислено в аварийный фонд",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "status",
-                "display_name": "Выплата ЗП",
+                "title": "Выплата ЗП",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "comment",
-                "display_name": "Примечание",
+                "title": "Примечание",
                 "type": "text",
                 "visible_always": 1,
                 "is_plural": 1
             },{
                 "name": "driver_id",
-                "display_name": "Сотрудник компании",
+                "title": "Сотрудник компании",
                 "table": "drivers",
                 "type": "relation",
                 "visible_always": 1
             },{
                 "name": "user_id",
-                "display_name": "Ответственный",
+                "title": "Ответственный",
                 "table": "users",
                 "type": "relation",
                 "visible_always": 1
@@ -91,48 +91,48 @@
         }]
     },{
         "name": "employees",
-        "display_name_singular": "Сотрудник",
-        "display_name_plural": "Сотрудники",
+        "title_singular": "Сотрудник",
+        "title_plural": "Сотрудники",
         "class": "App\\Models\\Employee",
         "description": "Описание сущности сотрудника",
         "sections": [{
             "name": "Информация",
             "fields": [{
                 "name": "name",
-                "display_name": "Имя",
+                "title": "Имя",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "phone",
-                "display_name": "Телефон",
+                "title": "Телефон",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "car_id",
-                "display_name": "Машины",
+                "title": "Машины",
                 "type": "relation",
                 "table": "cars",
                 "is_plural": 1,
                 "visible_always": 1
             },{
                 "name": "company_id",
-                "display_name": "Компания",
+                "title": "Компания",
                 "table": "companies",
                 "type": "relation",
                 "visible_always": 1
             },{
                 "name": "photo",
-                "display_name": "Фото",
+                "title": "Фото",
                 "type": "file",
                 "visible_always": 1
             },{
                 "name": "carrier_stat",
-                "display_name": "Статистика",
+                "title": "Статистика",
                 "type": "block",
                 "visible_always": 1
             },{
                 "name": "app_id",
-                "display_name": "Пользователь для доступа в мобильное приложение водителя",
+                "title": "Пользователь для доступа в мобильное приложение водителя",
                 "table": "users",
                 "type": "relation",
                 "visible_always": 1
@@ -140,8 +140,8 @@
         }]
     },{
         "name": "routes",
-        "display_name_singular": "Маршрут",
-        "display_name_plural": "Маршруты",
+        "title_singular": "Маршрут",
+        "title_plural": "Маршруты",
         "class": "App\\Models\\Route",
         "description": "Описание сущности сотрудника",
         "sections": []
@@ -152,17 +152,17 @@
             "name": "Расчет зарплаты",
             "fields": [{
                 "name": "rate",
-                "display_name": "Ставка",
+                "title": "Ставка",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "increase",
-                "display_name": "Надбавка за переработку, руб",
+                "title": "Надбавка за переработку, руб",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "timework",
-                "display_name": "Смена часов",
+                "title": "Смена часов",
                 "type": "text",
                 "visible_always": 1
             }]

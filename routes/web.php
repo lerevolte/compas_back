@@ -4,171 +4,310 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Http\Request;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
-/*
-|--------------------------------------------------------------------------
-| Web Routes
-|--------------------------------------------------------------------------
-|
-| Here is where you can register web routes for your application. These
-| routes are loaded by the RouteServiceProvider within a group which
-| contains the "web" middleware group. Now create something great!
-|
-*/
+use App\Services\CrudService;
+use YooKassa\Model\Notification\NotificationSucceeded;
+use YooKassa\Model\Notification\NotificationWaitingForCapture;
+use YooKassa\Model\NotificationEventType;
 
-// if(!function_exists('isMobile')) {
-//     function isMobile() {
-//         return preg_match("/(android|avantgo|blackberry|bolt|boost|cricket|docomo|fone|hiptop|mini|mobi|palm|phone|pie|tablet|up\.browser|up\.link|webos|wos)/i", $_SERVER["HTTP_USER_AGENT"]);
-//     };
-// };
-// if(!function_exists('get_settings')) {
-//     function get_settings() {
-//         return \App\Models\Settings::get();
-//     };
-// };
 Route::group(['middleware' => ['web']], function() {
-    Route::get('/', function() {
+    Route::match(['get', 'post'],'/set_fcm_token', function(Request $request) {
+        if($request->userId) {
+            info('account '.$request->accountId);
+            $tenant = \App\Models\Tenant::find($request->accountId);
+            info('tenant '.$tenant->id);
+            $tenant->run(function () use ($request) {
+                info('token tenant ');
+
+                $user = \App\Models\User::find($request->userId);
+                $devices = [];
+                info($user->device_id);
+                if($user->device_id)
+                    $devices = json_decode($user->device_id, true);
+                info($devices);
+                if(!in_array($request->deviceId, $devices)) {
+                    info('add device');
+                    $devices[] = $request->deviceId;
+                }
+                info($devices);
+                $tokens = [];
+                if($user->token)
+                    $tokens = json_decode($user->token, true);
+                if(!in_array($request->token, $tokens))
+                    $tokens[] = $request->token;
+
+                    $user->token = json_encode($tokens);
+                    $user->device_id = json_encode($devices);
+
+                    $user->app_version = $request->version;
+                    // $user->permission_geo = $request->permissionLocations;
+                    // $user->permission_notification = $request->permissionNotifications;
+                    $user->save();
+            });
+        }
         
-        return view('home');
+        
+    });
+    Route::match(['get','post'], '/payment/notification_check', function(Request $request) {
+         info('moneta check');
+    });
+    Route::match(['get','post'], '/payment/processing', function(Request $request) {
+        echo 'Ваш платеж обрабатывается...';
+    });
+    Route::match(['get','post'], '/payment/notification2', function(Request $request) {
+        $tenants = \App\Models\Tenant::get();
+        foreach($tenants as $tenant) {
+            $tenant->run(function () use ($tenant) {
+                $service = new \App\Services\TenantService(new App\Services\CrudService);
+                $service->syncDatabase2($tenant);
+            });
+        }
+        
+        // $tenant = \App\Models\Tenant::findOrFail('opt6');
+        // $service = new \App\Services\TenantService(new App\Services\CrudService);
+        // $service->syncDatabase($tenant);
+        die();
+    });
+    Route::match(['get','post'], '/payment/notification', function(Request $request) {
+       
+        $method = $request->paymentSystem_unitId;
+        if($request->paymentSystem_unitId == '12299232')
+            $comission = (float)$request->MNT_AMOUNT*0.01;
+        else
+            $comission = (float)$request->MNT_AMOUNT*0.027;
+        $payment = \DB::table('payments')->where([
+            'transaction_id' => $request->MNT_TRANSACTION_ID,
+            'status' => 'success'
+        ])->first();
+        if($payment) {
+            info('just success');
+            return 'SUCCESS';
+        }
+        $payment = \DB::table('payments')->where([
+            'transaction_id' => $request->MNT_TRANSACTION_ID,
+            'status' => 'processing'
+        ])->first();
+        if($payment) {
+            $amount_wo_moneta = $payment->amount;
+            $transaction_id = $payment->transaction_id.time();
+            \DB::table('payments')->where([
+                'transaction_id' => $request->MNT_TRANSACTION_ID,
+            ])->update([
+                'status' => 'success',
+                'amount' => $request->MNT_AMOUNT,
+                'operation_id' => $request->MNT_OPERATION_ID,
+                'moneta_comission' => $comission
+            ]);
+            $payment->operation_id = $request->MNT_OPERATION_ID;
+            $payment->amount = $request->MNT_AMOUNT;
+            if($payment->account_id && !$payment->async_id) {
+                $tenant = \App\Models\Tenant::find($payment->account_id);
+                $sum = (float)$request->MNT_AMOUNT;
+                $s = $tenant->run(function ($tenant) use ($payment, $comission, $amount_wo_moneta){
+                    $fine = \App\Models\GibddFine::find($payment->fine_id);
+                    
+                    $field_payment = json_decode($fine->payment, true);
+                    $field_payment['value'] = $amount_wo_moneta;
+                    $field_payment['state'] = 1;
+                    $fine->payment = json_encode($field_payment);
+                    $fine->save();
+                    $history_text = 'Штраф оплачен';
+                    $history_data = array(
+                        'entity' => 'fines_gibdd', 
+                        'entity_id' => $fine->id, 
+                        'user_id' => 1,
+                        'text' => $history_text,
+                        'event' => 'FINE_PAID',
+                        'color' => '#23704B',
+                        'show_title' => 1
+                    );
+                    $history = new \App\Models\History($history_data);
+
+                    $history->saveQuietly();
+                    $history_data = \App\Models\History::getDataList([$history]);
+                    $history_response_events = array($history_data);
+                    \App\Events\ObjectUpdated::dispatch('HistoryUpdated', $history_data);
+
+                    $settings = \App\Models\Settings::get(true);
+                    $data = $fine->getData(array(), $settings);
+                    \App\Events\ObjectUpdated::dispatch('ObjectUpdated', $data);
+
+                    \Modules\Gibdd\Entities\Module::paymentRequest($payment, $fine, $comission);
+
+                    return 'SUCCESS';
+                });
+
+                return 'SUCCESS';
+            } elseif($payment->fine_data && !$payment->async_id) {
+                $fine = json_decode($payment->fine_data);
+                \Modules\Gibdd\Entities\Module::paymentRequest($payment, $fine, $comission);
+
+                return 'SUCCESS';
+            }
+            
+        } else {
+            return response()->json(['ok' => $request->MNT_TRANSACTION_ID]);
+        }
+
+        
+    });
+    Route::match(['get','post'], '/balance/notification', function(Request $request) {
+        if($request->MNT_CUSTOM1 && $tenant = \App\Models\Tenant::find($request->MNT_CUSTOM1)) {
+            $sum = $request->MNT_CUSTOM2;
+            $s = $tenant->run(function ($tenant) use ($sum){
+                info('пополняем баланс аккаунту '.$sum);
+                $balance = \App\Models\Balance::first();
+                $balance->plus($sum, 'Пополнение баланса для оплаты услуг');
+            });
+
+            return 'SUCCESS';
+        } else {
+            return 'FAIL';
+        }
+        
+    });
+    Route::get('/404', function(Request $request) {
+        return view('errors.404');
+    });
+    Route::get('/sitemap_articles.xml', function () {
+        $articles = \App\Models\Article::get();
+        $output = '';
+        $output_articles = '';
+        foreach($articles as $article) {
+            $slug = json_decode($article->slug, true);
+            if(isset($slug['value']))
+                $slug = $slug['value'];
+            else
+                $slug = $article->slug;
+            $datetime = new \DateTime($article->updated_at);
+            $lastmod = $datetime->format('Y-m-d\TH:i:sP');
+
+            $output_articles.='<url>
+                <loc>https://compas.pro/articles/'.$slug.'</loc>
+                <lastmod>'.$lastmod.'</lastmod>
+                <changefreq>weekly</changefreq>
+                <priority>0.7</priority>
+              </url>';
+        }
+        $output = "<"."?xml version=\"1.0\" encoding=\"utf-8\"?".">";
+        $output.= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+              '.$output_articles.'
+            </urlset>';
+        return response($output, 200, [
+            'Content-Type' => 'application/xml'
+        ]);
+
+        \File::put(public_path().'/sitemap_articles.xml', $output);
+
+        return Illuminate\Support\Facades\Response::make($output, 200);//->header('Content-Type', 'application/xml');
+      
+
+    });
+    Route::get('/sitemap_faq.xml', function () {
+        $articles = \App\Models\Faq::get();
+        $output = '';
+        $output_articles = '';
+        foreach($articles as $article) {
+            $slug = json_decode($article->slug, true);
+            if(isset($slug['value']))
+                $slug = $slug['value'];
+            else
+                $slug = $article->slug;
+            $datetime = new \DateTime($article->updated_at);
+            $lastmod = $datetime->format('Y-m-d\TH:i:sP');
+
+            $output_articles.='<url>
+                <loc>https://compas.pro/questions/'.$slug.'</loc>
+                <lastmod>'.$lastmod.'</lastmod>
+                <changefreq>monthly</changefreq>
+                <priority>0.5</priority>
+              </url>';
+        }
+        $output = "<"."?xml version=\"1.0\" encoding=\"utf-8\"?".">";
+        $output.= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+              '.$output_articles.'
+            </urlset>';
+
+        return response($output, 200, [
+            'Content-Type' => 'application/xml'
+        ]);
+
+        \File::put(public_path().'/sitemap_faq.xml', $output);
+
+        return Illuminate\Support\Facades\Response::make($output, 200);
+        
+      
+
     });
 
-    Route::get('/privacy', function() {
+    Route::get('/sitemap_knowledge.xml', function () {
+        $articles = \App\Models\Knowledge::get();
+        $output = '';
+        $output_articles = '';
+        foreach($articles as $article) {
+            $slug = json_decode($article->slug, true);
+            if(isset($slug['value']))
+                $slug = $slug['value'];
+            else
+                $slug = $article->slug;
+            $datetime = new \DateTime($article->updated_at);
+            $lastmod = $datetime->format('Y-m-d\TH:i:sP');
+
+            $output_articles.='<url>
+                <loc>https://compas.pro/knowledge/'.$slug.'</loc>
+                <lastmod>'.$lastmod.'</lastmod>
+                <changefreq>monthly</changefreq>
+                <priority>0.5</priority>
+              </url>';
+        }
+        $output = "<"."?xml version=\"1.0\" encoding=\"utf-8\"?".">";
+        $output.= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+              '.$output_articles.'
+            </urlset>';
+
+        return response($output, 200, [
+            'Content-Type' => 'application/xml'
+        ]);
+
+        \File::put(public_path().'/sitemap_knowledge.xml', $output);
+
+        return Illuminate\Support\Facades\Response::make($output, 200);
         
-        return view('privacy');
+      
+
     });
+    Route::get('/sitemap_guides.xml', function () {
+        $articles = \App\Models\Guide::get();
+        $output = '';
+        $output_articles = '';
+        foreach($articles as $article) {
+            $slug = json_decode($article->slug, true);
+            if(isset($slug['value']))
+                $slug = $slug['value'];
+            else
+                $slug = $article->slug;
+            $datetime = new \DateTime($article->updated_at);
+            $lastmod = $datetime->format('Y-m-d\TH:i:sP');
+
+            $output_articles.='<url>
+                <loc>https://compas.pro/guides/'.$slug.'</loc>
+                <lastmod>'.$lastmod.'</lastmod>
+                <changefreq>monthly</changefreq>
+                <priority>0.5</priority>
+              </url>';
+        }
+        $output = "<"."?xml version=\"1.0\" encoding=\"utf-8\"?".">";
+        $output.= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+              '.$output_articles.'
+            </urlset>';
+
+        return response($output, 200, [
+            'Content-Type' => 'application/xml'
+        ]);
+
+        \File::put(public_path().'/sitemap_guides.xml', $output);
+
+        return Illuminate\Support\Facades\Response::make($output, 200);
+
+    });
+    Route::get('{path}', App\Http\Controllers\SpaController::class)->where('path', '^(?!api).*$');  
 });
-Route::get('/clear', function () {
-    \Cache::forever('settings-14', 'value');
-    //cache()->rememberForever('settings-14', function() {return 111;});
-    $settings = Illuminate\Support\Facades\Cache::get('settings-14');
-    print_r($settings);
-    die();
-    // Artisan::call('storage:link');
-    // Artisan::call('cache:clear');
-    // Artisan::call('config:cache');
-    // Artisan::call('view:clear');
-    // Artisan::call('route:clear');
-    // Artisan::call('route:list');
-    // App\Models\Tenant::all()->runForEach(function () {
-    //     App\Models\User::factory()->create();
-    // });
-    return "Кэш очищен.";
-});
-// Route::group(['middleware' => ['web', 'auth', InitializeTenancyByDomain::class, PreventAccessFromCentralDomains::class]], function() {
-//     Route::get('/', [
-//         'as' => 'home',
-//         'uses' => 'App\Http\Controllers\PageController@home'
-//     ]);
-
-//     Route::get('/profile/', [App\Http\Controllers\UserController::class, 'profile'])->name('users.profile');
-//     Route::get('/profile/edit-password', [App\Http\Controllers\UserController::class, 'edit_password'])->name('users.edit_password');
-//     Route::post('/profile/update-password', [App\Http\Controllers\UserController::class, 'update_password'])->name('users.update_password');
-//     Route::put('/profile/{user}', [App\Http\Controllers\UserController::class, 'update_profile'])->name('users.update_profile');
-
-//     Route::get('/settings/', [App\Http\Controllers\SettingsController::class, 'index'])->name('settings.index')->middleware('check_permission:read_settings');
-//     Route::get('/settings/zones', [App\Http\Controllers\SettingsController::class, 'zones'])->name('settings.zones')->middleware('check_permission:read_settings');
-//     Route::put('/settings/update/{account}', [App\Http\Controllers\SettingsController::class, 'update'])->name('settings.update')->middleware('check_permission:read_settings');
-//     Route::get('/settings/users/', [App\Http\Controllers\SettingsController::class, 'users'])->name('settings.users')->middleware('check_permission:read_users');
-//     Route::get('/settings/roles/', [App\Http\Controllers\SettingsController::class, 'roles'])->name('settings.roles')->middleware('check_permission:read_roles');
-
-//     Route::get('/balance/', [
-//         'uses' => 'App\Http\Controllers\BalanceController@index'
-//     ])->name('balance');
-//     Route::post('/balance/plus', [
-//         'uses' => 'App\Http\Controllers\BalanceController@plus'
-//     ]);
-//     Route::post('/balance/minus', [
-//         'uses' => 'App\Http\Controllers\BalanceController@minus'
-//     ]);
-
-//     Route::delete('/roles/{role}', [App\Http\Controllers\RoleController::class, 'destroy'])->name('roles.destroy')->middleware('check_permission:delete_roles');
-//     Route::get('/roles/create', [App\Http\Controllers\RoleController::class, 'create'])->name('roles.create');
-//     Route::get('/roles/edit/{id}', [App\Http\Controllers\RoleController::class, 'edit'])->name('roles.edit');
-//     Route::post('/roles/store', [App\Http\Controllers\RoleController::class, 'store'])->name('roles.store');
-//     Route::post('/roles/', [App\Http\Controllers\RoleController::class, 'update'])->name('roles.update')->middleware('check_permission:write_roles');
-//     Route::post('/roles/change-sort', [App\Http\Controllers\RoleController::class, 'changeSort'])->name('roles.sort')->middleware('check_permission:write_roles');
-
-//     Route::get('/users/get_drivers', [App\Http\Controllers\UserController::class, 'get_drivers'])->name('users.get_drivers');
-//     Route::post('/users/store', [App\Http\Controllers\UserController::class, 'store'])->name('users.store');
-//     Route::get('/users/create', [App\Http\Controllers\UserController::class, 'create'])->name('users.create')->middleware('check_permission:write_users');
-//     Route::get('/users/{user}', [App\Http\Controllers\UserController::class, 'edit'])->name('users.edit')->middleware('check_permission:write_users');
-//     Route::put('/users/{user}', [App\Http\Controllers\UserController::class, 'update'])->name('users.update')->middleware('check_permission:write_users');
-//     Route::delete('/users/{id}', [App\Http\Controllers\UserController::class, 'destroy'])->name('users.destroy')->middleware('check_permission:delete_users');
-
-//     Route::post('/users/change-sort', [App\Http\Controllers\UserController::class, 'changeSort'])->name('users.sort')->middleware('check_permission:write_users');
-//     Route::post('/users/restore/{id}', [App\Http\Controllers\UserController::class, 'restore'])->name('users.restore')->middleware('check_permission:write_users');
-//     Route::get('/users/', [App\Http\Controllers\UserController::class, 'index'])->name('users.index')->middleware('check_permission:write_users');
-
-//     Route::resource('field_sections', App\Http\Controllers\FieldSectionController::class);
-//     Route::post('/fields/change-sort', [App\Http\Controllers\FieldController::class, 'changeSort']);
-//     Route::post('/field_sections/change-sort', [App\Http\Controllers\FieldSectionController::class, 'changeSort']);
-//     Route::post('/field_sections/hide', [App\Http\Controllers\FieldSectionController::class, 'hide']);
-//     Route::post('/field_sections/destroy', [App\Http\Controllers\FieldSectionController::class, 'destroy']);
-
-//     Route::get('/field/', [
-//         'as' => 'field',
-//         'uses' => 'App\Http\Controllers\FieldController@field'
-//     ]);
-//     Route::get('/field/properties/{type}', [
-//         'as' => 'field_properties',
-//         'uses' => 'App\Http\Controllers\FieldController@renderProperties'
-//     ]);
-//     Route::post('/field/hide/', [
-//         'as' => 'field_hide',
-//         'uses' => 'App\Http\Controllers\FieldController@hide'
-//     ]);
-//     Route::post('/field/show/', [
-//         'as' => 'field_show',
-//         'uses' => 'App\Http\Controllers\FieldController@show'
-//     ]);
-//     Route::get('/field/add_color/', [
-//         'as' => 'field_add_color',
-//         'uses' => 'App\Http\Controllers\FieldController@add_color'
-//     ]);
-//     Route::match(['put', 'post'], '/field/store/', [
-//         'as' => 'field_store',
-//         'uses' => 'App\Http\Controllers\FieldController@store'
-//     ]);
-//     Route::get('/field/edit/', [
-//         'as' => 'field_edit',
-//         'uses' => 'App\Http\Controllers\FieldController@edit'
-//     ]);
-//     Route::post('/field/update/', [
-//         'as' => 'field_update',
-//         'uses' => 'App\Http\Controllers\FieldController@update'
-//     ]);
-//     Route::post('/field/destroy/{id}', [
-//         'as' => 'field.destroy',
-//         'uses' => 'App\Http\Controllers\FieldController@destroy'
-//     ]);
-
-//     Route::put('/filters/{filter}/add_field', [App\Http\Controllers\FilterController::class, 'add_field'])->name('filters.add_field');
-//     Route::put('/filters/show_field', [App\Http\Controllers\FilterController::class, 'show_field'])->name('filters.show_field');
-    
-//     Route::resource('filters', App\Http\Controllers\FilterController::class);
-
-//     Route::get('/objects/{model}', [App\Http\Controllers\ObjectController::class, 'list'])->name('objects.list');
-//     Route::get('/objects/{model}/get', [App\Http\Controllers\ObjectController::class, 'get'])->name('objects.get');
-//     Route::get('/objects/{model}/show/{id}', [App\Http\Controllers\ObjectController::class, 'show'])->name('objects.show');
-
-//     Route::get('/modules/install/{module}', [App\Http\Controllers\ModuleController::class, 'install'])->name('modules.install');
-// });
-
-// Route::group(['prefix' => 'admin'], function () {
-    
-//     Voyager::routes();
-// });
-
-
-// Route::get('/login', function () {
-//     if(\Auth::user()) {
-//         if(\Auth::user()->hasRole('driver')) {
-//             //$driver = \App\Models\Driver::where('user_id', \Auth::user()->id)->first();
-//             return redirect()->route('drivers.show', ['driver' => $driver->id]);
-//         } else {
-//             return redirect()->route('users.profile');
-//         }
-//     } else {
-//         return redirect('/admin/login');
-//     }
-    
-// })->name('login');

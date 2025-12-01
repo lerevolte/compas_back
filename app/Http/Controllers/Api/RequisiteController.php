@@ -20,47 +20,45 @@ class RequisiteController extends Controller
                 'company_id' => $item->company_id,
                 'fields' => array(
                     [
-                        "id" => 2418,
-                        "key" => "id",
-                        "title" => "ID",
-                        "type" => "number",
-                        "value" => $item->id
-                    ],
-                    [
                         "id" => 1959,
                         "key" => "name",
                         "title" => "Название организации",
                         "type" => "text",
                         "value" => $item->name,
-                        "required" => 1
+                        "required" => 1,
+                        "object_id" => $item->id
                     ],
                     [
                         "id" => 1960,
                         "key" => "inn",
                         "title" => "ИНН",
                         "type" => "text",
-                        "value" => $item->inn
+                        "value" => $item->inn,
+                        "object_id" => $item->id
                     ],
                     [
                         "id" => 1961,
                         "key" => "kpp",
                         "title" => "КПП",
                         "type" => "text",
-                        "value" => $item->kpp
+                        "value" => $item->kpp,
+                        "object_id" => $item->id
                     ],
                     [
                         "id" => 1962,
                         "key" => "address",
                         "title" => "Юридический адрес",
                         "type" => "text",
-                        "value" => $item->address
+                        "value" => $item->address,
+                        "object_id" => $item->id
                     ],
                     [
                         "id" => 1963,
                         "key" => "fact_address",
                         "title" => "Фактический адрес",
                         "type" => "text",
-                        "value" => $item->fact_address
+                        "value" => $item->fact_address,
+                        "object_id" => $item->id
                     ]
                 )
             );
@@ -85,34 +83,40 @@ class RequisiteController extends Controller
                         "title" => "Название организации",
                         "type" => "text",
                         "value" => $data->name,
+                        "required" => 1,
+                        "object_id" => $data->id
                     ],
                     [
                         "id" => 1960,
                         "key" => "inn",
                         "title" => "ИНН",
                         "type" => "text",
-                        "value" => $data->inn
+                        "value" => $data->inn,
+                        "object_id" => $data->id
                     ],
                     [
                         "id" => 1961,
                         "key" => "kpp",
                         "title" => "КПП",
                         "type" => "text",
-                        "value" => $data->kpp
+                        "value" => $data->kpp,
+                        "object_id" => $data->id
                     ],
                     [
                         "id" => 1962,
                         "key" => "address",
                         "title" => "Юридический адрес",
                         "type" => "text",
-                        "value" => $data->address
+                        "value" => $data->address,
+                        "object_id" => $data->id
                     ],
                     [
                         "id" => 1963,
                         "key" => "fact_address",
                         "title" => "Фактический адрес",
                         "type" => "text",
-                        "value" => $data->fact_address
+                        "value" => $data->fact_address,
+                        "object_id" => $data->id
                     ]
                 )
             );
@@ -139,40 +143,112 @@ class RequisiteController extends Controller
                         "key" => "name",
                         "title" => "Название организации",
                         "type" => "text",
-                        "value" => $data->name
+                        "value" => $data->name,
+                        "required" => 1,
+                        "object_id" => $data->id
                     ],
                     [
                         "id" => 1960,
                         "key" => "inn",
                         "title" => "ИНН",
                         "type" => "text",
-                        "value" => $data->inn
+                        "value" => $data->inn,
+                        "object_id" => $data->id
                     ],
                     [
                         "id" => 1961,
                         "key" => "kpp",
                         "title" => "КПП",
                         "type" => "text",
-                        "value" => $data->kpp
+                        "value" => $data->kpp,
+                        "object_id" => $data->id
                     ],
                     [
                         "id" => 1962,
                         "key" => "address",
                         "title" => "Юридический адрес",
                         "type" => "text",
-                        "value" => $data->address
+                        "value" => $data->address,
+                        "object_id" => $data->id
                     ],
                     [
                         "id" => 1963,
                         "key" => "fact_address",
                         "title" => "Фактический адрес",
                         "type" => "text",
-                        "value" => $data->fact_address
+                        "value" => $data->fact_address,
+                        "object_id" => $data->id
                     ]
                 )
             );
 
         return response()->json($data);
+    }
+
+    public function batch(Request $request)
+    {
+        if($request->rows) {
+            $data = array();
+            foreach($request->rows as $row) {
+                if(isset($row['isNew'])) {
+                    unset($row['id']);
+                    unset($row['isNew']);
+                    $req = Requisite::create($row);
+                } else {
+                    $id = $row['id'];
+                    unset($row['id']);
+                    Requisite::where('id', $id)->update($row);
+                    $req = Requisite::find($id);
+                }
+                $data[] = array(
+                    'id' => $req->id,
+                    'company_id' => $req->company_id,
+                    'fields' => array(
+                        [
+                            "id" => 1959,
+                            "key" => "name",
+                            "title" => "Название организации",
+                            "type" => "text",
+                            "value" => $req->name,
+                            "required" => 1,
+                            "object_id" => $req->id
+                        ],
+                        [
+                            "id" => 1960,
+                            "key" => "inn",
+                            "title" => "ИНН",
+                            "type" => "text",
+                            "value" => $req->inn,
+                            "object_id" => $req->id
+                        ],
+                        [
+                            "id" => 1961,
+                            "key" => "kpp",
+                            "title" => "КПП",
+                            "type" => "text",
+                            "value" => $req->kpp,
+                            "object_id" => $req->id
+                        ],
+                        [
+                            "id" => 1962,
+                            "key" => "address",
+                            "title" => "Юридический адрес",
+                            "type" => "text",
+                            "value" => $req->address,
+                            "object_id" => $req->id
+                        ],
+                        [
+                            "id" => 1963,
+                            "key" => "fact_address",
+                            "title" => "Фактический адрес",
+                            "type" => "text",
+                            "value" => $req->fact_address,
+                            "object_id" => $req->id
+                        ]
+                    )
+                );
+            }
+        }
     }
 
     public function destroy($id) {

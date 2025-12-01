@@ -15,6 +15,7 @@ class VerifyCsrfToken extends Middleware
         '/api/auth',
         '/b24_crm_deal_update',
         '/b24_crm_contact_update',
-        '/create_payment'
+        '/create_payment',
+        '/set_fcm_token'
     ];
 }

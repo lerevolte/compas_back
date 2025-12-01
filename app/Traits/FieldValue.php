@@ -5,6 +5,17 @@ use App\DataRow;
 
 trait FieldValue
 {
+	public function getStringValue($field) {
+		$value = is_array($this->{$field}) ? $this->{$field} : json_decode($this->{$field}, true);
+		if(isset($value['value']))
+			$value = $value['value'];
+		elseif(isset($value['text']))
+			$value = $value['text'];
+		else
+			$value = $this->{$field};
+
+		return $value;
+	}
 	public function getValue($field) {
 		$value = '';
 		switch ($field->type) {
@@ -64,7 +75,7 @@ trait FieldValue
 								$table_values = array();
 								foreach($options as $option) {
 									if(is_array($vals) && in_array($option->id, $vals))
-										$values[] = isset($option->display_name) && $option->display_name ? $option->display_name : $option->name;
+										$values[] = isset($option->title) && $option->title ? $option->title : $option->name;
 								}
 								if(count($values) > 0 && $values[0])
 									$value = implode(', ', $values);
@@ -88,7 +99,7 @@ trait FieldValue
 								$options = \DB::table($details['table'])->get();
 							foreach($options as $option) {
 								if($option->id == $this->{$field->field})
-									$value = (isset($option->display_name) ? $option->display_name : $option->name).(isset($option->last_name) ? ' '.$option->last_name : '');
+									$value = (isset($option->title) ? $option->title : $option->name).(isset($option->last_name) ? ' '.$option->last_name : '');
 							}
 						} else {
 							$value = $this->{$field->field};
@@ -116,7 +127,7 @@ trait FieldValue
 							$table_values = array();
 							foreach($options as $option) {
 								if(is_array($vals) && in_array($option->id, $vals))
-									$values[] = $option->display_name ? $option->display_name : $option->name;
+									$values[] = $option->title ? $option->title : $option->name;
 							}
 							if(count($values) > 0 && $values[0])
 								$value = implode(', ', $values);

@@ -1,7 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Broadcast;
-
+use App\Broadcasting\ChatChannel;
+use App\Models\ChatGroup;
 /*
 |--------------------------------------------------------------------------
 | Broadcast Channels
@@ -13,9 +14,18 @@ use Illuminate\Support\Facades\Broadcast;
 |
 */
 
-Broadcast::channel('object-updated', function ($user) {
-    // info('channel');
-    // info($user->id);
-    return true;//$user->id === 2;
+Broadcast::channel('tenant.{tenant}', function () {
+    info('CHANNEL tenant');
+    return true;//$tenant == tenant('id');
 });
-
+Broadcast::channel('object-updated', function ($user) {
+    info('CHANNEL');
+    info(tenant('id'));
+    return true;
+});
+Broadcast::channel('users.{id}', function ($user, $id) {
+    return (int) $user->id === (int) $id;
+});
+Broadcast::channel('groups.{group}', function ($user, ChatGroup $group) {
+    return $group->hasUser($user->id);
+});

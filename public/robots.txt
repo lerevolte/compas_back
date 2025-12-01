@@ -1,2 +1,6 @@
-User-agent: *
-Disallow:
+User-agent: * 
+Disallow: /auth
+Disallow: /landing
+Disallow: /*payload.json$
+Clean-param: source
+Clean-param: yprqee

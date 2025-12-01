@@ -25,44 +25,16 @@ class GibddFine extends Model
             if(!$model->user_id && $user)
                 $model->user_id = $user->id;
         });
-        static::updating(function($model)
-        {
-            if($model->getOriginal('car_id') != $model->car_id) {
-                if($model->getOriginal('car_id')) {
-                    $car = Car::find($model->getOriginal('car_id'));
-                    $car_fines = is_array($car->fine_id) ? $car->fine_id : json_decode($car->fine_id, true);
-                    if(is_array($car_fines)) {
-                        $k = array_search($model->id, $car_fines);
-                        unset($car_fines[$k]);
-                        $car->saveRelations('car_id', $car_fines);
-                        $car->fine_id = json_encode($car_fines);
-                        $car->saveQuietly();
-                    }
-                }
-
-                if($model->car_id) {
-                    $car = $model->car;
-                    $car_fines = is_array($car->fine_id) ? $car->fine_id : json_decode($car->fine_id, true);
-                    if(is_array($car_fines)) {
-                        if(!in_array($model->id, $car_fines)) {
-                            $car_fines[] = $model->id;
-                            $car->saveRelations('fine_id', $car_fines);
-                            $car->fine_id = json_encode($car_fines);
-                            $car->saveQuietly();
-                        }
-                    } else {
-                        $car->saveRelations('fine_id', [$model->id]);
-                        $car->fine_id = json_encode([$model->id]);
-                        $car->saveQuietly();
-                    }
-                }
-            }
-        });
     }
 
     public function car()
     {
         return $this->belongsTo(Car::class);
+    }
+
+    public function sync_history($field, $new_value)
+    {
+        $objects = \App\Models\History::saveForObject('fines_gibdd', array(['id' => $this->id, $field => $new_value]), false);
     }
     
 }

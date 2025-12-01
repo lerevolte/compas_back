@@ -100,15 +100,15 @@
                                                             $options_o = \DB::table($field_details['table'])->whereNull('deleted_at')->get();
                                                             if(count($options_o))
                                                                 foreach($options_o as $option) {
-                                                                    $opts[$option->id] = (isset($option->display_name) ? $option->display_name : $option->name).(isset($option->last_name) ? ' '.$option->last_name : '');
+                                                                    $opts[$option->id] = (isset($option->title) ? $option->title : $option->name).(isset($option->last_name) ? ' '.$option->last_name : '');
                                                                 }
                                                         } else
                                                             $opts = $field_details['options'];
                                                         $opts = json_encode($opts, JSON_UNESCAPED_UNICODE);
                                                         @endphp
-                                                        <option data-field="{{ $order_field->field }}" data-items="{{ $opts }}" value="{{ $order_field->field }}">{{ $order_field->display_name }}</option>
+                                                        <option data-field="{{ $order_field->field }}" data-items="{{ $opts }}" value="{{ $order_field->field }}">{{ $order_field->title }}</option>
                                                     @else
-                                                        <option data-field="{{ $order_field->field }}" value="{{ $order_field->field }}">{{ $order_field->display_name }}</option>
+                                                        <option data-field="{{ $order_field->field }}" value="{{ $order_field->field }}">{{ $order_field->title }}</option>
                                                     @endif
                                                 @endforeach
                                             </select>
@@ -235,16 +235,16 @@
                                                                 $options_o = \DB::table($field_details['table'])->whereNull('deleted_at')->get();
                                                                 if(count($options_o))
                                                                     foreach($options_o as $option) {
-                                                                        $opts1[$option->id] = (isset($option->display_name) ? $option->display_name : $option->name).(isset($option->last_name) ? ' '.$option->last_name : '');
+                                                                        $opts1[$option->id] = (isset($option->title) ? $option->title : $option->name).(isset($option->last_name) ? ' '.$option->last_name : '');
                                                                     }
                                                             } else
                                                                 $opts1 = $field_details['options'];
                                                             $opts1 = json_encode($opts, JSON_UNESCAPED_UNICODE);
                                                             
                                                             @endphp
-                                                            <option data-field="{{ $field->field }}" data-items="{{ $opts1 }}" value="{{ $field->field }}" @if($params['params'][$b24_code] == $field->field) selected @endif>{{ $field->display_name }}</option>
+                                                            <option data-field="{{ $field->field }}" data-items="{{ $opts1 }}" value="{{ $field->field }}" @if($params['params'][$b24_code] == $field->field) selected @endif>{{ $field->title }}</option>
                                                         @else
-                                                            <option data-field="{{ $field->field }}" value="{{ $field->field }}" @if($params['params'][$b24_code] == $field->field) selected @endif>{{ $field->display_name }}</option>
+                                                            <option data-field="{{ $field->field }}" value="{{ $field->field }}" @if($params['params'][$b24_code] == $field->field) selected @endif>{{ $field->title }}</option>
                                                         @endif
                                                         @php
                                                         unset($opts1);
@@ -272,7 +272,7 @@
                                                         $options_o = \DB::table($field_details['table'])->whereNull('deleted_at')->get();
                                                         if(count($options_o))
                                                             foreach($options_o as $option) {
-                                                                $options[$option->id] = (isset($option->display_name) ? $option->display_name : $option->name).(isset($option->last_name) ? ' '.$option->last_name : '');
+                                                                $options[$option->id] = (isset($option->title) ? $option->title : $option->name).(isset($option->last_name) ? ' '.$option->last_name : '');
                                                             }
                                                     } else
                                                         $options = $field_details['options'];
@@ -368,7 +368,7 @@
                     <div class="col-md-4">
                         <div class="white-box">
                             <div class="panel panel-bold d-flex align-items-center">
-                                {{ $order_field->display_name }}
+                                {{ $order_field->title }}
                             </div>
                             <div class="c-body pt-3">
                                 <div class="px-3">
@@ -381,7 +381,7 @@
                                             $options_o = \DB::table($field_details['table'])->whereNull('deleted_at')->get();
                                             if(count($options_o))
                                                 foreach($options_o as $option) {
-                                                    $options[$option->id] = (isset($option->display_name) ? $option->display_name : $option->name).(isset($option->last_name) ? ' '.$option->last_name : '');
+                                                    $options[$option->id] = (isset($option->title) ? $option->title : $option->name).(isset($option->last_name) ? ' '.$option->last_name : '');
                                                 }
                                         } else
                                             $options = $field_details['options'];

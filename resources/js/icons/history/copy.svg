@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="25px" height="25px" viewBox="0 0 25 25" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>Group Copy 6</title>
+    <defs>
+        <path d="M6.4056406,0.232076796 L10.2343843,0.0539956961 C11.8006672,-0.0188546755 13.3695102,-0.0179879117 14.9357117,0.0565931138 L18.4839855,0.225558533 C21.8287866,0.384834774 24.5044845,3.06053276 24.6637608,6.40533381 L24.8327262,9.95360762 C24.9073072,11.5198092 24.908174,13.0886521 24.8353236,14.6549351 L24.6572425,18.4836787 C24.5017072,21.8276876 21.8278205,24.5045305 18.4839855,24.6637608 L14.9357117,24.8327262 C13.3695102,24.9073072 11.8006672,24.908174 10.2343843,24.8353236 L6.54578325,24.6637608 C3.12332316,24.5045766 0.384742724,21.7659962 0.225558533,18.3435361 L0.0539956961,14.6549351 C-0.0188546755,13.0886521 -0.0179879117,11.5198092 0.0565931138,9.95360762 L0.225558533,6.40533381 C0.384788773,3.06149879 3.06163167,0.387612095 6.4056406,0.232076796 Z" id="path-1"></path>
+        <rect id="path-3" x="0" y="2.7377261" width="10.2190722" height="10.2622739" rx="2"></rect>
+    </defs>
+    <g id="Основа" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Artboard2121" transform="translate(-2251, -97)">
+            <g id="Group-Copy-6" transform="translate(2251.0553, 97.0553)">
+                <g id="Path-12" transform="translate(0, 0)">
+                    <mask id="mask-2" fill="white">
+                        <use xlink:href="#path-1"></use>
+                    </mask>
+                    <use id="Combined-Shape" fill="#A6B7D4" xlink:href="#path-1"></use>
+                </g>
+                <g id="Group-31" transform="translate(5.9447, 5.9447)">
+                    <rect id="Rectangle-Copy-14" stroke="#FFFFFF" x="2.28092784" y="-0.5" width="11.2190722" height="11.2622739" rx="2"></rect>
+                    <g id="Rectangle">
+                        <rect stroke="#A6B7D4" stroke-width="2" fill="#A6B7D4" fill-rule="evenodd" x="-1" y="1.7377261" width="12.2190722" height="12.2622739" rx="2"></rect>
+                        <rect stroke="#FFFFFF" stroke-width="1" x="-0.5" y="2.2377261" width="11.2190722" height="11.2622739" rx="2"></rect>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

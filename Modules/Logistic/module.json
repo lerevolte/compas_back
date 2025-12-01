@@ -1,5 +1,5 @@
 {
-    "display_name": "Логистика",
+    "title": "Логистика",
     "name": "Logistic",
     "alias": "logistic",
     "slug": "logistic",
@@ -18,175 +18,134 @@
     "files": [],
     "menu": [{
         "name": "Логистика",
+        "slug": "logistic",
         "link": "/modules/logistic"
+    },{
+        "name": "Маршруты",
+        "slug": "routes",
+        "entity": "routes",
+        "link": "/objects/routes"
+    },{
+        "name": "Задачи логистики",
+        "slug": "logistic_tasks",
+        "entity": "logistic_tasks",
+        "link": "/objects/logistic_tasks"
     }],
     "main": "1",
-    "settings": [{
-        "id": 1,
-        "title": "Главный город",
-        "type": "text",
-        "value": "Москва",
-        "is_required": 1
-    },{
-        "id": 2,
-        "title": "Ключ Яндекс.карт",
-        "type": "text",
-        "value": "",
-        "is_required": 0
-    },{
-        "id": 3,
-        "title": "Используемая карта",
-        "type": "select_dropdown",
-        "value": "Яндекс Карты",
-        "options": [
-            {
-                "label": "Openstreet",
-                "value": "Openstreet"
-            },
-            {
-                "label": "Яндекс Карты",
-                "value": "Яндекс Карты"
-            },
-            {
-                "label": "Google maps",
-                "value": "Google maps"
-            }
-        ],
-        "is_required": 1
-    },{
-        "id": 4,
-        "title": "Радиус зоны точки при план-факт контроле, метров",
-        "type": "map_radius",
-        "value": "500",
-        "color": "#1253a2",
-        "is_required": 1
-    },{
-        "id": 5,
-        "title": "Считать остановку, если машина более 5-ти минут находится в радиусе, метров",
-        "type": "map_radius",
-        "value": "150",
-        "color": "#e3402a",
-        "is_required": 1
-    },{
-        "id": 6,
-        "title": "Выделенные области на карте",
-        "type": "select_dropdown",
-        "value": "От дистанции",
-        "options": [
-            {
-                "label": "От дистанции",
-                "value": "От дистанции"
-            },
-            {
-                "label": "От времени",
-                "value": "От времени"
-            }
-        ],
-        "is_required": 0
-    },{
-        "id": 7,
-        "title": "Как считать зарплату",
-        "type": "select_dropdown",
-        "value": 1,
-        "options": [
-            {
-                "label": "От дистанции",
-                "value": 1
-            },
-            {
-                "label": "От времени",
-                "value": 2
-            }
-        ],
-        "is_required": 0
-    },{
-        "id": 8,
-        "title": "Коэффициент расчета",
-        "type": "text",
-        "value": "",
-        "is_required": 0
-    }],
+    "settings": {
+        "fields": [{
+            "id": 1,
+            "has_roles_read": 0,
+            "has_roles_write": 0,
+            "roles_read": [],
+            "roles_write": [],
+            "set_color": 0,
+            "visible_always": 1,
+            "is_hidden": 0,
+            "is_plural": 0,
+            "is_external_link": 0,
+            "required": 1,
+            "read_only": 0,
+            "permanent_required": 0,
+            "permanent_name": 0,
+            "is_permanent": null,
+            "color": null,
+            "unit": "",
+            "module": null,
+            "mask": null,
+            "show_file_name": 0,
+            "button_name": "Загрузить",
+            "can_read": 1,
+            "can_edit": 1,
+            "used_in_module": [],
+            "choosed": [],
+            "key": "email",
+            "title": "Главный город",
+            "type": "address",
+            "value": ""
+        }]
+    },
     "entities": [{
         "name": "cars",
-        "display_name_singular": "Автопарк",
-        "display_name_plural": "Автопарк",
+        "title_singular": "Автопарк",
+        "title_plural": "Автопарк",
         "class": "Modules\\Logistic\\Entities\\Car",
         "description": "Описание сущности машины",
         "sections": [{
             "name": "Информация",
             "fields": [{
                 "name": "name",
-                "display_name": "Название",
+                "title": "Название",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "color_status",
-                "display_name": "Цвет",
+                "title": "Цвет",
                 "type": "status",
                 "visible_always": 1
             },{
                 "name": "employee_id",
-                "display_name": "Сотрудник",
+                "title": "Сотрудник",
                 "table": "employees",
                 "type": "relation",
                 "visible_always": 1
             },{
                 "name": "company_id",
-                "display_name": "Компания",
+                "title": "Компания",
                 "table": "companies",
                 "type": "relation",
                 "visible_always": 1
             },{
                 "name": "photo",
-                "display_name": "Фото",
+                "title": "Фото",
                 "type": "file",
                 "visible_always": 1
             }]
         }]
     },{
         "name": "employees",
-        "display_name_singular": "Сотрудник",
-        "display_name_plural": "Сотрудники",
+        "title_singular": "Сотрудник",
+        "title_plural": "Сотрудники",
         "class": "App\\Models\\Employee",
         "description": "Описание сущности сотрудника",
         "sections": [{
             "name": "Информация",
             "fields": [{
                 "name": "name",
-                "display_name": "Имя",
+                "title": "Имя",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "phone",
-                "display_name": "Телефон",
+                "title": "Телефон",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "car_id",
-                "display_name": "Машины",
+                "title": "Машины",
                 "type": "relation",
                 "table": "cars",
                 "is_plural": 1,
                 "visible_always": 1
             },{
                 "name": "company_id",
-                "display_name": "Компания",
+                "title": "Компания",
                 "table": "companies",
                 "type": "relation",
                 "visible_always": 1
             },{
                 "name": "photo",
-                "display_name": "Фото",
+                "title": "Фото",
                 "type": "file",
                 "visible_always": 1
             },{
                 "name": "carrier_stat",
-                "display_name": "Статистика",
+                "title": "Статистика",
                 "type": "block",
                 "visible_always": 1
             },{
                 "name": "app_id",
-                "display_name": "Пользователь для доступа в мобильное приложение водителя",
+                "title": "Пользователь для доступа в мобильное приложение водителя",
                 "table": "users",
                 "type": "relation",
                 "visible_always": 1
@@ -194,77 +153,77 @@
         }]
     },{
         "name": "routes",
-        "display_name_singular": "Маршрут",
-        "display_name_plural": "Маршруты",
+        "title_singular": "Маршрут",
+        "title_plural": "Маршруты",
         "class": "App\\Models\\Route",
         "description": "Описание сущности маршрута",
         "sections": [{
             "name": "О маршруте",
             "fields": [{
                 "name": "name",
-                "display_name": "Название",
+                "title": "Название",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "loading_time",
-                "display_name": "Время загрузки",
+                "title": "Время загрузки",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "number_orders",
-                "display_name": "Количество заказов",
+                "title": "Количество заказов",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "mileage",
-                "display_name": "Пробег, км",
+                "title": "Пробег, км",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "time",
-                "display_name": "Время маршрута",
+                "title": "Время маршрута",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "weight",
-                "display_name": "Вес, кг",
+                "title": "Вес, кг",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "volume",
-                "display_name": "Объем, л",
+                "title": "Объем, л",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "rate",
-                "display_name": "Ставка водителя",
+                "title": "Ставка водителя",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "reserve_for_delivery",
-                "display_name": "Заложено на доставку, руб",
+                "title": "Заложено на доставку, руб",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "delivery_price",
-                "display_name": "Цена доставки, руб",
+                "title": "Цена доставки, руб",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "car_id",
-                "display_name": "Машина",
+                "title": "Машина",
                 "type": "relation",
                 "table": "cars",
                 "visible_always": 1
             },{
                 "name": "employee_id",
-                "display_name": "Сотрудник",
+                "title": "Сотрудник",
                 "type": "relation",
                 "table": "employees",
                 "visible_always": 1
             },{
                 "name": "user_id",
-                "display_name": "Ответственный",
+                "title": "Ответственный",
                 "type": "relation",
                 "table": "users",
                 "visible_always": 1
@@ -272,27 +231,27 @@
         }]
     },{
         "name": "companies",
-        "display_name_singular": "Компания",
-        "display_name_plural": "Компании",
+        "title_singular": "Компания",
+        "title_plural": "Компании",
         "class": "Modules\\Logistic\\Entities\\Company",
         "sections": [{
             "name": "Информация",
             "fields": [{
                 "name": "name",
-                "display_name": "Имя",
+                "title": "Имя",
                 "type": "text",
                 "visible_always": 1
             }]
         }]
     },{
         "name": "tasks",
-        "display_name_singular": "Задача",
-        "display_name_plural": "Задачи",
+        "title_singular": "Задача",
+        "title_plural": "Задачи",
         "class": "App\\Models\\Task"
     },{
         "name": "addresses",
-        "display_name_singular": "Адрес",
-        "display_name_plural": "Справочник адресов",
+        "title_singular": "Адрес",
+        "title_plural": "Справочник адресов",
         "class": "App\\Models\\Address"
     }]
 }

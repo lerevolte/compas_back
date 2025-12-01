@@ -1,5 +1,5 @@
 {
-    "display_name": "Пробег, км / моточасы",
+    "title": "Пробег, км / моточасы",
     "name": "Mileage",
     "alias": "mileages",
     "slug": "mileages",
@@ -18,52 +18,52 @@
     "is_hidden": 1,
     "entities": [{
         "name": "mileages",
-        "display_name_singular": "Пробег, км / моточасы",
-        "display_name_plural": "Пробег, км / моточасы",
+        "title_singular": "Пробег, км / моточасы",
+        "title_plural": "Пробег, км / моточасы",
         "class": "App\\Models\\Mileage",
         "main": "1",
         "sections": [{
             "name": "Информация",
             "fields": [{
                 "name": "name",
-                "display_name": "Название",
+                "title": "Название",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "date",
-                "display_name": "Дата",
+                "title": "Дата",
                 "type": "date",
                 "visible_always": 1
             },{
                 "name": "emergency_fund_start_day",
-                "display_name": "Авариный фонд на начало дня",
+                "title": "Авариный фонд на начало дня",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "emergency_fund_end_day",
-                "display_name": "Авариный фонд на конец дня",
+                "title": "Авариный фонд на конец дня",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "emergency_fund_day",
-                "display_name": "Зачислено в аварийный фонд",
+                "title": "Зачислено в аварийный фонд",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "comment",
-                "display_name": "Примечание",
+                "title": "Примечание",
                 "type": "text",
                 "visible_always": 1,
                 "is_plural": 1
             },{
                 "name": "driver_id",
-                "display_name": "Сотрудник компании",
+                "title": "Сотрудник компании",
                 "table": "drivers",
                 "type": "relation",
                 "visible_always": 1
             },{
                 "name": "user_id",
-                "display_name": "Ответственный",
+                "title": "Ответственный",
                 "table": "users",
                 "type": "relation",
                 "visible_always": 1
@@ -71,22 +71,22 @@
         }]
     },{
         "name": "cars",
-        "display_name_singular": "Автопарк",
-        "display_name_plural": "Автопарк",
+        "title_singular": "Автопарк",
+        "title_plural": "Автопарк",
         "class": "App\\Models\\Car",
         "main": "1",
         "sections": []
     },{
         "name": "employees",
-        "display_name_singular": "Сотрудник",
-        "display_name_plural": "Сотрудники",
+        "title_singular": "Сотрудник",
+        "title_plural": "Сотрудники",
         "class": "App\\Models\\Employee",
         "main": "1",
         "sections": []
     },{
         "name": "routes",
-        "display_name_singular": "Маршрут",
-        "display_name_plural": "Маршруты",
+        "title_singular": "Маршрут",
+        "title_plural": "Маршруты",
         "class": "App\\Models\\Route",
         "main": "1",
         "sections": []

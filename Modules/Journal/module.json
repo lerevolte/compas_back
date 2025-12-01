@@ -1,5 +1,5 @@
 {
-    "display_name": "Журнал",
+    "title": "Журнал",
     "name": "Journal",
     "alias": "journal",
     "slug": "journal",
@@ -18,59 +18,59 @@
     "is_hidden": 1,
     "entities": [{
         "name": "journal_records",
-        "display_name_singular": "Запись",
-        "display_name_plural": "Журнал",
+        "title_singular": "Запись",
+        "title_plural": "Журнал",
         "class": "Modules\\Journal\\Entities\\Record",
         "main": "1",
         "sections": [{
             "name": "Информация",
             "fields": [{
                 "name": "name",
-                "display_name": "Название",
+                "title": "Название",
                 "type": "text",
                 "visible_always": 1
             },{
                 "name": "status",
-                "display_name": "Статус",
+                "title": "Статус",
                 "type": "status",
                 "visible_always": 1
             },{
                 "name": "car_id",
-                "display_name": "Автопарк",
+                "title": "Автопарк",
                 "table": "cars",
                 "type": "relation",
                 "visible_always": 1
             },{
                 "name": "user_id",
-                "display_name": "Ответственный",
+                "title": "Ответственный",
                 "table": "users",
                 "type": "relation",
                 "visible_always": 1
             },{
                 "name": "photo",
-                "display_name": "Фото",
+                "title": "Фото",
                 "type": "file",
                 "visible_always": 1
             }]
         }]
     },{
         "name": "cars",
-        "display_name_singular": "Автопарк",
-        "display_name_plural": "Автопарк",
+        "title_singular": "Автопарк",
+        "title_plural": "Автопарк",
         "class": "App\\Models\\Car",
         "main": "1",
         "sections": []
     },{
         "name": "employees",
-        "display_name_singular": "Сотрудник",
-        "display_name_plural": "Сотрудники",
+        "title_singular": "Сотрудник",
+        "title_plural": "Сотрудники",
         "class": "App\\Models\\Employee",
         "main": "1",
         "sections": []
     },{
         "name": "products",
-        "display_name_singular": "Товар",
-        "display_name_plural": "Товар",
+        "title_singular": "Товар",
+        "title_plural": "Товар",
         "class": "Modules\\Products\\Entities\\Product",
         "main": "1",
         "sections": []

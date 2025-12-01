@@ -12,9 +12,17 @@ use Illuminate\Support\Str;
 use Nwidart\Modules\Facades\Module;
 use App\Models\ModuleCategory;
 use Carbon\Carbon;
+use App\Services\SearchService;
 
 class ModuleController extends Controller
 {
+    private SearchService $searchService;
+
+    public function __construct(SearchService $searchService)
+    {
+        $this->searchService = $searchService;
+    }
+
     public function categories()
     {
         $categories = ModuleCategory::all();
@@ -29,7 +37,7 @@ class ModuleController extends Controller
             $data = array();
             $local_modules = \DB::table('modules')->get()->keyBy('slug');
             foreach ($modules as $module) {
-                if($module->get('is_hidden'))
+                if($module->get('is_hidden') || !$module->get('title'))
                     continue;
                 $images = array();
                 if($images_res = $module->get('images')) {
@@ -41,16 +49,6 @@ class ModuleController extends Controller
                 $logo_path = '';
                 $logo_res = $module->get('logo');
                 if($logo_res) {
-                    // if(isset($config['images'])) {
-                    //     foreach ($config['images'] as $key => $value) {
-                    //         $file_path = getcwd().'/../Modules/'.$module->getName().'/'.$value;
-                    //         $path = dirname(public_path('assets/modules/'.$module->getName().'/'.$value));
-                    //         if(!\File::isDirectory($path))
-                    //             \File::makeDirectory($path, 0777, true, true);
-                    //         \File::copy($file_path, public_path('assets/modules/'.$module->getName().'/'.$value));
-                    //     }
-                    // }
-
                     if(!file_exists(public_path('assets/modules/'.$module->getName().'/logo/'.$logo_res))) {
                         $file_path = getcwd().'/../Modules/'.$module->getName().'/'.$logo_res;
                         $path = dirname(public_path('assets/modules/'.$module->getName().'/logo/'.$logo_res));
@@ -63,7 +61,7 @@ class ModuleController extends Controller
                 $entities = $module->get('entities');
                 $module_slug = strtolower($module->getName());
                 $item = array(
-                    'name' => $module->get('display_name'),
+                    'name' => $module->get('title'),
                     'logo' => $logo_path,
                     'description' => $module->getDescription(),
                     'enabled' => $module->isEnabled() ? 1 : 0,
@@ -103,6 +101,11 @@ class ModuleController extends Controller
             return ($a['name'] < $b['name']) ? -1 : 1;
         });
 
+        $data = array(
+            'categories' => ModuleCategory::all(),
+            'modules' => $data
+        );
+
         return response()->json($data);
     }
 
@@ -127,7 +130,7 @@ class ModuleController extends Controller
                 $entity = \DB::table('data_types')->where('model_name', $e['class'])->first();
                 if($entity) {
                     $entities[] = array(
-                        'name' => $entity->display_name_plural,
+                        'name' => $entity->title_plural,
                         'slug' => $entity->name,
                         'enable' => $entity->enable,
                         'description' => $e['description'] ?? ''
@@ -138,7 +141,7 @@ class ModuleController extends Controller
         }
         $local_module = \DB::table('modules')->where('slug', $slug)->first();
         $data = array(
-            'name' => $module->get('display_name'),
+            'name' => $module->get('title'),
             'logo' => $logo_path,
             'description' => $module->getDescription(),
             'enabled' => $module->isEnabled() ? 1 : 0,
@@ -155,6 +158,30 @@ class ModuleController extends Controller
         );
         if($local_module && $local_module->config) {
             $data['fields'] = json_decode($local_module->config, true);
+        }
+
+        return response()->json($data);
+    }
+
+    public function settings($slug)
+    {
+        $local_module = \DB::table('modules')->where('slug', $slug)->first();
+        if(!$local_module)
+            return response()->json(
+                array(
+                    'code' => 404,
+                    'error' => 'Модуль не найден',
+                )
+            );
+        $data = json_decode($local_module->config, true);
+        if(isset($data['fields']))
+            $data = $data['fields'];
+        foreach($data as $key => $param) {
+            if(isset($param['related_table']) && $param['related_table'] == 'users') {
+                $data[$key]['value']['localOptions'] = $this->searchService->find(['q' => '', 'field_id' => 458]);
+            } elseif(isset($param['related_table']) && $param['related_table'] == 'roles') {
+                $data[$key]['value']['localOptions'] = $this->searchService->find(['q' => '', 'field_id' => 2025]);
+            }
         }
 
         return response()->json($data);
@@ -193,78 +220,22 @@ class ModuleController extends Controller
                 \File::makeDirectory($path, 0777, true, true);
             \File::copy($file_path, public_path('assets/modules/'.$module->getName().'/logo/'.$config['logo']));
         }
+        if(isset($config['menu'])) {
 
-        // $module_side_item = new \App\Models\SidebarItem;
-        // $module_side_item->name = $module->get('display_name');
-        // $module_side_item->slug = $module->get('slug');
-        // $module_side_item->link = '/'.$module->get('slug');
-        // //$module_side_item->url = '';
-        // $module_side_item->save();
-        // if(isset($config['menu'])) {
-        //     $module_side_item = new \App\Models\SidebarItem;
-        //     $module_side_item->name = $module->get('display_name');
-        //     $module_side_item->code = $module->get('slug');
-        //     $module_side_item->link = $config['menu'][0]['link'];
-        //     //$module_side_item->url = '';
-        //     $module_side_item->save();
-        //     foreach ($config['menu'] as $key => $item) {
-        //         $sidebar_item = new \App\Models\SidebarItem;
-        //         $sidebar_item->name = $item['name'];
-        //         $sidebar_item->code = $item['name'];
-        //         $sidebar_item->link = $item['link'];
-                
-        //         //$sidebar_item->parent_id = $module_side_item->id;
-        //         $sidebar_item->save();
-        //     };
-        // }
+            foreach ($config['menu'] as $key => $item) {
+                if(isset($item['entity'])) {
+                    \DB::table('data_types')->where('slug', $item['entity'])->update(['enable' => 1]);
+                };
+                if(isset($item['slug'])) {
+                    $sidebar_item = new \App\Models\SidebarItem;
+                    $sidebar_item->name = $item['name'];
+                    $sidebar_item->slug = $item['slug'];
+                    $sidebar_item->link = $item['link'];
+                    $sidebar_item->save();
+                }
+            };
+        }
         \App\Models\SidebarItem::fixTree();
-        // if(isset($config['entities'])) {
-        //     foreach ($config['entities'] as $key => $entity) {
-        //         $e = \DB::table('data_types')->where('slug', $entity['name'])->first();
-        //         if(!$e) {
-        //             \DB::table('data_types')->insert([
-        //                 'name' => $entity['name'],
-        //                 'slug' => $entity['name'],
-        //                 'display_name_singular' => $entity['display_name_singular'],
-        //                 'display_name_plural' => $entity['display_name_plural'],
-        //                 'model_name' => $entity['class'],
-        //                 'enable' => 0
-        //             ]);
-        //             $data_type = \DB::table('data_types')->where('model_name', $entity['class'])->first();
-        //             foreach($entity['sections'] as $section) {
-        //                 \DB::table('field_sections')->insert([
-        //                     'name' => $section['name'],
-        //                     'page' => $entity['name']
-        //                 ]);
-        //                 $s = \DB::table('field_sections')->where('page', $entity['name'])->where('name', $section['name'])->first();
-        //                 foreach($section['fields'] as $field) {
-        //                     $details = '';
-        //                     if(isset($field['table'])) {
-        //                         $details = json_encode(array('table' => $field['table']));
-        //                     } elseif(isset($field['options'])) {
-        //                         $details['options'] = array();
-        //                         foreach($field['options'] as $option => $value) {
-        //                             $details['options'][$option] = $value;
-        //                         }
-        //                         $details = json_encode($details);
-        //                     };
-        //                     \DB::table('data_rows')->insert([
-        //                         'data_type_id' => $data_type->id,
-        //                         'field' => $field['name'],
-        //                         'type' => $field['type'],
-        //                         'display_name' => $field['display_name'],
-        //                         'module_section_id' => $s->id,
-        //                         'visible_always' => $field['visible_always'],
-        //                         'only_read' => isset($field['read_only']) && $field['read_only'] ? 1 : 0,
-        //                         'is_plural' => isset($field['is_plural']) ? 1 : 0,
-        //                         'details' => $details
-        //                     ]);
-        //                 }
-                        
-        //             }
-        //         }
-        //     }
-        // }
         if(isset($config['changes_entities'])) {
             $data = array(
                 'title' => 'Модули',
@@ -284,7 +255,7 @@ class ModuleController extends Controller
                     continue;
                 if(!isset($data['childs'][$entity['entity']]))
                     $data['childs'][$entity['entity']] = array(
-                        'title' => $config['display_name'],
+                        'title' => $config['title'],
                         'sort' => $key,
                         'enabled' => 1,
                         'id' => $key,
@@ -292,7 +263,7 @@ class ModuleController extends Controller
                     );
                 else
                     $data['childs'][$entity['entity']] = array(
-                        'title' => $config['display_name'],
+                        'title' => $config['title'],
                         'sort' => $key,
                         'enabled' => 1,
                         'id' => $key,
@@ -302,7 +273,7 @@ class ModuleController extends Controller
                 $data_type = \DB::table('data_types')->where('model_name', $entity_class)->first();
                 $slug = $data_type->slug;
                 $s = new \App\Models\FieldSection;
-                $s->name = $module->get('display_name');
+                $s->name = $module->get('title');
                 $s->module = $module->get('slug');
                 $s->page = $entity['entity'];
                 $s->column_id = 1;
@@ -329,7 +300,7 @@ class ModuleController extends Controller
                         'data_type_id' => $data_type->id,
                         'field' => $field['name'],
                         'type' => $field['type'],
-                        'display_name' => $field['display_name'],
+                        'title' => $field['title'],
                         'module_section_id' => $s->id,
                         'visible_always' => $field['visible_always'],
                         'only_read' => isset($field['read_only']) && $field['read_only'] ? 1 : 0,
@@ -353,39 +324,6 @@ class ModuleController extends Controller
 
                 }
 
-                // foreach($entity['sections'] as $section) {
-                //     \DB::table('field_sections')->insert([
-                //         'name' => $section['name'],
-                //         'page' => $slug
-                //     ]);
-                //     $s = \DB::table('field_sections')->where('page', $slug)->where('name', $section['name'])->first();
-
-                //     foreach($section['fields'] as $field) {
-                //         $details = array();
-                //         if(isset($field['table'])) {
-                //             $details = json_encode(array('table' => $field['table']));
-                //         } elseif(isset($field['options'])) {
-                //             $details['options'] = array();
-                //             foreach($field['options'] as $option => $value) {
-                //                 $details['options'][$option] = $value;
-                //             }
-                //             $details = json_encode($details, true);
-                //         } else {
-                //             $details = '';
-                //         };
-                //         \DB::table('data_rows')->insert([
-                //             'data_type_id' => $data_type->id,
-                //             'field' => $field['name'],
-                //             'type' => $field['type'],
-                //             'display_name' => $field['display_name'],
-                //             'section_id' => $s->id,
-                //             'visible_always' => $field['visible_always'],
-                //             'only_read' => isset($field['read_only']) && $field['read_only'] ? 1 : 0,
-                //             'is_plural' => isset($field['is_plural']) ? 1 : 0,
-                //             'details' => $details
-                //         ]);
-                //     }
-                // }
             }
             foreach($menus as $entity => $menu) {
                 if(isset($data['childs'][$entity])) {
@@ -415,15 +353,9 @@ class ModuleController extends Controller
             }
         }
         
-        // \Artisan::call('tenants:migrate',
-        //  array(
-        //    '--path' => getcwd().'/../Modules/'.$module->getName().'/Database/Migrations',
-        //    '--tenants' => $tenant
-        // ));
-        //print_r($config);
         \DB::table('field_sections')->where('module', $module->get('slug'))->update(['hide' => 0]);
         \DB::table('modules')->insert([
-            'name' => $config['display_name'],
+            'name' => $config['title'],
             'config' => isset($config['settings']) ? json_encode($config['settings']) : '',
             'entities' => isset($config['entities']) ? json_encode($config['entities']) : '',
             'slug' => $config['slug'],
@@ -436,6 +368,8 @@ class ModuleController extends Controller
             \DB::table('local_cache')->where(['url' => 'sidebar', 'user_id' => \Auth::user()->id])->update(['updated_at' => $now]);
         else
             \DB::table('local_cache')->insert(['url' => 'sidebar', 'user_id' => \Auth::user()->id, 'created_at' => $now, 'updated_at' => $now]);
+
+        \App\Models\Settings::clear_cache();
 
         cache()->flush();
 
@@ -459,33 +393,38 @@ class ModuleController extends Controller
         $config = file_get_contents(getcwd().'/../Modules/'.$module.'/module.json');
         
         $config = json_decode($config, true);
-
+        $ids_delete = array();
         if(isset($config['menu'])) {
-            $link = \App\Models\SidebarItem::where('name', $module->get('display_name'))->where('slug', $module->get('slug'))->first();
+            $link = \App\Models\SidebarItem::where('name', $module->get('title'))->where('slug', $module->get('slug'))->first();
             if($link)
                 $link->delete();
+            $menus = \DB::table('settings')->where([
+                'type' => 'sidebar'
+            ])->get();
+
             foreach ($config['menu'] as $key => $item) {
-                $link = \App\Models\SidebarItem::where('name', $item['name'])->where('link', $item['link'])->first();
+                $link = \App\Models\SidebarItem::where('link', $item['link'])->first();
+                if($link)
+                    $ids_delete[] = $link->id;
+                foreach($menus as $menu) {
+                    $new_menu = json_decode($menu->value, true);
+                    foreach($new_menu as $k => $menu_item) {
+                        if(in_array($menu_item['id'], $ids_delete)) {
+                            unset($new_menu[$k]);
+                        }
+                    }
+                    $new_menu = array_values($new_menu);
+                    \DB::table('settings')->where(['id' => $menu->id])->update(['value' => json_encode($new_menu, JSON_UNESCAPED_UNICODE)]);
+                }
+
                 if($link)
                     $link->delete();
             };
+            
+            
             \App\Models\SidebarItem::fixTree();
         }
         
-        // if(isset($config['entities'])) {
-        //     foreach ($config['entities'] as $key => $entity) {
-        //         \DB::table('data_types')->where([
-        //                 'model_name' => $entity['class']
-        //             ])->delete();
-        //         \DB::table('field_sections')->where([
-        //                 'page' => $entity['name']
-        //             ])->delete();
-                
-        //     }
-        // }
-        // \Artisan::call('tenants:rollback',
-        //  array(
-        //    '--path' => getcwd().'/../Modules/'.$module.'/Database/Migrations'));
 
         $mod = Module::findOrFail($module);
         \DB::table('modules')->where([
@@ -496,69 +435,6 @@ class ModuleController extends Controller
         $config = file_get_contents(getcwd().'/../Modules/'.$module->getName().'/module.json');
         
         $config = json_decode($config, true);
-        if(isset($config['changes_entities'])) {
-            $menus = \DB::table('settings')->where([
-                'type' => 'menu',
-                'user_id' => \Auth::user()->id
-            ])->get()->keyBy('entity')->toArray();
-            foreach ($config['changes_entities'] as $key => $entity) {
-                
-                if(!isset($data['childs'][$entity['entity']]))
-                    $data['childs'][$entity['entity']] = 1;
-                else
-                    $data['childs'][$entity['entity']] = array(1);
-                $entity_class = $entity['class'];
-                $data_type = \DB::table('data_types')->where('model_name', $entity_class)->first();
-                $slug = $data_type->slug;
-                \DB::table('field_sections')->where('module', $module->get('slug'))->update(['hide' => 1]);
-                foreach($entity['fields'] as $field) {
-                    $details = array();
-                    if(isset($field['table'])) {
-                        $details = json_encode(array('table' => $field['table']));
-                    } elseif(isset($field['options'])) {
-                        $details['options'] = array();
-                        foreach($field['options'] as $option => $value) {
-                            $details['options'][$option] = $value;
-                        }
-                        $details = json_encode($details);
-                    } else {
-                        $details = '';
-                    };
-                    
-                    $field_name = $field['name'];
-                    \Schema::table($data_type->slug, function($table) use($field_name) {
-                        $table->dropColumn($field_name);
-                    });
-                    
-                }
-            }
-            \DB::table('data_rows')->where([
-                'module' => $module->get('slug')
-            ])->update(['is_inactive' => 1]);
-            foreach($menus as $entity => $menu) {
-                if(isset($data['childs'][$entity])) {
-                    $new_menu = json_decode($menu->value, true);
-                    $modules_item = null;
-                    foreach($new_menu as $k => $m) {
-                        if($m['tab'] == 'modules')
-                            $modules_item = $k;
-                    }
-
-                    if($modules_item) {
-                        foreach($new_menu[$modules_item]['childs'] as $k => $m) {
-                            if(isset($m['slug']) && $m['slug'] == $module->get('slug'))
-                                unset($new_menu[$modules_item]['childs'][$k]);
-                        }
-                        \DB::table('settings')->where([
-                            'id' => $menu->id
-                        ])->update([
-                            'value' => $new_menu
-                        ]);
-                    }
-                    
-                }
-            }
-        }
         \App\Models\SidebarItem::where('slug', $module->get('slug'))->delete();
         \App\Models\SidebarItem::fixTree();
         $now = Carbon::now();
@@ -569,6 +445,7 @@ class ModuleController extends Controller
 
         
 
+        \App\Models\Settings::clear_cache();
         cache()->flush();
 
         return response()->json(
@@ -590,116 +467,39 @@ class ModuleController extends Controller
                 )
             );
         $config = json_decode($local_module->config, true);
-
-        foreach($config as $k => $param) {
-            foreach($request->fields as $i => $new_param) {
-                if($param['id'] == $new_param['id']) {
-                    $config[$k] = $new_param;
+        if(isset($config['fields'])) {
+            foreach($config['fields'] as $k => $param) {
+                foreach($request->all() as $key => $new_value) {
+                    if($param['key'] == $key) {
+                        if(isset($config['fields'][$k]['value']['value']))
+                            $config['fields'][$k]['value']['value'] = $new_value;
+                        else
+                            $config['fields'][$k]['value'] = $new_value;
+                    }
+                }
+            }
+        } else {
+            foreach($config as $k => $param) {
+                foreach($request->all() as $key => $new_value) {
+                    if($param['key'] == $key) {
+                        if(isset($config[$k]['value']['value']))
+                            $config[$k]['value']['value'] = $new_value;
+                        else
+                            $config[$k]['value'] = $new_value;
+                    }
                 }
             }
         }
+        
         $config = json_encode($config);
         \DB::table('modules')->where('slug', $slug)->update(['config' => $config]);
     }
 
-    public function checkWork($entity, $id, $module, Request $request)
+    public function check_entity_statuses($entity, $id, $module)
     {
-        $comparisons = \DB::table('comparison_fields')->where([
-            'module' => $module,
-        ])->pluck('entity_field', 'module_field')->toArray();
-        $relations = array();
-        $relations[$entity] = \DB::table($entity)->where('id', $id)->get()->toArray();
-        $entity = \DB::table('data_types')->where('slug', $entity)->first();
-        if(!$entity || !$entity->enable) {
-            return response()->json(
-                array(
-                    'code' => 404,
-                    'error' => 'Сущность не найдена',
-                )
-            );
-        }
-        $entity_class = $entity->model_name;
-        $model_fields = $entity_class::getFields();
-        $fields_data = array();
-        $current = $entity_class::findOrFail($id);
+        $module = \App\Models\Module::where('slug', $module)->firstOrFail();
+        $related_entities = $module->statusesEntities($entity, $id);
 
-        $field_ids = array();
-        foreach($model_fields as $field) {
-            $field_ids[$field->field] = $field->id;
-            if($field->type == 'relation') {
-                $details = json_decode($field->details, true);
-                if(isset($details['table'])) {
-                    $relation_entity = \DB::table('data_types')->where('slug', $details['table'])->first();
-                    $relation_entity_class = $relation_entity->model_name;
-                    $relation_fields = $relation_entity_class::getFields();
-                    foreach($relation_fields as $f) {
-                        $field_ids[$f->field] = $f->id;
-                    }
-                    if($field->is_plural && $current->{$field->field}) {
-                        $val = json_decode($current->{$field->field}, true);
-                    } elseif($current->{$field->field}) {
-                        $val = array($current->{$field->field});
-                    }
-                    if(isset($val))
-                        $relations[$details['table']] = \DB::table($details['table'])->whereIntegerInRaw('id', $val)->get()->toArray();
-                }
-            }
-        }
-        $module = Module::findOrFail($module);
-        $config = file_get_contents(getcwd().'/../Modules/'.$module->getName().'/module.json');
-        
-        $config = json_decode($config, true);
-
-        $entities_fields = array();
-        $checks = array();
-        if(isset($config['changes_entities'])) {
-            foreach($config['changes_entities'] as $module_entity) {
-                if(isset($module_entity['need_check']) && $module_entity['need_check']) {
-                    $entities_fields[$module_entity['entity']] = array();
-                    $checks[$module_entity['entity']] = 1;
-                    foreach($module_entity['fields'] as $field) {
-                        $entities_fields[$module_entity['entity']][] = $field['name'];
-
-                    }
-                }
-            }
-        }
-
-        foreach($entities_fields as $entity => $fields) {
-            if(isset($relations[$entity])) {
-                foreach($relations[$entity] as $relation) {
-
-                    foreach($fields as $field) {
-                        if(isset($comparisons[$field_ids[$field]])) {
-                            $field_name = array_search($comparisons[$field_ids[$field]], $field_ids);
-                            if($field_name && !$relation->{$field_name}) {
-                                $checks[$entity] = 0;
-                            }
-                        } elseif(!$relation->{$field})
-                            $checks[$entity] = 0;
-                    }
-                }
-            }
-        }
-
-        $entities = array();
-        if($res = $module->get('entities')) {
-            foreach($res as $e) {
-                $entity = \DB::table('data_types')->where('model_name', $e['class'])->first();
-                if($entity && isset($checks[$entity->name])) {
-                    $entities[] = array(
-                        'id' => $entity->id,
-                        'name' => $entity->display_name_plural,
-                        'slug' => $entity->name,
-                        'enable' => $entity->enable,
-                        'description' => $e['description'] ?? '',
-                        'status' => $checks[$entity->name]
-                    );
-                }
-                
-            }
-        }
-
-        return response()->json($entities);
+        return response()->json($related_entities);
     }
 }

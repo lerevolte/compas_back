@@ -60,17 +60,17 @@ class TrashController extends Controller
                     foreach ($model_fields as $field) {
                         $field_values = array();
                         $field_colors[$field->field] = $field->label_color ? $field->label_color : null;
-                        if(isset($settings[$entity->slug]['list_values'][$field->field])) {
+                        if(isset($settings['list_values'][$field->id])) {
                             if($field->type == 'relation') {
-                                $field_values = array_slice($settings[$entity->slug]['list_values'][$field->field], 0, 19, true);
+                                $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true);
                             } else {
-                                $field_values = $settings[$entity->slug]['list_values'][$field->field];
+                                $field_values = $settings['list_values'][$field->id];
                             }
                         };
                         if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->type != 'password') {
                             $table_columns[$field->field] = array(
                                 'id' => $field->id,
-                                'title' => $field->display_name,
+                                'title' => $field->title,
                                 'key' => $field->field,
                                 'width' => '200px',
                                 'enabled' => 0,
@@ -98,7 +98,7 @@ class TrashController extends Controller
                         } elseif($field->type != 'text_group' && $field->type != 'password') {
                             $table_columns[$field->field] = array(
                                 'id' => $field->id,
-                                'title' => $field->display_name,
+                                'title' => $field->title,
                                 'key' => $field->field,
                                 'width' => $table_columns[$field->field]['width'],
                                 'enabled' => $table_columns[$field->field]['enabled'],
@@ -134,17 +134,17 @@ class TrashController extends Controller
                     foreach ($model_fields as $field) {
                         $field_values = array();
                         $field_colors[$field->field] = $field->label_color ? $field->label_color : null;
-                        if(isset($settings[$entity->slug]['list_values'][$field->field])) {
+                        if(isset($settings['list_values'][$field->id])) {
                             if($field->type == 'relation') {
-                                $field_values = array_slice($settings[$entity->slug]['list_values'][$field->field], 0, 19, true); 
+                                $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true); 
                             } else {
-                                $field_values = $settings[$entity->slug]['list_values'][$field->field];
+                                $field_values = $settings['list_values'][$field->id];
                             }
                         };
                         if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->type != 'password') {
                             $table_columns[$field->field] = array(
                                 'id' => $field->id,
-                                'title' => $field->display_name,
+                                'title' => $field->title,
                                 'key' => $field->field,
                                 'width' => '200px',
                                 'enabled' => 0,
@@ -219,7 +219,6 @@ class TrashController extends Controller
                                 if($settings[$entity->slug]['fields'][$field]->type == 'relation')
                                     $paginator = $paginator->whereJsonContains($field, (int)$val);
                                 else {
-                                    //->whereRaw("json_contains(`client_id`, ?)", [15])->whereRaw('json_contains(`tip_tk`, \'"'.$str.'"\')')
                                     $paginator = $paginator->whereRaw('json_contains('.$field.', \'"'.$val.'"\')');
                                 }
                             } else {
@@ -275,12 +274,12 @@ class TrashController extends Controller
                                 $data[$field->field] = array();
                                 if(is_array($values)) {
                                     foreach($values as $val) {
-                                        if(isset($settings[$entity->slug]['list_values'][$field->field][$val]))
-                                            $data[$field->field][] = $settings[$entity->slug]['list_values'][$field->field][$val];
+                                        if(isset($settings['list_values'][$field->id][$val]))
+                                            $data[$field->field][] = $settings['list_values'][$field->id][$val];
                                     }
                                 }
-                            } elseif($field->type == 'relation' && isset($settings[$entity->slug]['list_values'][$field->field][$value])) {
-                                $data[$field->field] = $settings[$entity->slug]['list_values'][$field->field][$value];
+                            } elseif($field->type == 'relation' && isset($settings['list_values'][$field->id][$value])) {
+                                $data[$field->field] = $settings['list_values'][$field->id][$value];
                             } elseif($field->type == 'relation') {
                                 $data[$field->field] = null;
                             };

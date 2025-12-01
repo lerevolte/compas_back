@@ -3,6 +3,10 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Validation\Rules\File;
+use Illuminate\Http\Exceptions\HttpResponseException;
+
 
 class StoreFileRequest extends FormRequest
 {
@@ -23,8 +27,31 @@ class StoreFileRequest extends FormRequest
      */
     public function rules()
     {
+
         return [
-            //'files'  => 'required|mimes:doc,docx,pdf,txt,jpg,png,svg,xlsx,xls,rar|max:65536',
+            // 'files'  => 'required|mimes:doc,docx,pdf,txt,jpg,png,svg,xlsx,xls,rar|max:65536',
+            //'files'  => 'required',
+            'files.*' => 'required|file|max:100000'
         ];
+    }
+
+    public function messages()
+    {
+
+        return [
+            'files.*.required' => 'Файл обязателен',
+            'files.*.max' => 'Максимальный размер загружаемого файла - 100мб'
+        ];
+
+    }
+
+    public function failedValidation(Validator $validator)
+    {
+        throw new HttpResponseException(response()->json([
+            'success'   => false,
+            'message'   => 'Validation errors',
+            'data'      => $validator->errors()
+        ]));
+        
     }
 }

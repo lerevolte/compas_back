@@ -10,6 +10,7 @@ use Auth;
 use App\Helpers\ValueHelper;
 use Illuminate\Support\Str;
 use App\Models\Role;
+use App\Models\Permission;
 use Carbon\Carbon;
 
 class RoleController extends Controller
@@ -31,18 +32,13 @@ class RoleController extends Controller
 
     public function list(Request $request)
     {
+        if(!\Auth::user()->is_admin)
+            return response()->json([
+                'message' => 'Доступ ограничен'
+            ], 403);
         $data = array();
 
-        $items = Role::get();
-        foreach($items as $item) {
-            $data[] = array(
-                'id' => $item->id,
-                'label' => $item->display_name,
-                'value' => $item->id,
-                'is_admin' => $item->is_admin,
-                'is_permanent' => $item->is_permanent
-            );
-        }
+        $data = Role::list();
 
         return response()->json($data);
 
@@ -59,229 +55,136 @@ class RoleController extends Controller
     }
     public function show($id, Request $request)
     {
+        if(!\Auth::user()->is_admin)
+            return response()->json([
+                'message' => 'Доступ ограничен'
+            ], 403);
         $role = Role::find($id);
-        $data_types = \DB::table('data_types')->where('enable', 1)->pluck('display_name_plural', 'name')->toArray();
+        $data_types = \DB::table('data_types')->where('enable', 1)->where('hidden', 0)->get()->keyBy('id')->toArray();
         //$permissions = $role->permissions_tables();
         $permissions = array();
-        $res = \App\Models\Permission::where('area', 'entity')->where('role_id', $id)->get()->groupBy('entity')->toArray();
+        $res = \App\Models\Permission::whereNotNull('entity_id')->where('role_id', $id)->get()->keyBy('entity_id')->toArray();
 
-        foreach($data_types as $entity => $data_type_name) {
-            if(!array_key_exists($entity, $res)) {
-                $new_permissions = [
-                    [
-                        'key' => 'read_'.$entity,
-                        'entity' => $entity,
-                        'type' => 'read',
-                        'value' => 'N',
-                        'role_id' => $id,
-                        'area' => 'entity'
-                    ],
-                    [
-                        'key' => 'write_'.$entity,
-                        'entity' => $entity,
-                        'type' => 'write',
-                        'value' => 'N',
-                        'role_id' => $id,
-                        'area' => 'entity'
-                    ],
-                    [
-                        'key' => 'add_'.$entity,
-                        'entity' => $entity,
-                        'type' => 'add',
-                        'value' => 'N',
-                        'role_id' => $id,
-                        'area' => 'entity'
-                    ],
-                    [
-                        'key' => 'delete_'.$entity,
-                        'entity' => $entity,
-                        'type' => 'delete',
-                        'value' => 'N',
-                        'role_id' => $id,
-                        'area' => 'entity'
-                    ],
-                    [
-                        'key' => 'export_'.$entity,
-                        'entity' => $entity,
-                        'type' => 'export',
-                        'value' => 'N',
-                        'role_id' => $id,
-                        'area' => 'entity'
-                    ],
-                    [
-                        'key' => 'import_'.$entity,
-                        'entity' => $entity,
-                        'type' => 'import',
-                        'value' => 'N',
-                        'role_id' => $id,
-                        'area' => 'entity'
-                    ]
-                ];
-                $permissions[] = array(
-                    'title' => $entity,
-                    'display_name' => $data_type_name,
-                    'permissions' => $new_permissions
-                );
-                \DB::table('permissions')->insert($new_permissions);
+        $new_permissions_exist = false;
+        foreach($data_types as $entity_id => $entity) {
+            if(!array_key_exists($entity_id, $res)) {
+                \DB::table('permissions')->insert([['entity_id' => $entity_id, 'role_id' => $id]]);
+                $new_permissions_exist = true;
             }
         }
-        foreach($res as $entity => $entity_permissions) {
+        if($new_permissions_exist)
+            $res = \App\Models\Permission::whereNotNull('entity_id')->where('role_id', $id)->get()->keyBy('entity_id')->toArray();
+        foreach($res as $entity => $entity_permission) {
             if(isset($data_types[$entity]))
                 $permissions[] = array(
-                    'title' => $entity,
-                    'display_name'=> $data_types[$entity] ?? '',
-                    'permissions' => $entity_permissions
+                    'id' => $entity_permission['id'],
+                    'entity_id' => $entity_permission['entity_id'],
+                    'name' => $data_types[$entity_permission['entity_id']]->title_plural,
+                    'read_p' => $entity_permission['read_p'],
+                    'create_p' => $entity_permission['create_p'],
+                    'update_p' => $entity_permission['update_p'],
+                    'delete_p' => $entity_permission['delete_p'],
+                    'export_p' => $entity_permission['export_p'],
+                    //'import_p' => $entity_permission['import_p'],
                 );
         }
-        $data = array_merge($role->toArray(), array('entities' => $permissions));
+
+        $permissions = collect($permissions)->sortBy('name')->toArray();
+        
+        $table = \App\Models\Table::roles();
+        $roles = Role::list();
+
+        $data = array(
+            'list' => array_values($permissions),
+            'table' => $table,
+            'roles' => $roles
+        );
 
         return response()->json($data);
     }
 
-    public function show_modules($id, Request $request)
-    {
-        $role = Role::find($id);
-        $data_types = \DB::table('modules')->where('enabled', 1)->pluck('name', 'slug')->toArray();
-        $permissions = array();
-        $res = \App\Models\Permission::where('area', 'module')->where('role_id', $id)->get()->groupBy('entity')->toArray();
+    // public function show_modules($id, Request $request)
+    // {
+    //     $role = Role::find($id);
+    //     $data_types = \DB::table('modules')->where('enabled', 1)->pluck('name', 'slug')->toArray();
+    //     $permissions = array();
+    //     $res = \App\Models\Permission::where('area', 'module')->where('role_id', $id)->get()->groupBy('entity')->toArray();
 
-        foreach($data_types as $entity => $data_type_name) {
-            if(!array_key_exists($entity, $res)) {
-                $new_permissions = [
-                    [
-                        'key' => 'read_module_'.$entity,
-                        'entity' => $entity,
-                        'type' => 'read',
-                        'value' => 'N',
-                        'role_id' => $id,
-                        'area' => 'module'
-                    ],
-                    [
-                        'key' => 'write_module_'.$entity,
-                        'entity' => $entity,
-                        'type' => 'write',
-                        'value' => 'N',
-                        'role_id' => $id,
-                        'area' => 'module'
-                    ]
-                ];
-                $permissions[] = array(
-                    'title' => $entity,
-                    'display_name' => $data_type_name,
-                    'permissions' => $new_permissions
-                );
-                \DB::table('permissions')->insert($new_permissions);
-            }
-        }
-        foreach($res as $entity => $entity_permissions) {
-            if(isset($data_types[$entity]))
-                $permissions[] = array(
-                    'title' => $entity,
-                    'display_name'=> $data_types[$entity] ?? '',
-                    'permissions' => $entity_permissions
-                );
-        }
-        $data = array_merge($role->toArray(), array('entities' => $permissions));
+    //     foreach($data_types as $entity => $data_type_name) {
+    //         if(!array_key_exists($entity, $res)) {
+    //             $new_permissions = [
+    //                 [
+    //                     'key' => 'read_module_'.$entity,
+    //                     'entity' => $entity,
+    //                     'type' => 'read',
+    //                     'value' => 'N',
+    //                     'role_id' => $id,
+    //                     'area' => 'module'
+    //                 ],
+    //                 [
+    //                     'key' => 'write_module_'.$entity,
+    //                     'entity' => $entity,
+    //                     'type' => 'write',
+    //                     'value' => 'N',
+    //                     'role_id' => $id,
+    //                     'area' => 'module'
+    //                 ]
+    //             ];
+    //             $permissions[] = array(
+    //                 'title' => $entity,
+    //                 'display_name' => $data_type_name,
+    //                 'permissions' => $new_permissions
+    //             );
+    //             \DB::table('permissions')->insert($new_permissions);
+    //         }
+    //     }
+    //     foreach($res as $entity => $entity_permissions) {
+    //         if(isset($data_types[$entity]))
+    //             $permissions[] = array(
+    //                 'title' => $entity,
+    //                 'display_name'=> $data_types[$entity] ?? '',
+    //                 'permissions' => $entity_permissions
+    //             );
+    //     }
+    //     $data = array_merge($role->toArray(), array('entities' => $permissions));
 
-        return response()->json($data);
-    }
+    //     return response()->json($data);
+    // }
 
     public function update($id, Request $request)
     {
-        $role = Role::find($id);
-        $data_types = \DB::table('data_types')->pluck('display_name_plural', 'name')->toArray();
-
-        $ids = array();
-        $name = $role->name;
-        if(!$name)
-            $name = \Str::of($request->display_name)->slug('_');
-        $is_admin = $request->is_admin;
+        $role = Role::findOrFail($id);
+        $is_admin = $request->has('is_admin') ? $request->is_admin : $role->is_admin;
         if($role->is_permanent)
             $is_admin = $role->is_admin;
-        $role->update(['is_admin' => $request->is_admin, 'display_name' => $request->display_name, 'name' => $name]);
-        $filterKeys = ['entity' => '', 'area' => '', 'type' => '', 'value' => '', 'key' => '', 'role_id' => ''];
+        $name = $role->name;
+        if(!$name)
+            $name = \Str::of($request->title)->slug('_');
+        $role->update(['is_admin' => $is_admin, 'display_name' => ($request->title ? $request->title : $role->display_name), 'name' => $name]);
 
-        if($request->entities && is_array($request->entities)) {
-            foreach($request->entities as $entity) {
-                $perms = $entity['permissions'];
-                foreach($perms as $k => $perm) {
-                    $perms[$k] = array_intersect_key($perm, $filterKeys);
-                }
-                
-                \DB::table('permissions')->upsert(
-                    $perms, 
-                    ['key', 'role_id'], 
-                    ['value']
-                );
-                $types = array(
-                    'add',
-                    'write',
-                    'read',
-                    'delete',
-                    'export',
-                    'import'
-                );
-                // foreach($types as $type) {
-                //     if(!\App\Models\Permission::where([
-                //         'entity' => $entity['title'], 
-                //         'role_id' => $role->id,
-                //         'type' => $type
-                //     ])->exists()) {
-                //         $perm = \App\Models\Permission::create(
-                //             [
-                //                 'entity' => $entity['title'],
-                //                 'role_id' => $role->id,
-                //                 'area' => 'entity',
-                //                 'key' => $type.'_'.$entity['title'],
-                //                 'type' => $type,
-                //                 'value' => 'N',
-                //             ]
-                //         );
-                //         $ids[] = $perm->id;
-                //     }
-                // }
-
-                
-                // foreach($entity['permissions'] as $permission) {
-                //     info($permission);
-                //     $perm = \App\Models\Permission::updateOrCreate(
-                //         [
-                //             'entity' => $entity['title'],
-                //             //'role_id' => $role->id,
-                //             'area' => 'entity',
-                //             //'key' => $permission['type'].'_'.$entity['title'],
-                //             'type' => $permission['type'],
-                //             'value' => $permission['value'],
-                //             //'parent_id' => isset($permission['parent_id']) ? $permission['parent_id'] : '',
-                //             //'is_parent' => 
-                //         ],
-                //         [
-                //             'type' => $permission['type'],
-                //             'key' => $permission['type'].'_'.$entity['title'],
-                //             'role_id' => $role->id
-                //             //'is_parent' => isset($perms['childs']) && count($perms['childs']) ? 1 : 0,
-                //         ]
-                //     );
-                //     $ids[] = $perm->id;
-                // }
-            }
-            //$role->permissions()->syncWithoutDetaching($ids);
+        if($request->rows && is_array($request->rows)) {
+            Permission::upsert($request->rows, ['id'], ['read_p', 'create_p', 'update_p', 'delete_p', 'export_p', 'import_p']);
         }
-        if(count($ids))
-            $role->permissions()->syncWithoutDetaching($ids);
-        cache()->flush();
+        \App\Models\Settings::clear_cache();
 
         $permissions = array();
-        $res = \App\Models\Permission::where('area', 'entity')->where('role_id', $role->id)->get()->groupBy('entity')->toArray();
 
-        foreach($res as $entity => $entity_permissions) {
-            $permissions[] = array(
-                'title' => $entity,
-                'display_name'=> $data_types[$entity] ?? '',
-                'permissions' => $entity_permissions
-            );
+        $data_types = \DB::table('data_types')->where('enable', 1)->get()->keyBy('id')->toArray();
+        $res = Permission::whereNotNull('entity_id')->where('role_id', $id)->get()->keyBy('entity_id')->toArray();
+        foreach($res as $entity => $entity_permission) {
+            if(isset($data_types[$entity]))
+                $permissions[] = array(
+                    'id' => $entity_permission['id'],
+                    'entity_id' => $entity_permission['entity_id'],
+                    'name' => $data_types[$entity_permission['entity_id']]->title_plural,
+                    'read_p' => $entity_permission['read_p'],
+                    'create_p' => $entity_permission['create_p'],
+                    'update_p' => $entity_permission['update_p'],
+                    'delete_p' => $entity_permission['delete_p'],
+                    'export_p' => $entity_permission['export_p'],
+                    'import_p' => $entity_permission['import_p'],
+                );
         }
-        $data = array_merge($role->toArray(), array('entities' => $permissions));
 
         $now = Carbon::now();
         if(\DB::table('local_cache')->where(['url' => 'roles', 'user_id' => \Auth::user()->id])->exists())
@@ -289,88 +192,39 @@ class RoleController extends Controller
         else
             \DB::table('local_cache')->insert(['url' => 'roles', 'user_id' => \Auth::user()->id, 'created_at' => $now, 'updated_at' => $now]);
 
-        return response()->json($data);
+        return response()->json($permissions);
     }
 
     public function store(Request $request)
     {
-        $data_types = \DB::table('data_types')->pluck('display_name_plural', 'name')->toArray();
+        $data_types = \DB::table('data_types')->where('enable', 1)->get()->keyBy('id')->toArray();
         $role = new Role;
         $role->display_name = 'Без названия';
-        if($request->display_name)
-            $role->display_name = $request->display_name;
+        if($request->title)
+            $role->display_name = $request->title;
         $role->is_admin = 0;
         $role->save();
-        $types = array(
-            'add',
-            'write',
-            'read',
-            'delete',
-            'export',
-            'import'
-        );
-        $entities = \DB::table('data_types')->select(['slug', 'display_name_singular', 'display_name_plural', 'color'])/*->where('area', 'entity')*/->get();
 
-        foreach($entities as $entity) {
-            foreach($types as $type) {
-                $perm = \App\Models\Permission::create(
-                    [
-                        'entity' => $entity->slug,
-                        'role_id' => $role->id,
-                        'area' => 'entity',
-                        'key' => $type.'_'.$entity->slug,
-                        'type' => $type,
-                        'value' => 'N',
-                    ]
-                );
-                $ids[] = $perm->id;
-            }
+        foreach($data_types as $entity_id => $entity) {
+            \DB::table('permissions')->insert([['entity_id' => $entity_id, 'role_id' => $role->id]]);
         }
 
-        $modules = \DB::table('modules')->where('enabled', 1)->pluck('name', 'slug')->toArray();
-
-        foreach($modules as $module => $name) {
-            $perm = \App\Models\Permission::create(
-                [
-                    'entity' => $module,
-                    'role_id' => $role->id,
-                    'area' => 'module',
-                    'key' => 'read_module_'.$module,
-                    'type' => 'read',
-                    'value' => 'N',
-                ]
-            );
-            $ids[] = $perm->id;
-            $perm = \App\Models\Permission::create(
-                [
-                    'entity' => $module,
-                    'role_id' => $role->id,
-                    'area' => 'module',
-                    'key' => 'write_module_'.$module,
-                    'type' => 'write',
-                    'value' => 'N',
-                ]
-            );
-            $ids[] = $perm->id;
-        }
-
-        $role->permissions()->syncWithoutDetaching($ids);
-
-        cache()->flush();
-
-        $permissions = array();
-        $res = \App\Models\Permission::where('area', 'entity')->where('role_id', $role->id)->get()->groupBy('entity')->toArray();
-
-        foreach($res as $entity => $entity_permissions) {
+        $res = Permission::whereNotNull('entity_id')->where('role_id', $role->id)->get()->keyBy('entity_id')->toArray();
+        foreach($res as $entity => $entity_permission) {
             $permissions[] = array(
-                'title' => $entity,
-                'display_name'=> $data_types[$entity] ?? '',
-                'permissions' => $entity_permissions
+                'id' => $entity_permission['id'],
+                'entity_id' => $entity_permission['entity_id'],
+                'name' => $data_types[$entity_permission['entity_id']]->title_plural,
+                'read_p' => $entity_permission['read_p'],
+                'create_p' => $entity_permission['read_p'],
+                'update_p' => $entity_permission['update_p'],
+                'delete_p' => $entity_permission['delete_p'],
+                'export_p' => $entity_permission['export_p'],
+                'import_p' => $entity_permission['import_p'],
             );
         }
-        $data = array_merge($role->toArray(), array('entities' => $permissions));
 
-        return response()->json($data);
+        return response()->json($permissions);
     }
 
     public function destroy($id)

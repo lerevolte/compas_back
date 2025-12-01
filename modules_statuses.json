@@ -1,15 +1,17 @@
 {
     "Addresses": false,
-    "Bitrix24": false,
+    "Bitrix24": true,
     "Products": true,
     "Logistic": true,
-    "Journal": false,
+    "Journal": true,
     "Clients": true,
     "Salary": false,
-    "EmergencyFund": true,
-    "Wialon": false,
+    "EmergencyFund": false,
+    "Wialon": true,
     "Tasks": true,
     "Instructions": true,
     "Mileage": false,
-    "Gibdd": true
+    "Gibdd": true,
+    "Chat": true,
+    "Osago": true
 }

@@ -93,17 +93,17 @@ class TableController extends Controller
             foreach ($model_fields as $field) {
                 $field_values = array();
                 $field_colors[$field->field] = $field->label_color ? $field->label_color : null;
-                if(isset($settings[$data_type]['list_values'][$field->field])) {
+                if(isset($settings['list_values'][$field->id])) {
                     if($field->type == 'relation') {
-                        $field_values = array_slice($settings[$data_type]['list_values'][$field->field], 0, 19, true); 
+                        $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true); 
                     } else {
-                        $field_values = $settings[$data_type]['list_values'][$field->field];
+                        $field_values = $settings['list_values'][$field->id];
                     }
                 };
                 if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->type != 'password') {
                     $table_columns[$field->field] = array(
                         'id' => $field->id,
-                        'title' => $field->display_name,
+                        'title' => $field->title,
                         'key' => $field->field,
                         'width' => '200px',
                         'enabled' => 0,
@@ -136,7 +136,7 @@ class TableController extends Controller
                 } elseif($field->type != 'text_group' && $field->type != 'password') {
                     $table_columns[$field->field] = array(
                         'id' => $field->id,
-                        'title' => $field->display_name,
+                        'title' => $field->title,
                         'key' => $field->field,
                         'width' => $table_columns[$field->field]['width'],
                         'enabled' => $table_columns[$field->field]['enabled'],
@@ -225,17 +225,17 @@ class TableController extends Controller
             foreach ($model_fields as $field) {
                 $field_values = array();
                 $field_colors[$field->field] = $field->label_color ? $field->label_color : null;
-                if(isset($settings[$data_type]['list_values'][$field->field])) {
+                if(isset($settings['list_values'][$field->id])) {
                     if($field->type == 'relation') {
-                        $field_values = array_slice($settings[$data_type]['list_values'][$field->field], 0, 19, true); 
+                        $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true); 
                     } else {
-                        $field_values = $settings[$data_type]['list_values'][$field->field];
+                        $field_values = $settings['list_values'][$field->id];
                     }
                 };
                 if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->type != 'password') {
                     $table_columns[$field->field] = array(
                         'id' => $field->id,
-                        'title' => $field->display_name,
+                        'title' => $field->title,
                         'key' => $field->field,
                         'width' => '200px',
                         'enabled' => 0,

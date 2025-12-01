@@ -31,76 +31,90 @@ class Company extends Model
 
         static::updating(function($model)
         {   
-            if($model->getOriginal('car_id') != $model->car_id) {
-                if($model->getOriginal('car_id')) {
-                    if(is_array($model->getOriginal('car_id')))
-                        $car_ids = $model->getOriginal('car_id');
-                    else
-                        $car_ids = json_decode($model->getOriginal('car_id'), true);
-                    $cars = Car::whereIntegerInRaw('id', $car_ids)->get();
-                    if(count($cars)) {
-                        foreach ($cars as $car) {
-                            $car->saveRelations('company_id', null);
-                            $car->company_id = null;
-                            $car->saveQuietly();
-                        }
-                    }
-                }
+            // if($model->getOriginal('car_id') != $model->car_id) {
+            //     if($model->getOriginal('car_id')) {
+            //         if(is_array($model->getOriginal('car_id')))
+            //             $car_ids = $model->getOriginal('car_id');
+            //         else
+            //             $car_ids = json_decode($model->getOriginal('car_id'), true);
 
-                if($model->car_id) {
-                    if(is_array($car_ids))
-                        $car_ids = $model->car_id;
-                    else
-                        $car_ids = json_decode($model->car_id, true);
-                    if(is_array($car_ids)) {
-                        $cars = Car::whereIntegerInRaw('id', $car_ids)->get();
-                        if(count($cars)) {
-                            foreach ($cars as $car) {
-                                $car->saveRelations('company_id', $model->id);
-                                $car->company_id = $model->id;
-                                $car->saveQuietly();
-                            }
-                        }
-                    }
-                }
-            }
+                    
+            //         if(count($car_ids)) {
+            //             \DB::table('cars')->whereIntegerInRaw('id',$car_ids)->update(['choosed_at' => null]);
+            //             $new_car_ids = array();
+            //             if($model->car_id) {
+            //                 if(is_array($model->car_id))
+            //                     $new_car_ids = $model->car_id;
+            //                 else
+            //                     $new_car_ids = json_decode($model->car_id, true);
+            //             }
+            //             foreach($car_ids as $car) {
+            //                 if(!in_array($car, $new_car_ids))
+            //                     \App\Models\History::saveForObject('cars', array(['id' => $car, 'company_id' => null]));
+            //             }
+            //         }
+            //         $cars = Car::whereIntegerInRaw('id', $car_ids)->get();
+            //         if(count($cars)) {
+            //             foreach ($cars as $car) {
+            //                 $car->saveRelations('company_id', null);
+            //                 $car->company_id = null;
+            //                 $car->saveQuietly();
+            //             }
+            //         }
+            //     }
 
-            if($model->getOriginal('employee_id') != $model->employee_id) {
-                if($model->getOriginal('employee_id')) {
-                    if(is_array($model->getOriginal('employee_id')))
-                        $employee_ids = $model->getOriginal('employee_id');
-                    else
-                        $employee_ids = json_decode($model->getOriginal('employee_id'), true);
-                    $employees = Employee::whereIntegerInRaw('id', $employee_ids)->get();
-                    if(count($employees)) {
-                        foreach ($employees as $employee) {
-                            $employee->saveRelations('company_id', null);
-                            $employee->company_id = null;
-                            $employee->saveQuietly();
-                        }
-                    }
-                }
+            //     if($model->car_id) {
+            //         if(is_array($model->car_id))
+            //             $car_ids = $model->car_id;
+            //         else
+            //             $car_ids = json_decode($model->car_id, true);
 
-                if($model->employee_id) {
-                    if(is_array($model->employee_id))
-                        $employee_ids = $model->employee_id;
-                    else
-                        $employee_ids = json_decode($model->employee_id, true);
-                    if(is_array($employee_ids)) {
-                        $employees = Employee::whereIntegerInRaw('id', $employee_ids)->get();
-                        if(count($employees)) {
-                            foreach ($employees as $employee) {
-                                $employee->saveRelations('company_id', $model->id);
-                                $employee->company_id = $model->id;
-                                $employee->saveQuietly();
-                            }
-                        }
-                    }
-                }
-            }
+            //         if(count($car_ids)) {
+            //             $old_car_ids = array();
+            //             if($model->getOriginal('car_id')) {
+            //                 if(is_array($model->getOriginal('car_id')))
+            //                     $old_car_ids = $model->getOriginal('car_id');
+            //                 else
+            //                     $old_car_ids = json_decode($model->getOriginal('car_id'), true);
+            //             }
+            //             foreach($car_ids as $car) {
+            //                 if(!in_array($car, $old_car_ids))
+            //                     \App\Models\History::saveForObject('cars', array(['id' => $car, 'company_id' => $model->id]));
+            //             }
+            //         }
+            //         if(is_array($car_ids)) {
+            //             $cars = Car::whereIntegerInRaw('id', $car_ids)->get();
+            //             if(count($cars)) {
+            //                 foreach ($cars as $car) {
+            //                     $car->saveRelations('company_id', $model->id);
+            //                     $car->company_id = $model->id;
+            //                     $car->saveQuietly();
+            //                 }
+            //             }
+            //         }
+            //     }
+            // }
         });
     }
 
-    
+    public function cars()
+    {
+        return $this->hasMany(Car::class, 'company_id')->orderBy('choosed_at');
+    }
+
+    public function employees()
+    {
+        return $this->hasMany(Employee::class, 'company_id');
+    }
+
+    public function fines_gibdd()
+    {
+        return $this->hasMany(GibddFine::class, 'company_id');
+    }
+
+    public function sync_history($field, $new_value)
+    {
+        $objects = \App\Models\History::saveForObject('companies', array(['id' => $this->id, $field => $new_value]), false);
+    }
 
 }

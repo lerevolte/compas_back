@@ -13,12 +13,26 @@
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_URI} (.+)/$
     RewriteRule ^ %1 [L,R=301]
+    #RewriteRule ^(.*)/$ /$1 [L,R=301]
+
 
     # Send Requests To Front Controller...
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 
-    RewriteCond %{SERVER_PORT} 80
-    RewriteRule ^(.*)$ https://compas.pro/$1 [R,L]
+
+    RedirectMatch 301 ^/landing /
+    #RewriteCond %{SERVER_PORT} 80
+    #RewriteRule ^(.*)$ https://compas.pro/$1 [R,L]
+
+    RewriteRule ^icons/(.*)$ /home/admin/web/compas.pro/public_html/public/icons/$1 [L]
 </IfModule>
+
+<FilesMatch "\.(?i:gif|jpe?g|png|ico|css|js|swf)$">
+
+  <IfModule mod_headers.c>
+    Header set Cache-Control "max-age=172800, public, must-revalidate"
+  </IfModule>
+
+</FilesMatch>

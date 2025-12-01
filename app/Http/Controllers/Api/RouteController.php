@@ -74,12 +74,12 @@ class RouteController extends Controller
                         $data[$field->field] = array();
                         if(is_array($values)) {
                             foreach($values as $val) {
-                                if(isset($settings['routes']['list_values'][$field->field][$val]))
-                                    $data[$field->field][] = $settings['routes']['list_values'][$field->field][$val];
+                                if(isset($settings['list_values'][$field->id][$val]))
+                                    $data[$field->field][] = $settings['list_values'][$field->id][$val];
                             }
                         }
-                    } elseif($field->type == 'relation' && isset($settings['routes']['list_values'][$field->field][$value])) {
-                        $data[$field->field] = $settings['routes']['list_values'][$field->field][$value];
+                    } elseif($field->type == 'relation' && isset($settings['list_values'][$field->id][$value])) {
+                        $data[$field->field] = $settings['list_values'][$field->id][$value];
                     } elseif($field->type == 'relation') {
                         $data[$field->field] = null;
                     };
@@ -120,7 +120,7 @@ class RouteController extends Controller
 
         $data = $request->all();
         $item = $entity_class::create($data);
-        $item->name = $entity->display_name_singular.' #'.$item->id;
+        $item->name = $entity->title_singular.' #'.$item->id;
         $item->user_id = \Auth::user()->id;
         $item->date = date('d.m.Y');
         if($request->date)
@@ -186,7 +186,7 @@ class RouteController extends Controller
                             continue;
                         }
                         if($field->field == $field_name && $field->type == 'date')
-                            $rows[$id][$field_name] = \Carbon\Carbon::parse($value)->format('Y-m-d H:i:s');//$value = strtotime($value);
+                            $rows[$id][$field_name] = \Carbon\Carbon::parse($value)->format('Y-m-d H:i:s');
                         if($field->field == $field_name && $field->type == 'text')
                             $rows[$id][$field_name] = (string)$value;
                     }
@@ -202,8 +202,8 @@ class RouteController extends Controller
 
                 if(array_key_exists($field->field, $row) && array_key_exists($field->field, $objects[$row['id']]) && $objects[$row['id']][$field->field] !== $row[$field->field]) {
                     $changed_fields[] = $field->id;
-                    if($field->type == 'status' && isset($settings['routes']['list_values'][$field->field])) {
-                        $statuses = collect($settings['routes']['list_values'][$field->field]);
+                    if($field->type == 'status' && isset($settings['list_values'][$field->id])) {
+                        $statuses = collect($settings['list_values'][$field->id]);
                         $visible_statuses = $statuses->filter(function ($status) {
                                 return !$status->is_hidden;
                             })->pluck('id')->toArray();
@@ -221,20 +221,20 @@ class RouteController extends Controller
                             } else {
                                 $new_value = $new_status->value ? $new_status->value : 'Значение '.(array_search($new_status->id, $visible_statuses)+1);
                             }
-                            $history_text = $field->display_name.': '.$old_value.' -> '.$new_value;
+                            $history_text = $field->title.': '.$old_value.' -> '.$new_value;
                         } elseif($new_status) {
                             if($new_status->is_hidden) {
                                 $new_value = $new_status->color;
                             } else {
                                 $new_value = $new_status->value ? $new_status->value : 'Значение '.(array_search($new_status->id, $visible_statuses)+1);
                             }
-                            $history_text = $field->display_name.': '.$objects[$row['id']][$field->field].' -> '.$new_value;
+                            $history_text = $field->title.': '.$objects[$row['id']][$field->field].' -> '.$new_value;
                         } else {
-                            $history_text = $field->display_name.': '.$objects[$row['id']][$field->field].' -> '.$row[$field->field];
+                            $history_text = $field->title.': '.$objects[$row['id']][$field->field].' -> '.$row[$field->field];
                         }
-                    } elseif(isset($settings['routes']['list_values'][$field->field])) {
+                    } elseif(isset($settings['list_values'][$field->id])) {
 
-                        $list_values = $settings['routes']['list_values'][$field->field];
+                        $list_values = $settings['list_values'][$field->id];
                         foreach($list_values as $k => $item) {
                             if(isset($item['label']))
                                 $list_values[$item['value']] = $item['label'];
@@ -269,17 +269,17 @@ class RouteController extends Controller
                             $old_value = implode(', ', $old_list);
                             $new_value = implode(', ', $new_list);
 
-                            $history_text = $field->display_name.': '.$old_value.' -> '.$new_value;
+                            $history_text = $field->title.': '.$old_value.' -> '.$new_value;
                         } else {
                             $old_value = isset($list_values[$objects[$row['id']][$field->field]]) ? $list_values[$objects[$row['id']][$field->field]] : '';
                             $new_value = isset($list_values[$row[$field->field]]) ? $list_values[$row[$field->field]] : '';
-                            $history_text = $field->display_name.': '.(is_array($old_value) ? $old_value['value'] : $old_value).' -> '.(is_array($new_value) ? $new_value['value'] : $new_value);
+                            $history_text = $field->title.': '.(is_array($old_value) ? $old_value['value'] : $old_value).' -> '.(is_array($new_value) ? $new_value['value'] : $new_value);
                         }
                     } else {
                         if(is_array($row[$field->field])) {
                             if($field->type == 'address') {
                                 $old_addr = json_decode($objects[$row['id']][$field->field], true);
-                                $history_text = $field->display_name.': '.(isset($old_addr['text']) ? $old_addr['text'] : '').' -> '.$row[$field->field]['text'];
+                                $history_text = $field->title.': '.(isset($old_addr['text']) ? $old_addr['text'] : '').' -> '.$row[$field->field]['text'];
                             } elseif($field->type == 'file') {
                                 $file_values = array();
                                 foreach($row[$field->field] as $v) {
@@ -295,9 +295,9 @@ class RouteController extends Controller
                                     }
                                 }
                                 
-                                $history_text = $field->display_name.': '.implode(', ', $old_values).' -> '.implode(', ', $file_values);
+                                $history_text = $field->title.': '.implode(', ', $old_values).' -> '.implode(', ', $file_values);
                             } else {
-                                $history_text = $field->display_name.': '.$objects[$row['id']][$field->field].' -> '.implode(', ', array_values($row[$field->field]));
+                                $history_text = $field->title.': '.$objects[$row['id']][$field->field].' -> '.implode(', ', array_values($row[$field->field]));
                             }
                         } else {
                             $old_value = $objects[$row['id']][$field->field];
@@ -312,7 +312,7 @@ class RouteController extends Controller
                                 }
                                 $old_value = implode(', ', $old_values);
                             }
-                            $history_text = $field->display_name.': '.$old_value.' -> '.$row[$field->field];
+                            $history_text = $field->title.': '.$old_value.' -> '.$row[$field->field];
                         }
                         
                     }
@@ -425,12 +425,12 @@ class RouteController extends Controller
                         $data[$field->field] = array();
                         if(is_array($values)) {
                             foreach($values as $val) {
-                                if(isset($settings['routes']['list_values'][$field->field][$val]))
-                                    $data[$field->field][] = $settings['routes']['list_values'][$field->field][$val];
+                                if(isset($settings['list_values'][$field->id][$val]))
+                                    $data[$field->field][] = $settings['list_values'][$field->id][$val];
                             }
                         }
-                    } elseif($field->type == 'relation' && isset($settings['routes']['list_values'][$field->field][$value])) {
-                        $data[$field->field] = $settings['routes']['list_values'][$field->field][$value];
+                    } elseif($field->type == 'relation' && isset($settings['list_values'][$field->id][$value])) {
+                        $data[$field->field] = $settings['list_values'][$field->id][$value];
                     } elseif($field->type == 'relation') {
                         $data[$field->field] = null;
                     };
@@ -518,12 +518,12 @@ class RouteController extends Controller
                         $data[$field->field] = array();
                         if(is_array($values)) {
                             foreach($values as $val) {
-                                if(isset($settings['routes']['list_values'][$field->field][$val]))
-                                    $data[$field->field][] = $settings['routes']['list_values'][$field->field][$val];
+                                if(isset($settings['list_values'][$field->id][$val]))
+                                    $data[$field->field][] = $settings['list_values'][$field->id][$val];
                             }
                         }
-                    } elseif($field->type == 'relation' && isset($settings['routes']['list_values'][$field->field][$value])) {
-                        $data[$field->field] = $settings['routes']['list_values'][$field->field][$value];
+                    } elseif($field->type == 'relation' && isset($settings['list_values'][$field->id][$value])) {
+                        $data[$field->field] = $settings['list_values'][$field->id][$value];
                     } elseif($field->type == 'relation') {
                         $data[$field->field] = null;
                     };

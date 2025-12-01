@@ -24,7 +24,7 @@ class ModuleCategory extends Model
 		        if($logo_res)
 		            $logo_path = str_replace('storage/', '', \Storage::disk('public')->url('assets/modules/'.$module->getName().'/logo/'.$logo_res));
 	            $data[] = array(
-	                'name' => $module->get('display_name'),
+	                'name' => $module->get('title'),
 	                'logo' => $logo_path,
 	                'description' => $module->getDescription(),
 	                'enabled' => $module->isEnabled() ? 1 : 0,
