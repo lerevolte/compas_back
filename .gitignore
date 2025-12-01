@@ -30,3 +30,4 @@ auth.json
 # Ignored directories
 project/
 resources/
+storage/
