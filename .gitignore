@@ -26,6 +26,7 @@ Homestead.json
 .env.production
 .phpactor.json
 auth.json
+firebase.json
 
 # Ignored directories
 project/
