@@ -1,1 +1,0 @@
-import{d as o,b as t,e as r,t as a,Y as n}from"./entry.9434a4bb.js";const s={};function c(e,i){return t(),r("div",null,a((e._.provides[n]||e.$route).path),1)}const d=o(s,[["render",c]]);export{d as default};

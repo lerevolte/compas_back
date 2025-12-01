@@ -1,1 +1,0 @@
-import{D as e,b as t,c as s,R as a}from"./entry.b325ab13.js";const _={__name:"[slug]",setup(c){return e({title:"Магазин модулей . Компас",meta:[{name:"description",content:"Описание."}]}),(n,o)=>(t(),s(a))}};export{_ as default};

@@ -1,1 +1,0 @@
-import{o as e,a as o,b as r,c as a,_ as s}from"./entry.9434a4bb.js";const u={__name:"index",setup(t){return e(()=>{document.querySelector(".page").classList.add("error")}),o(()=>{document.querySelector(".page").classList.remove("error")}),(c,n)=>(r(),a(s))}};export{u as default};
