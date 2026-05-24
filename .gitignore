@@ -70,3 +70,8 @@ Thumbs.db
 
 # Claude Code (личные настройки)
 .claude/settings.local.json/public_new/
+
+# Runtime artifacts
+nohup.out
+worker.log
+test.json
