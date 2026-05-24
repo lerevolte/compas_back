@@ -1,0 +1,1 @@
+import{u as s,D as t,b as r,c as a,j as n,X as c}from"./entry.9434a4bb.js";const d={__name:"index",setup(o){const e=s();return t({title:"Пользователь. Компас",meta:[{name:"description",content:"Описание."}]}),(u,i)=>(r(),a(c,{slug:"users",id:n(e).user.id},null,8,["id"]))}};export{d as default};
