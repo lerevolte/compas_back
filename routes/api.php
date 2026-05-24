@@ -39,8 +39,12 @@ Route::middleware([
     'api'
 ])->group(function () {
     Route::get(
-        'pages', 
+        'pages',
         [App\Http\Controllers\SpaController::class, 'pages']
+    );
+    Route::get(
+        'health',
+        [App\Http\Controllers\Api\HealthController::class, 'index']
     );
     Route::get(
         'table/fines', 
