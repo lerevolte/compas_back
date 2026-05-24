@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="20px" height="20px" viewBox="0 0 20 20" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>Group 23</title>
+    <g id="--Страница-аналитики" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Аналитика-4-Copy-2" transform="translate(-1129, -213)">
+            <g id="Group" transform="translate(254, 81)">
+                <g id="Group-17-Copy-6" transform="translate(865, 0)">
+                    <g id="Group-26" transform="translate(0, 57)">
+                        <g id="Group-23" transform="translate(10, 75)">
+                            <rect id="Rectangle-Copy-8" x="0" y="0" width="20" height="20" rx="3"></rect>
+                            <g id="bar" transform="translate(1, 2)" fill-rule="nonzero">
+                                <polygon id="Shape" fill="#C0C0C0" points="0 14.625 18 14.625 18 16.875 0 16.875"></polygon>
+                                <path d="M1.125,0 L5.625,0 L5.625,2.25 L1.125,2.25 L1.125,0 Z M6.75,0 L11.25,0 L11.25,10.126125 L6.75,10.126125 L6.75,0 Z M12.357,0 L16.857,0 L16.857,7.875 L12.357,7.875 L12.357,0 Z" id="Combined-Shape" fill="#FD8200"></path>
+                                <path d="M1.125,3.375 L5.625,3.375 L5.625,13.501125 L1.125,13.501125 L1.125,3.375 Z M6.75,11.253375 L11.25,11.253375 L11.25,13.503375 L6.75,13.503375 L6.75,11.253375 Z M12.357,9.001125 L16.857,9.001125 L16.857,13.501125 L12.357,13.501125 L12.357,9.001125 Z" id="Combined-Shape" fill="#00B5E0"></path>
+                            </g>
+                        </g>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

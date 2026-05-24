@@ -1,0 +1,1 @@
+import"./entry.e5663211.js";const t=""+globalThis.__publicAssetsURL("articles/defaultAvatar.png");export{t as d};

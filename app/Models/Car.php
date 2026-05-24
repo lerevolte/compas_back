@@ -67,6 +67,11 @@ class Car extends Model
         return $this->hasMany(Mileage::class, 'car_id');
     }
 
+    public function routes()
+    {
+        return $this->hasMany(Route::class, 'car_id');
+    }
+
     public function employees()
     {
         return $this->belongsToMany(Employee::class, 'car_employee');

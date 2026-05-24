@@ -16,6 +16,7 @@ class SidebarItem extends Model
         //'sort',
         '_lft',
         '_rgt',
-        'parent_id'
+        'parent_id',
     ];
+    protected $fillable = ['name', 'link', 'enabled', 'slug'];
 }

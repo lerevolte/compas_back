@@ -1,0 +1,1 @@
+import{d as e,b as t,c as a}from"./entry.2b35fe94.js";import{_ as o}from"./AuthPage.ea154006.js";import"./AppSection.52ec5f7a.js";const i={__name:"index",setup(r){return e({title:"Авторизация | Compas.pro",meta:[{name:"description",content:"Описание."}],link:[{rel:"canonical",href:"https://compas.pro/auth"}]}),(c,n)=>(t(),a(o))}};export{i as default};

@@ -58,15 +58,15 @@ class FileService
 
             $media = $document->addMediaFromUrl($path)->toMediaCollection();
             if(in_array($ext, array('xls', 'xlsx')))
-                $thumbnail = '/public/files/xls.svg';
+                $thumbnail = '/files/xls.svg';
             elseif(in_array($ext, array('doc', 'docx')))
-                $thumbnail = '/public/files/word.svg';
+                $thumbnail = '/files/word.svg';
             elseif($ext == 'pdf')
-                $thumbnail = '/public/files/pdfSmall.svg';
+                $thumbnail = '/files/pdfSmall.svg';
             elseif(in_array($ext, array('png', 'jpg', 'jpeg', 'gif', 'webp'))) {
                 $thumbnail = \Thumbnail::src($path)->heighten(200)->url();
             } elseif($ext != 'svg')
-                $thumbnail = '/public/files/undefinedFile.svg';
+                $thumbnail = '/files/undefinedFile.svg';
             
             $result[] = array(
                 'id' => $document->id,

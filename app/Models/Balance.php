@@ -9,7 +9,7 @@ use App\Models\Tariff;
 use Mail;
 use App\Mail\InvoiceCreated;
 use App\Services\CrudService;
-
+use Illuminate\Support\Facades\Log;
 
 class Balance extends Model
 {
@@ -71,9 +71,9 @@ class Balance extends Model
         
         $total_sum = 0;
         foreach ($operations->orderBy('date', 'desc')->get() as $operation) {
-            if($operation->type == 'plus')
+            if($operation->type == 'пополнение')
                 $total_sum+= $operation->sum;
-            elseif($operation->type == 'minus')
+            elseif($operation->type == 'списание')
                 $total_sum-= $operation->sum;
         }
         $operations = $operations->paginate($limit);
@@ -192,9 +192,24 @@ class Balance extends Model
                 'type' => 'account'
             ])->first();
             if($docs_email && $docs_email->value) {
-                Mail::to($docs_email->value)->send(new InvoiceCreated(
-                    filepath: storage_path('app/public/'.$document->path)
-                ));
+                try {
+                    Mail::to($docs_email->value)->send(new InvoiceCreated(
+                        filepath: storage_path('app/public/' . $document->path)
+                    ));
+                } catch (\Exception $e) {
+                    // Логируем ошибку, чтобы не потерять информацию
+                    Log::error('Не удалось отправить письмо с инвойсом', [
+                        'document_id' => $document->id ?? null,
+                        'email'       => $docs_email->value,
+                        'error'       => $e->getMessage(),
+                        'trace'       => $e->getTraceAsString(),
+                    ]);
+
+                    // Можно дополнительно уведомить разработчиков через Slack и т.п.
+                    // report($e); // если хочешь, чтобы Laravel сам отправил в Sentry/Bugsnag и т.д.
+
+                    // Приложение продолжает работать — пользователь даже может не узнать об ошибке
+                }
             }
             tenancy()->central(function () use ($tenant, $payer, $invoice, $doc_photo) {
                 $crudService = new \App\Services\CrudService;
@@ -269,7 +284,7 @@ class Balance extends Model
     	$operation->type = 'пополнение';
     	$operation->balance_id = $this->id;
         $operation->comment = $comment;
-        $operation->date = date("d.m.Y");
+        $operation->date = date("Y-m-d");
         if($document_id)
             $operation->document_id = $document_id;
     	$operation->save();
@@ -286,7 +301,7 @@ class Balance extends Model
     	$operation->type = 'списание';
     	$operation->balance_id = $this->id;
         $operation->comment = $comment;
-        $operation->date = date("d.m.Y");
+        $operation->date = date("Y-m-d");
         if($document_id)
             $operation->document_id = $document_id;
         if($invoice_id)
@@ -389,7 +404,7 @@ class Balance extends Model
             $operation->count_mobile = $mobile_count;
             $operation->comment = 'Расход за день';
             $operation->count_routes = count($routes);
-            $operation->date = date("d.m.Y", strtotime($date));
+            $operation->date = date("Y-m-d", strtotime($date));
             $operation->save();
             // $this->sum = $this->sum - $operation->sum;
             // $this->save();
@@ -401,7 +416,7 @@ class Balance extends Model
     {
     
         //$tenant->run(function () use ($balance) {
-            $date = date('d.m.Y');
+            $date = date('Y-m-d');
             $operation = BalanceOperation::where('date', $date)->where('comment', 'Списание по тарифу')->first();
             if(!$operation) {
                 $tariff = Tariff::current();

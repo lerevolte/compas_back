@@ -1,0 +1,1 @@
+import{a8 as o,o as a,c as r,k as t,a9 as n}from"./entry.1aa304c1.js";const s={};function c(e,i){return a(),r("div",null,t((e._.provides[n]||e.$route).path),1)}const p=o(s,[["render",c]]);export{p as default};

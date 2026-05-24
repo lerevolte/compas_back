@@ -518,6 +518,8 @@ class Settings extends Model
 		                if(isset($details['table'])) {
 		                    $type = isset($models_by_name[$details['table']]) ? $models_by_name[$details['table']] : null;
 	                        if($type) {
+                                info($field->id.' '.$field->field);
+                                info($type->model_name);
 	                        	if($details['table'] == 'cars' || $details['table'] == 'employees' || $details['table'] == 'clients')
 	                        		$table_objects = isset($table_objects[$details['table']]) ? $table_objects[$details['table']] :$type->model_name::orderBy('choosed_at', 'DESC')->orderBy('name', 'ASC')->whereNull('deleted_at')->get();
 	                        	else
@@ -549,7 +551,7 @@ class Settings extends Model
 											],
 											'value' => $object->id
 		                    			);
-		                        } elseif(isset($object->first_name)) {
+		                        }/* elseif(isset($object->first_name)) {
 		                        	$field_values[$field->id][$object->id] = array(
 		                    				'label' => [	
 												'id' =>	$object->id,
@@ -562,7 +564,7 @@ class Settings extends Model
 											],
 											'value' => $object->id
 		                    			);
-		                        } elseif(isset($object->display_name)) {
+		                        } */elseif(isset($object->display_name)) {
 		                        	$name = $object->display_name;
 		                        	if(ValueHelper::isJson($name)) {
 		                        		$name = json_decode($object->display_name, true)['value'];
@@ -588,12 +590,12 @@ class Settings extends Model
 		                        	}
 
 
-		                        	$last_name = '';
-		                        	if(isset($object->last_name))
-		                        		$last_name = $object->last_name;
-		                        	if(ValueHelper::isJson($last_name)) {
-		                        		$last_name = json_decode($object->last_name, true)['value'];
-		                        	}
+		                        	// $last_name = '';
+		                        	// if(isset($object->last_name))
+		                        	// 	$last_name = $object->last_name;
+		                        	// if(ValueHelper::isJson($last_name)) {
+		                        	// 	$last_name = json_decode($object->last_name, true)['value'];
+		                        	// }
 		                        	$obj_arr = $object->toArray();
 
 		                        	$field_values[$field->id][$object->id] = array(
@@ -604,7 +606,7 @@ class Settings extends Model
 												'is_hidden' => 0,
 												'field_id' => $field->id,
 												'color' => array_key_exists('color', $obj_arr) && !$object->color ? $object->getColor() : ($object->color ?? ''),
-												'text' => $name.($last_name ? ' '.$last_name:''),
+												'text' => $name//.($last_name ? ' '.$last_name:''),
 											],
 											'value' => $object->id
 		                    			);

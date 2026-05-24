@@ -1,0 +1,1 @@
+import{r as s,e as n,h as c,a7 as r}from"./entry.dbbf34a4.js";const p={__name:"AppSection",setup(a,{expose:o}){const e=s();return o({sectionRef:e}),(t,f)=>(n(),c("section",{ref_key:"sectionRef",ref:e},[r(t.$slots,"default")],512))}},_=p;export{_ as A};

@@ -40,6 +40,64 @@ class CrudService
                     'status' => 403
                 ];
             }
+            if ($slug == 'logistic_tasks' && array_key_exists('delivery_date', $row) && $row['id']) {
+                // Проверяем существование записи с заполненным route_id
+                // Используем exists() для оптимизации, чтобы не грузить всю модель
+                $is_routed = $entity_class::where('id', $row['id'])
+                    ->whereNotNull('route_id')
+                    ->exists();
+
+                if ($is_routed) {
+                    return [
+                        'message' => 'Дату доставки нужно менять у связанного маршрута',
+                        'status' => 403
+                    ];
+                }
+            }
+            // --- НАЧАЛО НОВЫХ ИЗМЕНЕНИЙ (АВТОЗАПОЛНЕНИЕ COMPANY_ID ДЛЯ ROUTES) ---
+            if ($slug == 'routes' && $row['id'] == 0 && (!isset($row['company_id']) || !$row['company_id'])) {
+                $found_company_id = null;
+
+                // 1. Пробуем найти через сотрудника
+                if (isset($row['employee_id']) && $row['employee_id']) {
+                    // Нормализуем ID, так как с фронта может прийти массив или ['value' => id]
+                    $emp_id = $row['employee_id'];
+                    if (is_array($emp_id)) {
+                        $emp_id = $emp_id['value'] ?? ($emp_id[0] ?? null);
+                    }
+
+                    if ($emp_id) {
+                        $employee = \App\Models\Employee::find((int)$emp_id);
+                        // Теперь $employee точно модель, а не коллекция
+                        if ($employee && $employee->company_id) {
+                            $found_company_id = $employee->company_id;
+                        }
+                    }
+                }
+
+                // 2. Если не нашли, пробуем найти через машину
+                if (!$found_company_id && isset($row['car_id']) && $row['car_id']) {
+                    // Нормализуем ID машины
+                    $car_id = $row['car_id'];
+                    if (is_array($car_id)) {
+                        $car_id = $car_id['value'] ?? ($car_id[0] ?? null);
+                    }
+
+                    if ($car_id) {
+                        $car = \App\Models\Car::find((int)$car_id);
+                        if ($car && $car->company_id) {
+                            $found_company_id = $car->company_id;
+                        }
+                    }
+                }
+
+                // Если нашли компанию, записываем её в массив rows
+                if ($found_company_id) {
+                    $rows[$k]['company_id'] = $found_company_id;
+                    $row['company_id'] = $found_company_id; 
+                }
+            }
+            // --- КОНЕЦ НОВЫХ ИЗМЕНЕНИЙ ---
             foreach($row as $field => $value) {
                 $val = $value;
                 if(is_array($val)) {

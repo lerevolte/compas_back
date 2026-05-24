@@ -246,7 +246,7 @@ class Table
                 elseif(isset($model_fields[$key]) && $column['type'] == 'relation' && $model_fields[$key]->relation_table && !$settings['models'][$model_fields[$key]->relation_table]->enable)
                     unset($table_columns[$key]);
             }
-            if(!isset($table_columns['isChoose'])) {
+            if(!isset($table_columns['isChoose']) && $slug != 'balance_operations') {
                 $table_columns['isChoose'] = array(
                     "id" => 0,
                     "title" => "Выделение",
@@ -262,7 +262,7 @@ class Table
                     "mask" => ""
                 );
             }
-            if(!isset($table_columns['actions'])) {
+            if(!isset($table_columns['actions']) && $slug != 'balance_operations') {
                 $table_columns['actions'] = array(
                     "id" => 2,
                     "title" => "Действие",
@@ -278,6 +278,7 @@ class Table
                     "mask" => ""
                 );
             }
+            
             $start_time = microtime(true);  // Время окончания
             foreach ($model_fields as $field) {
                 $field_values = array();
@@ -328,6 +329,12 @@ class Table
                     $table_columns[$field->field]['is_hidden'] = $field->hide;
                     $table_columns[$field->field]['visible_always'] = $field->visible_always;
                     $table_columns[$field->field]['options'] = array_values($field_values);
+                    if($field->type == 'status' && $field->details) {
+                        $details = json_decode($field->details, true);
+                        if(isset($details['can_create'])) {
+                            $table_columns[$field->field]['can_create'] = $details['can_create'] ? 1 : 0;
+                        }
+                    }
                     
                     if($field->type == 'relation') {
                         $table_columns[$field->field]['related_table'] = json_decode($field->details, true)['table'];
@@ -367,7 +374,10 @@ class Table
                         'mask' => $field->mask
                     );
                     $table_columns[$field->field]['type'] = $field->type;
-                    $table_columns[$field->field]['read_only'] = $field->only_read || !$settings[$slug]['perms'][$field->field]['write'] || $permissions['update_p'] == 'N'? 1 : 0;
+
+                    $table_columns[$field->field]['read_only'] = $field->only_read || (isset($settings[$slug]['perms'][$field->field]['write']) && !$settings[$slug]['perms'][$field->field]['write']) || (isset($permissions['update_p']) && $permissions['update_p'] == 'N')? 1 : 0;
+
+
                     if(\Auth::user()->is_admin && !$field->only_read) 
                         $table_columns[$field->field]['read_only'] = 0;
                     $table_columns[$field->field]['can_read'] = $settings[$slug]['perms'][$field->field]['read'] || \Auth::user()->is_admin ? 1 : 0;
@@ -378,6 +388,12 @@ class Table
                     $table_columns[$field->field]['is_hidden'] = $field->hide;
                     $table_columns[$field->field]['visible_always'] = $field->visible_always;
                     $table_columns[$field->field]['options'] = array_values($field_values);
+                    if($field->type == 'status' && $field->details) {
+                        $details = json_decode($field->details, true);
+                        if(isset($details['can_create'])) {
+                            $table_columns[$field->field]['can_create'] = $details['can_create'] ? 1 : 0;
+                        }
+                    }
                     if($field->type == 'relation') {
                         $table_columns[$field->field]['related_table'] = json_decode($field->details, true)['table'];
                         // if($field->field == 'category_id')
@@ -519,6 +535,12 @@ class Table
                     $table_columns[$field->field]['is_hidden'] = $field->hide;
                     $table_columns[$field->field]['visible_always'] = $field->visible_always;
                     $table_columns[$field->field]['options'] = array_values($field_values);
+                    if($field->type == 'status' && $field->details) {
+                        $details = json_decode($field->details, true);
+                        if(isset($details['can_create'])) {
+                            $table_columns[$field->field]['can_create'] = $details['can_create'] ? 1 : 0;
+                        }
+                    }
                     if($field->type == 'relation') {
                         $table_columns[$field->field]['related_table'] = json_decode($field->details, true)['table'];
                         // if($field->field == 'category_id')
@@ -548,6 +570,11 @@ class Table
                 
             }
             
+        }
+
+        if($slug == 'balance_operations') {
+            unset($table_columns['isChoose']);
+            unset($table_columns['actions']);
         }
         
         
@@ -978,6 +1005,12 @@ class Table
                     $table_columns[$field->field]['is_hidden'] = $field->hide;
                     $table_columns[$field->field]['visible_always'] = $field->visible_always;
                     $table_columns[$field->field]['options'] = array_values($field_values);
+                    if($field->type == 'status' && $field->details) {
+                        $details = json_decode($field->details, true);
+                        if(isset($details['can_create'])) {
+                            $table_columns[$field->field]['can_create'] = $details['can_create'] ? 1 : 0;
+                        }
+                    }
                     if($field->type == 'relation') {
                         $table_columns[$field->field]['related_table'] = json_decode($field->details, true)['table'];
                         // if($field->field == 'category_id')
@@ -1006,6 +1039,9 @@ class Table
         
 
         $table_columns = array_values($table_columns);
+
+        info('product table_columns');
+        info($table_columns);
 
         return $table_columns;
     }

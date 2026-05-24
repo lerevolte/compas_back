@@ -151,6 +151,13 @@ class TenantService
                 \DB::table('field_sections')->insert([$odata]);
             };
 
+            $objects = \DB::connection('seeds')->table('field_values')->get();
+            foreach ($objects as $object) {
+                $odata = collect($object)->toArray();
+                
+                \DB::table('field_values')->insert([$odata]);
+            };
+
             $objects = \DB::connection('seeds')->table('data_types')->get();
             foreach ($objects as $object) {
                 $odata = collect($object)->toArray();
@@ -292,171 +299,175 @@ class TenantService
                 $token = $user->generateToken();
             }
 
-            if($data['email'] == 'lerevolte@yandex.ru' || $data['email'] == 'plusmario@yandex.ru') {
-                if($gibdd_queries) {
-                    foreach($gibdd_queries as $value => $item) {
-                        if($item->requisite == 'СТС') {
-                            $result = $this->crudService->batch('cars', [[
-                                'id' => 0,
-                                'number' => $item->additional_value,
-                                'sts_number' => $item->value,
-                                'user_id' => 1
-                            ]]);
-                        }
-                        if($item->requisite == 'Водительское удостоверение') {
-                            $result = $this->crudService->batch('employees', [[
-                                'id' => 0,
-                                'driver_license' => $item->value,
-                                'user_id' => 1
-                            ]]);
-                        }
+            // if($data['email'] == 'lerevolte@yandex.ru' || $data['email'] == 'plusmario@yandex.ru') {
+            //     if($gibdd_queries) {
+            //         foreach($gibdd_queries as $value => $item) {
+            //             if($item->requisite == 'СТС') {
+            //                 $result = $this->crudService->batch('cars', [[
+            //                     'id' => 0,
+            //                     'number' => $item->additional_value,
+            //                     'sts_number' => $item->value,
+            //                     'user_id' => 1
+            //                 ]]);
+            //             }
+            //             if($item->requisite == 'Водительское удостоверение') {
+            //                 $result = $this->crudService->batch('employees', [[
+            //                     'id' => 0,
+            //                     'driver_license' => $item->value,
+            //                     'user_id' => 1
+            //                 ]]);
+            //             }
 
-                        if($item->requisite == 'ИНН') {
-                            $result = $this->crudService->batch('companies', [[
-                                'id' => 0,
-                                'inn' => $item->value,
-                                'kpp' => $item->additional_value,
-                                'user_id' => 1
-                            ]]);
-                        }
-                    };
+            //             if($item->requisite == 'ИНН') {
+            //                 $result = $this->crudService->batch('companies', [[
+            //                     'id' => 0,
+            //                     'inn' => $item->value,
+            //                     'kpp' => $item->additional_value,
+            //                     'user_id' => 1
+            //                 ]]);
+            //             }
+            //         };
                 
-                    \Modules\Gibdd\Entities\Module::findFines();
-                    $sts_prefix = '124000000000';
-                    $license_prefix = '122000000000';
-                    $inn_prefix = '200';
-                    foreach($gibdd_queries as $value => $item) {
-                        if($item->requisite == 'УИН' && !\App\Models\GibddFine::where('number_doc', $item->value)->exists()) {
-                            $fines = json_decode($item->result, true);
-                            foreach($fines as $record) {
-                                if(!$record['name'])
-                                    continue;
-                                $fine = new \App\Models\GibddFine;
-                                $fine->payer_identifier = $record['payer_identifier'];
-                                $fine->wire_username = $record['wire_username'];
-                                if(isset($record['additional_payer_identifier']))
-                                    $fine->additional_payer_identifier = $record['additional_payer_identifier'];
-                                $fine->saveQuietly();
-                                $history_text = 'Создана запись: '.$fine->id;
-                                $history = new \App\Models\History(['entity' => 'fines_gibdd', 'event' => 'OBJECT_CREATED', 'entity_id' => $fine->id, 'user_id' => 1, 'text' => $history_text]);
-                                $history->save();
-                                $fine->name = $record['name'];
-                                $record['id'] = $fine->id;
-                                $record['user_id'] = null;
-                                unset($record['wire_username']);
-                                unset($record['payer_identifier']);
-                                if(isset($record['additional_payer_identifier'])) {
-                                    if(strstr($record['additional_payer_identifier'], $sts_prefix)) {
-                                        $sts = str_replace($sts_prefix, '', $record['additional_payer_identifier']);
-                                        $arr = \DB::table('cars')->where('sts_number', $sts)->pluck('id');
-                                        if(count($arr)) {
-                                            $record['car_id'] = array_pop($arr);
-                                        } else {
-                                            $record['name'] = $record['name'].' СТС: '.$sts;
-                                        }
-                                    }
-                                    if(strstr($record['additional_payer_identifier'], $license_prefix)) {
-                                        $license = str_replace($license_prefix, '', $record['additional_payer_identifier']);
-                                        $arr = \DB::table('employees')->where('driver_license', $license)->pluck('id');
-                                        if(count($arr)) {
-                                            $record['employee_id'] = array_pop($arr);
-                                        } else {
-                                            $record['name'] = $record['name'].' Удостоверение: '.$license;
-                                        }
-                                    }
-                                    unset($record['additional_payer_identifier']);
-                                }
-                                $record['user_id'] = 1;
-                                \App\Models\History::saveForObject('fines_gibdd', array($record));
-                                $fine_id = $record['id'];
-                                unset($record['id']);
-                                \DB::table('fines_gibdd')->where('id', $fine_id)->update($record);
-                            }
-                        }
-                    };
-                    $settings = \App\Models\Settings::get(true);
-                    foreach($gibdd_queries as $value => $item) {
-                        if($item->requisite == 'УИН' && !\App\Models\GibddFine::where('number_doc', $item->value)->exists()) {
-                            $fines = json_decode($item->result, true);
-                            foreach($fines as $record) {
-                                $record['user_id'] = null;
-                                unset($record['wire_username']);
-                                unset($record['payer_identifier']);
-                                if(isset($record['additional_payer_identifier'])) {
-                                    if(strstr($record['additional_payer_identifier'], $sts_prefix)) {
-                                        $sts = str_replace($sts_prefix, '', $record['additional_payer_identifier']);
-                                        $arr = \DB::table('cars')->where('sts_number', $sts)->pluck('id');
-                                        if(count($arr)) {
-                                            $record['car_id'] = array_pop($arr);
-                                        } else {
-                                            $record['name'] = $record['name'].' СТС: '.$sts;
-                                        }
-                                    }
-                                    if(strstr($record['additional_payer_identifier'], $license_prefix)) {
-                                        $license = str_replace($license_prefix, '', $record['additional_payer_identifier']);
-                                        $arr = \DB::table('employees')->where('driver_license', $license)->pluck('id');
-                                        if(count($arr)) {
-                                            $record['employee_id'] = array_pop($arr);
-                                        } else {
-                                            $record['name'] = $record['name'].' Удостоверение: '.$license;
-                                        }
-                                    }
-                                    unset($record['additional_payer_identifier']);
-                                }
-                                $record['user_id'] = 1;
-                                \App\Models\History::saveForObject('fines_gibdd', array($record));
-                                $fine_id = $record['id'];
-                                unset($record['id']);
-                                \DB::table('fines_gibdd')->where('id', $fine_id)->update($record);
-                            }
-                        }
-                    };
-                }
-            } else {
-                if(isset($data['number']) || isset($data['sts_number'])) {
-                    $result = $this->crudService->batch('cars', [[
-                        'id' => 0,
-                        'number' => $data['number'] ?? null,
-                        'sts_number' => $data['sts_number'] ?? null,
-                        'user_id' => 1
-                    ]]);
-                }
+            //         \Modules\Gibdd\Entities\Module::findFines();
+            //         $sts_prefix = '124000000000';
+            //         $license_prefix = '122000000000';
+            //         $inn_prefix = '200';
+            //         foreach($gibdd_queries as $value => $item) {
+            //             if($item->requisite == 'УИН' && !\App\Models\GibddFine::where('number_doc', $item->value)->exists()) {
+            //                 $fines = json_decode($item->result, true);
+            //                 foreach($fines as $record) {
+            //                     if(!$record['name'])
+            //                         continue;
+            //                     $fine = new \App\Models\GibddFine;
+            //                     $fine->payer_identifier = $record['payer_identifier'];
+            //                     $fine->wire_username = $record['wire_username'];
+            //                     if(isset($record['additional_payer_identifier']))
+            //                         $fine->additional_payer_identifier = $record['additional_payer_identifier'];
+            //                     $fine->saveQuietly();
+            //                     $history_text = 'Создана запись: '.$fine->id;
+            //                     $history = new \App\Models\History(['entity' => 'fines_gibdd', 'event' => 'OBJECT_CREATED', 'entity_id' => $fine->id, 'user_id' => 1, 'text' => $history_text]);
+            //                     $history->save();
+            //                     $fine->name = $record['name'];
+            //                     $record['id'] = $fine->id;
+            //                     $record['user_id'] = null;
+            //                     unset($record['wire_username']);
+            //                     unset($record['payer_identifier']);
+            //                     if(isset($record['additional_payer_identifier'])) {
+            //                         if(strstr($record['additional_payer_identifier'], $sts_prefix)) {
+            //                             $sts = str_replace($sts_prefix, '', $record['additional_payer_identifier']);
+            //                             $arr = \DB::table('cars')->where('sts_number', $sts)->pluck('id');
+            //                             if(count($arr)) {
+            //                                 $record['car_id'] = array_pop($arr);
+            //                             } else {
+            //                                 $record['name'] = $record['name'].' СТС: '.$sts;
+            //                             }
+            //                         }
+            //                         if(strstr($record['additional_payer_identifier'], $license_prefix)) {
+            //                             $license = str_replace($license_prefix, '', $record['additional_payer_identifier']);
+            //                             $arr = \DB::table('employees')->where('driver_license', $license)->pluck('id');
+            //                             if(count($arr)) {
+            //                                 $record['employee_id'] = array_pop($arr);
+            //                             } else {
+            //                                 $record['name'] = $record['name'].' Удостоверение: '.$license;
+            //                             }
+            //                         }
+            //                         unset($record['additional_payer_identifier']);
+            //                     }
+            //                     $record['user_id'] = 1;
+            //                     \App\Models\History::saveForObject('fines_gibdd', array($record));
+            //                     $fine_id = $record['id'];
+            //                     unset($record['id']);
+            //                     \DB::table('fines_gibdd')->where('id', $fine_id)->update($record);
+            //                 }
+            //             }
+            //         };
+            //         $settings = \App\Models\Settings::get(true);
+            //         foreach($gibdd_queries as $value => $item) {
+            //             if($item->requisite == 'УИН' && !\App\Models\GibddFine::where('number_doc', $item->value)->exists()) {
+            //                 $fines = json_decode($item->result, true);
+            //                 foreach($fines as $record) {
+            //                     $record['user_id'] = null;
+            //                     unset($record['wire_username']);
+            //                     unset($record['payer_identifier']);
+            //                     if(isset($record['additional_payer_identifier'])) {
+            //                         if(strstr($record['additional_payer_identifier'], $sts_prefix)) {
+            //                             $sts = str_replace($sts_prefix, '', $record['additional_payer_identifier']);
+            //                             $arr = \DB::table('cars')->where('sts_number', $sts)->pluck('id');
+            //                             if(count($arr)) {
+            //                                 $record['car_id'] = array_pop($arr);
+            //                             } else {
+            //                                 $record['name'] = $record['name'].' СТС: '.$sts;
+            //                             }
+            //                         }
+            //                         if(strstr($record['additional_payer_identifier'], $license_prefix)) {
+            //                             $license = str_replace($license_prefix, '', $record['additional_payer_identifier']);
+            //                             $arr = \DB::table('employees')->where('driver_license', $license)->pluck('id');
+            //                             if(count($arr)) {
+            //                                 $record['employee_id'] = array_pop($arr);
+            //                             } else {
+            //                                 $record['name'] = $record['name'].' Удостоверение: '.$license;
+            //                             }
+            //                         }
+            //                         unset($record['additional_payer_identifier']);
+            //                     }
+            //                     $record['user_id'] = 1;
+            //                     \App\Models\History::saveForObject('fines_gibdd', array($record));
+            //                     $fine_id = $record['id'];
+            //                     unset($record['id']);
+            //                     \DB::table('fines_gibdd')->where('id', $fine_id)->update($record);
+            //                 }
+            //             }
+            //         };
+            //     }
+            // } else {
+            //     if(isset($data['number']) || isset($data['sts_number'])) {
+            //         $result = $this->crudService->batch('cars', [[
+            //             'id' => 0,
+            //             'number' => $data['number'] ?? null,
+            //             'sts_number' => $data['sts_number'] ?? null,
+            //             'user_id' => 1
+            //         ]]);
+            //     }
 
-                if(isset($data['driver_license'])) {
-                    $result = $this->crudService->batch('employees', [[
-                        'id' => 0,
-                        'driver_license' => $data['driver_license'],
-                        'user_id' => 1
-                    ]]);
-                }
+            //     if(isset($data['driver_license'])) {
+            //         $result = $this->crudService->batch('employees', [[
+            //             'id' => 0,
+            //             'driver_license' => $data['driver_license'],
+            //             'user_id' => 1
+            //         ]]);
+            //     }
 
-                if(isset($data['inn'])) {
-                    $result = $this->crudService->batch('companies', [[
-                        'id' => 0,
-                        'inn' => $data['inn'],
-                        'kpp' => $data['kpp'],
-                        'user_id' => 1
-                    ]]);
-                }
+            //     if(isset($data['inn'])) {
+            //         $result = $this->crudService->batch('companies', [[
+            //             'id' => 0,
+            //             'inn' => $data['inn'],
+            //             'kpp' => $data['kpp'],
+            //             'user_id' => 1
+            //         ]]);
+            //     }
 
-                if(isset($data['sts_number']) || isset($data['inn']) || isset($data['driver_license'])) {
-                    \Modules\Gibdd\Entities\Module::findFines();
-                };
+            //     if(isset($data['sts_number']) || isset($data['inn']) || isset($data['driver_license'])) {
+            //         \Modules\Gibdd\Entities\Module::findFines();
+            //     };
 
                 
-                if(isset($data['num_post'])) {
-                    $r = \Modules\Gibdd\Entities\Module::findByNum($data['num_post']);
-                }
-            }
+            //     if(isset($data['num_post'])) {
+            //         $r = \Modules\Gibdd\Entities\Module::findByNum($data['num_post']);
+            //     }
+            // }
 
             if(isset($data['tariff'])) {
                 \DB::table('settings')->where('key', 'tariff')->update(['value' => $data['tariff']]);
             }
-            Mail::to($data['email'])->send(new AccountRegistered(
-                account: "https://$domain.compas.pro",
-                email: $data['email'],
-                password: $data['password']
-            ));
+            try {
+                Mail::to($data['email'])->send(new AccountRegistered(
+                    account: "https://$domain.compas.pro",
+                    email: $data['email'],
+                    password: $data['password']
+                ));
+            } catch (\Exception $e) {
+                \Log::warning('Failed to send registration email: ' . $e->getMessage());
+            }
             
             return [
                 'success' => true, 
@@ -512,6 +523,7 @@ class TenantService
 
         foreach ($tenants as $tenant) {
             tenancy()->initialize($tenant); 
+            info('syncentity1');
             if (!Schema::hasTable('car_categories')) {
                 Schema::create('car_categories', function (Blueprint $table) {
                     $table->unsignedInteger('id')->primary();
@@ -523,7 +535,7 @@ class TenantService
                     $table->binary('model_id')->nullable();
                     $table->string('name', 255)->nullable();
                 });
-                
+                info('syncentity2');
                 // Вставка начальных данных
                 \DB::table('car_categories')->insert([
                     ['id' => 1, 'created_at' => '2022-10-27 09:21:00', 'updated_at' => '2022-10-27 09:21:00', 'name' => 'Легковые'],

@@ -290,7 +290,14 @@ class FieldService
                     'label' => $item['label']
                 );
             }
+            if (isset($dto->can_create)) {
+                $details['can_create'] = $dto->can_create ? true : false;
+            }
             $data['details'] = json_encode($details, true);
+        } elseif (isset($dto->can_create)) {
+            $existingDetails = json_decode($field->details, true) ?? [];
+            $existingDetails['can_create'] = $dto->can_create ? true : false;
+            $data['details'] = json_encode($existingDetails, true);
         };
 
         $data['set_color'] = isset($dto->set_color) ? $dto->set_color : $field->set_color;

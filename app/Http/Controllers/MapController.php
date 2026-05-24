@@ -18,6 +18,146 @@ class MapController extends Controller
 
     public function show(Request $request)
     {
+        // \App\Models\SidebarItem::fixTree();
+        // $s = app('settings');
+
+        // if(!$s)
+        //     $s = \App\Models\Settings::update();
+        // $sidebar_items2 = $s['settings']['sidebar_items'];
+        // dd(\App\Models\SidebarItem::defaultOrder()->where('enabled', 1)->get()->toTree()->toArray());
+        // $sidebar_items = [];
+        // foreach($sidebar_items2 as $item) {
+        //     $sidebar_items[$item['id']] = $item;
+        // }
+        // $user_id = 1;
+        // //$item = cache('sidebar-'.$user_id);
+        // $cache_name = tenant('id').':sidebarmenu-'.$user_id;
+        // $item = cache()->getMemcached()->get($cache_name);
+        // // if($this->role)
+        // //     $permissions = $this->role->permissions->keyBy('entity_id');
+        // if(!$item) {
+        //     // $item = cache()->rememberForever('sidebar-'.$user_id, function() use ($user_id)
+        //     // {
+        //         $item = \DB::table('settings')->where([
+        //             'type' => 'sidebar',
+        //             'user_id' => $user_id
+        //         ])->first();
+        //         cache()->getMemcached()->add($cache_name, $item);
+        //         //return $data;
+        //     //});
+        // }
+        // $tariff = \App\Models\Tariff::current();
+        // $blocked_pages = [];
+        // if($tariff->restrictions) {
+        //     $restrictions_tariff = json_decode($tariff->restrictions,true);
+        //     if(isset($restrictions_tariff['blocked_pages'])) {
+        //         $blocked_pages = $restrictions_tariff['blocked_pages'];
+        //     }
+        // }
+        // $sidebar_ids = array();
+
+        // if(!$item) {
+        //     // if($this->role_id) {
+        //     //     $menu = $this->role->sidebar;
+        //     // }
+        //     if(!isset($menu) || !$menu) {
+        //         $all_menu = \DB::table('settings')->where([
+        //             'type' => 'sidebar',
+        //             'user_id' => 1
+        //         ])->first();
+        //         if($all_menu)
+        //             $menu = $all_menu->value;
+        //         else
+        //             $menu = json_encode($sidebar_items, JSON_UNESCAPED_UNICODE);
+        //     }
+            
+        //     \DB::table('settings')->insert([
+        //         'key' => 'sidebar',
+        //         'display_name' => 'Sidemenu',
+        //         'value' => $menu,
+        //         'type' => 'sidebar',
+        //         'user_id' => $this->id
+        //     ]);
+        //     $item = \DB::table('settings')->where([
+        //         'type' => 'sidebar',
+        //         'user_id' => $this->id
+        //     ])->first();
+        //     $menu = json_decode($item->value, true);
+        // } else {
+        //     $need_create = false;
+        //     $menu = json_decode($item->value, true);
+        //     $max_id = 0;
+        //     $ids = array();
+        //     if(is_array($menu))
+        //         foreach($menu as $k => $menu_item) {
+        //             if(isset($menu_item['id']))
+        //                 $ids[] = $menu_item['id'];
+        //         }
+        //     else
+        //         $menu = array();
+        //     foreach($sidebar_items as $sidebar_item) {
+        //         $sidebar_ids[] = $sidebar_item['id'];
+        //         if(!in_array($sidebar_item['id'], $ids)) {
+        //             $need_create = true;
+        //             $menu[] = $sidebar_item;
+        //         }
+        //     }
+        //     if($need_create) {
+        //         \DB::table('settings')->where('id', $item->id)->update(['value' => json_encode($menu)]);
+        //     }
+        // }
+
+        // foreach($menu as $k => $item) {
+            
+        //     if(isset($item['children'])) {
+        //         foreach($item['children'] as $i => $child) {
+        //             if(!in_array($child['id'], $sidebar_ids) || in_array($child['slug'], $blocked_pages)) {
+        //                 unset($menu[$k]['children'][$i]);
+        //             }
+        //             if(isset($sidebar_items[$child['id']]) && $sidebar_items[$child['id']]['enabled'] && isset($item['children'][$i])) {
+        //                 //$menu[$k]['children'][$i]['enabled'] = 1;
+        //             }
+                    
+        //             if(isset($child['slug']) && isset($s['models'][$child['slug']]) && 
+        //                 isset($permissions[$s['models'][$child['slug']]->id]) && 
+        //                 $permissions[$s['models'][$child['slug']]->id]->read_p == 'N'
+        //             ) {
+        //                 unset($menu[$k]['children'][$i]);
+        //             }
+        //             if(isset($child['slug']) && ($child['slug'] == 'settings' || $child['slug'] == 'modules' || $child['slug'] == 'trash' || $child['slug'] == 'roles' || $child['slug'] == 'tariffs') && !$this->isAdmin()) {
+        //                 unset($menu[$k]['children'][$i]);
+        //             }
+        //         }
+        //     }
+        //     if(isset($item['is_group']) && $item['is_group']) {
+        //         $menu[$k]['children'] = array_values($menu[$k]['children']);
+        //         if(!count($menu[$k]['children']))
+        //             unset($menu[$k]);
+        //         continue;
+        //     }
+        //     if(!in_array($item['id'], $sidebar_ids) || in_array($item['slug'], $blocked_pages)) {
+        //         unset($menu[$k]);
+        //     }
+        //     if(isset($sidebar_items[$item['id']]) && $sidebar_items[$item['id']]['enabled'] && isset($menu[$k])) {
+        //         //$menu[$k]['enabled'] = 1;
+        //     }
+            
+        //     if(isset($item['slug']) && isset($s['models'][$item['slug']]) && 
+        //         isset($permissions[$s['models'][$item['slug']]->id]) && 
+        //         $permissions[$s['models'][$item['slug']]->id]->read_p == 'N'
+        //     ) {
+        //         unset($menu[$k]);
+        //     }
+        // }
+        // // if(!$this->isAdmin())
+        // //     foreach($menu as $k => $item) {
+        // //         if(isset($item['slug']) && ($item['slug'] == 'settings' || $item['slug'] == 'modules' || $item['slug'] == 'trash' || $item['slug'] == 'roles' || $item['slug'] == 'tariffs')) {
+        // //             unset($menu[$k]);
+        // //         }
+        // //     }
+
+        // return array_values($menu);
+
         $radius = 500;
         $date = $request->date;
         try {
@@ -73,6 +213,7 @@ class MapController extends Controller
                 ];
             });
             $allTasksForRoute = $tasksForJs;
+            //dd($allTasksForRoute);
             $analysisService = new RouteAnalysisService($allTasksForRoute->toArray(), $radius);
             $analysisResult = $analysisService->analyze($route->employee_id, Carbon::parse($validatedDate)->format('d.m.Y'));
 

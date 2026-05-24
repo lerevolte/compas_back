@@ -91,7 +91,7 @@ class Menu
             \DB::table('settings')->where('id', $item->id)->update(['value' => json_encode($menu)]);
         }
         foreach($menu as $k => $menu_item) {
-
+            info($item->id);
             if(isset($menu_item['slug']) && isset($s['models'][$menu_item['slug']]) && 
                 isset($permissions[$s['models'][$menu_item['slug']]->id]) && 
                 $permissions[$s['models'][$menu_item['slug']]->id]->read_p == 'N' && !$user->is_admin ||
@@ -108,7 +108,9 @@ class Menu
             }
         }
         foreach($menu as $k => $menu_item) {
-            if(isset($menu_item['tab']) && $menu_item['tab'] == 'modules') {
+            if(isset($menu_item['tab']) && $menu_item['tab'] == 'modules' && !count($menu_item['childs'])) {
+                unset($menu[$k]);
+            } elseif(isset($menu_item['tab']) && $menu_item['tab'] == 'modules') {
                 $menu[$k]['childs'] = array_values($menu_item['childs']);
             }
         }

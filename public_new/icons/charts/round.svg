@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="20px" height="20px" viewBox="0 0 20 20" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>Group 21</title>
+    <g id="--Страница-аналитики" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Аналитика-4-Copy-2" transform="translate(-1129, -179)">
+            <g id="Group" transform="translate(254, 81)">
+                <g id="Group-17-Copy-6" transform="translate(865, 0)">
+                    <g id="Group-26" transform="translate(0, 57)">
+                        <g id="Group-12-Copy" transform="translate(0, 34)">
+                            <g id="Group-21" transform="translate(10, 7)">
+                                <rect id="Rectangle-Copy-8" x="0" y="0" width="20" height="20" rx="3"></rect>
+                                <g id="pie" transform="translate(1, 1)" fill-rule="nonzero">
+                                    <path d="M9,12.8597143 C6.86863267,12.8590047 5.14099534,11.1313673 5.14028571,9 C5.14028571,7.89557143 5.61085714,6.90428571 6.35528571,6.201 L4.22357143,1.38214286 C1.59665384,3.02357635 0.00053526651,5.90242036 0,9 C0,13.9692857 4.03071429,18 9,18 C11.8072388,17.9997556 14.4527281,16.6862875 16.1498571,14.4501429 L11.5392857,11.8851429 C10.8405904,12.5097163 9.93715336,12.8564531 9,12.8597143 Z" id="Shape" fill="#089A1E"></path>
+                                    <path d="M9,0 C8.15657143,0 7.34528571,0.124714286 6.57257143,0.340714286 L8.70942857,5.16985714 L9,5.14028571 C11.1313673,5.14099534 12.8590047,6.86863267 12.8597143,9 C12.8597143,9.21985714 12.8301429,9.432 12.7941429,9.64157143 L17.3995714,12.2052857 C17.7946289,11.1827317 17.9981604,10.0962134 18,9 C18,4.03071429 13.9692857,0 9,0 Z" id="Path" fill="#FD8200"></path>
+                                </g>
+                            </g>
+                        </g>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

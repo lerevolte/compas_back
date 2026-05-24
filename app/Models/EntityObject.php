@@ -78,6 +78,9 @@ class EntityObject
             if ($isAuthenticated) {
                 $current->user_id = $user->id;
             }
+            if (!$id && $request->route_id && $slug == 'logistic_tasks') {
+                $current->route_id = $request->route_id;
+            }
 
             // Специфичная логика для osago_polises
             if ($slug == 'osago_polises') {
@@ -175,6 +178,7 @@ class EntityObject
 
                 if ($field->type == 'relation' && $field->is_plural && $field->relation_table) {
                     $relation_table = $field->relation_table;
+                    info($relation_table);
                     $field_value = $current->{$relation_table}->pluck('id')->toArray();
                 }
 
@@ -182,11 +186,15 @@ class EntityObject
                 $fields_data[$field->field]['can_read'] = $settings[$slug]['perms'][$field->field]['read'] || $isAdmin ? 1 : 0;
                 $fields_data[$field->field]['can_edit'] = isset($data['deleted_at']) || $field->only_read || 
                     !$settings[$slug]['perms'][$field->field]['write'] && !$isAdmin ? 0 : 1;
-
+                if ($slug == 'logistic_tasks' && $field->field == 'delivery_date' && $current->route_id) {
+                    $fields_data[$field->field]['can_edit'] = 0;
+                }
                 // Обработка значений полей
                 if ($request->is_copy) {
                     if ($field->field == 'created_at') {
                         $field_value = \Carbon\Carbon::now();
+                    } elseif ($field->field == 'name') {
+                        $field_value = null;
                     } elseif ($field->field == 'id' || $field->field == 'updated_at') {
                         $field_value = null;
                     } elseif ($field->field == 'user_id' && $isAuthenticated) {
@@ -431,7 +439,7 @@ class EntityObject
                             !$isAdmin) {
                             continue;
                         }
-                        if (isset($fields_data[$field->field])) {
+                        if (isset($fields_data[$field->field]) && $field->data_type_id == $entity->id) {
                             $section_data['fields'][$field->id] = $fields_data[$field->field];
                         }
                     }
@@ -481,7 +489,7 @@ class EntityObject
                 $data['hidden_fields'][] = $fields_data[$field->field];
             }
         }
-        //info($data);
+
         return $data;
     }
 
@@ -592,6 +600,9 @@ class EntityObject
                 $fields_data[$field->field]['can_read'] = $settings[$slug]['perms'][$field->field]['read'] || \Auth::user()->is_admin ? 1 : 0;
                 $fields_data[$field->field]['can_edit'] = isset($data['deleted_at']) || $field->only_read || !$settings[$slug]['perms'][$field->field]['write'] && !\Auth::user()->is_admin ? 0 : 1;
                 if(!$id && $permissions['create_p'] == 'Y' && $field->field == 'user_id' && !\Auth::user()->is_admin) {
+                    $fields_data[$field->field]['can_edit'] = 0;
+                }
+                if ($slug == 'logistic_tasks' && $field->field == 'delivery_date' && $current->route_id) {
                     $fields_data[$field->field]['can_edit'] = 0;
                 }
                 if($id && $permissions['update_p'] == 'Y' && $current->user_id != \Auth::user()->id && !\Auth::user()->is_admin && $slug != 'users' && \Auth::user()->id != $id || 
@@ -866,8 +877,10 @@ class EntityObject
             $module_fields = $section->module_fields();
             if($module_fields && count($module_fields)) {
                 foreach($module_fields as $k => $field) {
-                    if(isset($settings[$slug]['perms'][$field->field]) && $settings[$slug]['perms'][$field->field]['read'] == 'disabled' && !\Auth::user()->isAdmin() && isset($fields_data[$field->field]))
+                    if(isset($settings[$slug]['perms'][$field->field]) && $settings[$slug]['perms'][$field->field]['read'] == 'disabled' && !\Auth::user()->isAdmin() && isset($fields_data[$field->field]) || !isset($fields_data[$field->field]))
                         continue;
+
+
                     $fields[$field->id] = $fields_data[$field->field];
                 }
             }
@@ -1062,17 +1075,17 @@ class EntityObject
                     $sorted_values = implode(',', $sorted_ids);
                     $paginator = $entity_class::orderByRaw("FIELD(id, $sorted_values)");
                 // } else {
-                //     $sorted_ids = $entity_class::select('id', $sort_field)->get()->sortBy($sort_field, SORT_NATURAL, true)->pluck('id')->toArray();
-                //     $sorted_values = implode(',', $sorted_ids);
-                //     $paginator = $entity_class::orderByRaw("FIELD(id, $sorted_values)");
+                //      $sorted_ids = $entity_class::select('id', $sort_field)->get()->sortBy($sort_field, SORT_NATURAL, true)->pluck('id')->toArray();
+                //      $sorted_values = implode(',', $sorted_ids);
+                //      $paginator = $entity_class::orderByRaw("FIELD(id, $sorted_values)");
                 // }
                 break;
             } elseif($field->field == $sort_field) {
                 // if($sort_order == 'asc') {
-                //     $sorted_ids = $entity_class::select('id', $sort_field)->get()->sortBy($sort_field, SORT_NATURAL)->pluck('id')->toArray();
-                //     $sorted_values = implode(',', $sorted_ids);
-                //     $paginator = $entity_class::orderByRaw("FIELD(id, $sorted_values) ASC");
-                //     //$paginator = $entity_class::orderByRaw("$sort_field REGEXP '^-?[0-9\.]+$' AND LENGTH($sort_field) - LENGTH(REPLACE($sort_field, '.', '')) < 2 DESC, CAST($sort_field AS UNSIGNED), $sort_field");
+                //      $sorted_ids = $entity_class::select('id', $sort_field)->get()->sortBy($sort_field, SORT_NATURAL)->pluck('id')->toArray();
+                //      $sorted_values = implode(',', $sorted_ids);
+                //      $paginator = $entity_class::orderByRaw("FIELD(id, $sorted_values) ASC");
+                //      //$paginator = $entity_class::orderByRaw("$sort_field REGEXP '^-?[0-9\.]+$' AND LENGTH($sort_field) - LENGTH(REPLACE($sort_field, '.', '')) < 2 DESC, CAST($sort_field AS UNSIGNED), $sort_field");
                 // }
                 // else {
                 $arr = ['id', $sort_field];
@@ -1117,6 +1130,7 @@ class EntityObject
             $paginator = $entity_class::orderBy('id', 'desc');
             $sort_field = 'id';
         }
+
         
         $tabs = array();
         if($request->trashed) {
@@ -1127,6 +1141,14 @@ class EntityObject
         }   
         if($request->filter && is_array($request->filter)){
 
+            if ($slug == 'logistic_tasks' && isset($request->filter['route_id'])) {
+                $routeId = $request->filter['route_id'];
+                if ($routeId == 'null' || $routeId === null) {
+                    $paginator = $paginator->whereNull('route_id');
+                } else {
+                    $paginator = $paginator->where('route_id', $routeId);
+                }
+            }
             foreach($request->filter as $field => $val) {
                 if($val == 'null')
                     $val = null;
@@ -1137,7 +1159,7 @@ class EntityObject
                     $paginator = $paginator->whereDate($field, $val);
                 } else*/
                 if($settings[$slug]['fields'][$field]->type == 'date') {
-                    if(strstr($val, ','))
+                    if(!is_array($val) && strstr($val, ','))
                         $val = explode(',', $val);
                     if(is_array($val) && $val[0] && $val[1]) {
                         if($val[0] != $val[1])
@@ -1152,6 +1174,36 @@ class EntityObject
                         $paginator = $paginator->whereDate($field, date('Y-m-d', strtotime($val)));
                         //$paginator = $paginator->whereDate($field, date('Y-m-d', strtotime($val)));
                     }
+                } elseif($settings[$slug]['fields'][$field]->type == 'number' && $settings[$slug]['fields'][$field]->field != 'id') {
+                    if(!is_array($val) && strstr($val, ','))
+                        $val = explode(',', $val);
+
+                    if(is_array($val)) {
+                        $min = isset($val[0]) && $val[0] !== '' && $val[0] !== 'null' ? $val[0] : null;
+                        $max = isset($val[1]) && $val[1] !== '' && $val[1] !== 'null' ? $val[1] : null;
+
+                        if($min !== null && $max !== null) {
+                            $paginator = $paginator->where(function($q) use ($field, $min, $max) {
+                                $q->whereBetween(\DB::raw("CAST($field AS DECIMAL(10,2))"), [$min, $max])
+                                  ->orWhereNull($field)
+                                  ->orWhere($field, '');
+                            });
+                        } elseif($min !== null) {
+                            $paginator = $paginator->where(function($q) use ($field, $min) {
+                                $q->where(\DB::raw("CAST($field AS DECIMAL(10,2))"), '>=', $min)
+                                  ->orWhereNull($field)
+                                  ->orWhere($field, '');
+                            });
+                        } elseif($max !== null) {
+                            $paginator = $paginator->where(function($q) use ($field, $max) {
+                                $q->where(\DB::raw("CAST($field AS DECIMAL(10,2))"), '<=', $max)
+                                  ->orWhereNull($field)
+                                  ->orWhere($field, '');
+                            });
+                        }
+                    } else {
+                        $paginator = $paginator->where($field, $val);
+                    }
                 } else {
                     if(isset($settings[$slug]['fields'][$field]) && $settings[$slug]['fields'][$field]->is_plural) {
                         if($settings[$slug]['fields'][$field]->type == 'relation' && $settings[$slug]['fields'][$field]->relation_table) {
@@ -1164,7 +1216,18 @@ class EntityObject
                             $paginator = $paginator->whereJsonContains($field, (int)$val);
                         } else {
                             //->whereRaw("json_contains(`client_id`, ?)", [15])->whereRaw('json_contains(`tip_tk`, \'"'.$str.'"\')')
-                            $paginator = $paginator->whereRaw('json_contains('.$field.', \''.$val.'\')');
+                            
+                            // Изменено на логику AND: запись должна содержать ВСЕ значения из переданного массива
+                            if(is_array($val)) {
+                                foreach($val as $v) {
+                                    if($v !== null && $v !== 'null') {
+                                        // Применяем whereRaw последовательно, что создает условия AND
+                                        $paginator = $paginator->whereRaw('json_contains('.$field.', \''.$v.'\')');
+                                    }
+                                }
+                            } else {
+                                $paginator = $paginator->whereRaw('json_contains('.$field.', \''.$val.'\')');
+                            }
                             //$paginator = $paginator->whereRaw('json_contains('.$field.', \'"'.$val.'"\')');
                         }
                     } else {
@@ -1185,9 +1248,9 @@ class EntityObject
                                 $paginator = $paginator->whereIntegerInRaw($field, $val);
                             else {
                                 // $paginator = $paginator->where(function ($query) use ($search_columns, $q) {
-                                //     foreach ($search_columns as $column) {
-                                //         $query->orWhere($column, 'like', "%{$q}%");
-                                //     }
+                                //      foreach ($search_columns as $column) {
+                                //          $query->orWhere($column, 'like', "%{$q}%");
+                                //      }
                                 // });
                                 
                                 if($settings[$slug]['fields'][$field]->type == 'address')
@@ -1212,6 +1275,95 @@ class EntityObject
                     
                 }
             }
+        }
+
+        // Filter logistic_tasks by route requirements
+        if ($slug == 'logistic_tasks' && $request->filter) {
+            $filter = $request->filter;
+            
+            // car_requirements: task's requirements must ALL be met by route's car
+            if (isset($filter['car_requirements']) && is_array($filter['car_requirements'])) {
+                $reqs = array_filter($filter['car_requirements']);
+                if (!empty($reqs)) {
+                    $paginator = $paginator->where(function($q) use ($reqs) {
+                        // Tasks with no requirements always show
+                        $q->where(function($q2) {
+                            $q2->whereNull('car_requirements')
+                               ->orWhere('car_requirements', '[]')
+                               ->orWhere('car_requirements', '');
+                        })->orWhere(function($q2) use ($reqs) {
+                            // Task's EVERY requirement must be in route's capabilities
+                            foreach ($reqs as $req) {
+                                $q2->whereJsonContains('car_requirements', (int)$req);
+                            }
+                        });
+                    });
+                }
+            }
+
+            // employee_requirements: same logic
+            if (isset($filter['employee_requirements']) && is_array($filter['employee_requirements'])) {
+                $reqs = array_filter($filter['employee_requirements']);
+                if (!empty($reqs)) {
+                    $paginator = $paginator->where(function($q) use ($reqs) {
+                        $q->where(function($q2) {
+                            $q2->whereNull('employee_requirements')
+                               ->orWhere('employee_requirements', '[]')
+                               ->orWhere('employee_requirements', '');
+                        })->orWhere(function($q2) use ($reqs) {
+                            foreach ($reqs as $req) {
+                                $q2->whereJsonContains('employee_requirements', (int)$req);
+                            }
+                        });
+                    });
+                }
+            }
+
+
+            // // Weight filter
+            // if (isset($filter['weight']) && is_array($filter['weight'])) {
+            //     $wMin = $filter['weight'][0] ?? null;
+            //     $wMax = $filter['weight'][1] ?? null;
+            //     if ($wMin !== null || $wMax !== null) {
+            //         $paginator = $paginator->get()->filter(function($task) use ($wMin, $wMax) {
+            //             $products = json_decode($task->products, true);
+            //             $totalWeight = 0;
+            //             if (is_array($products)) {
+            //                 foreach ($products as $p) {
+            //                     $totalWeight += ($p['weight'] ?? 0) * ($p['count'] ?? 1);
+            //                 }
+            //             }
+            //             if ($wMin !== null && $totalWeight < (float)$wMin) return false;
+            //             if ($wMax !== null && $totalWeight > (float)$wMax) return false;
+            //             return true;
+            //         });
+            //         // Re-paginate after filtering
+            //         $total = $paginator->count();
+            //         $paginator = $paginator->forPage($request->page ?? 1, $request->per_page ?? 25);
+            //     }
+            // }
+            
+            // // Volume filter (same logic if tasks have volume in products)
+            // if (isset($filter['volume']) && is_array($filter['volume'])) {
+            //     $vMin = $filter['volume'][0] ?? null;
+            //     $vMax = $filter['volume'][1] ?? null;
+            //     if ($vMin !== null || $vMax !== null) {
+            //         $paginator = $paginator->get()->filter(function($task) use ($vMin, $vMax) {
+            //             $products = json_decode($task->products, true);
+            //             $totalVolume = 0;
+            //             if (is_array($products)) {
+            //                 foreach ($products as $p) {
+            //                     $totalVolume += ($p['volume'] ?? 0) * ($p['count'] ?? 1);
+            //                 }
+            //             }
+            //             if ($vMin !== null && $totalVolume < (float)$vMin) return false;
+            //             if ($vMax !== null && $totalVolume > (float)$vMax) return false;
+            //             return true;
+            //         });
+            //         $total = $paginator->count();
+            //         $paginator = $paginator->forPage($request->page ?? 1, $request->per_page ?? 25);
+            //     }
+            // }
         }
 
         if($request->order_id && $slug == 'products') {
@@ -1243,7 +1395,20 @@ class EntityObject
                     }
                     $paginator = $paginator->whereIntegerInRaw('id', $product_ids);
                 } else {
-                    return [];
+                    return [
+                        'count' => 0,
+                        'current_page' => 1,
+                        'last_page' => 1,
+                        'per_page' => 25,
+                        'total' => 0,
+                        'from' => 0,
+                        'to' => 0,
+                        'data' => [],
+                        'buttons' => $settings[$slug]['buttons'],
+                        'sort_field' => $sort_field,
+                        'sort_order' => $sort_order
+                    ];
+                    //return [];
                 }
             }
         };
@@ -1293,6 +1458,10 @@ class EntityObject
             
             
         };
+
+        if ($slug == 'logistic_tasks' && $request->filter && isset($request->filter['route_id']) && $request->filter['route_id'] != 'null') {
+            $paginator = $paginator->reorder('sort', 'asc');
+        }
         
         $paginator = $paginator->paginate(function($total) use ($limit){
             if(!$limit){
@@ -1328,7 +1497,6 @@ class EntityObject
                     }
                     if($field->type == 'relation' && $field->is_plural && $field->relation_table) {
                         $relation_table = $field->relation_table;
-                        info($relation_table);
                         $field_value = $item->{$relation_table}->pluck('id')->toArray();
                     }
                     $data[$field->field] = $field_value;
@@ -1373,6 +1541,9 @@ class EntityObject
                             'localOptions' => null
                         );
                     }
+                    if($field->type == 'file' && $field->is_link) {
+                        $data[$field->field] = null;
+                    }
                     if($field->type == 'file' && $field->is_link && $item->{$field->field}) {
                         $file = json_decode($item->{$field->field}, true);
                         $data[$field->field] = array(
@@ -1400,12 +1571,28 @@ class EntityObject
             
         }
 
+
         if(isset($order) && $order && $slug == 'products') {
             $products_objects = array();
             $products = json_decode($order->products, true);
             $list_values = array();
             if(isset($settings['list_values'][$field->id]))
                 $list_values = $settings['list_values'][$field->id];
+            if(!is_array($products) || !count($products)) {
+                return [
+                    'count' => 0,
+                    'current_page' => 1,
+                    'last_page' => 1,
+                    'per_page' => 25,
+                    'total' => 0,
+                    'from' => 0,
+                    'to' => 0,
+                    'data' => [],
+                    'buttons' => $settings[$slug]['buttons'],
+                    'sort_field' => $sort_field,
+                    'sort_order' => $sort_order
+                ];
+            }
             
             if(is_array($products)) {
                 foreach($products as $num => $product) {
@@ -1458,9 +1645,9 @@ class EntityObject
             }
         };
         // if($sort_order == 'asc' && $sort_field)
-        //     array_sort_by_column($objects, $sort_field, SORT_ASC, SORT_NATURAL);
+        //      array_sort_by_column($objects, $sort_field, SORT_ASC, SORT_NATURAL);
         // elseif($sort_field)
-        //     array_sort_by_column($objects, $sort_field, SORT_DESC, SORT_NATURAL);
+        //      array_sort_by_column($objects, $sort_field, SORT_DESC, SORT_NATURAL);
         $fields_data[$field->field]['guide'] = null;
         if(is_array($guides) && isset($guides['fields'][$slug][$field->field]) && $show_hints)
                     $fields_data[$field->field]['guide'] = $guides['fields'][$slug][$field->field];
@@ -1570,7 +1757,6 @@ class EntityObject
             $fields['password'] = Hash::make($fields['password']);
         }
         unset($fields['id']);
-        //info($fields);
 
         foreach($fields as $field => $value) {
             if (is_numeric($field)) 
@@ -1610,7 +1796,6 @@ class EntityObject
                 // foreach($only_new_values as $sort => $v) {
                 //     \DB::table($relation_table)->where('id', $v)->update([$model_fields[$field]->related_field => $object->id, 'choosed_at' => now()->addSeconds($sort)]);
                 // }
-                info('field1 '.$relation_table);
                 $object->load($relation_table);
                 
                 
@@ -1620,7 +1805,6 @@ class EntityObject
                 $entity_relation = $settings['models'][$relation_table];
                 $entity_relation_class = $entity_relation->model_name;
                 if($object->{$model_fields[$field]->field}) {
-                    info('field2 '.$model_fields[$field]->field);
                     $old_el_relations = $entity_relation_class::where('id', $object->{$model_fields[$field]->field})->first()->{$slug}()->pluck('id')->toArray();
 
                     if(in_array($object->id, $old_el_relations)) {

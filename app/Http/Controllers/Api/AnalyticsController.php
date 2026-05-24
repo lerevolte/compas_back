@@ -106,17 +106,156 @@ class AnalyticsController extends Controller
         return response()->json($data);
     }
 
+    public function logisticsDaySummary(Request $request)
+    {
+        $date = $request->input('date', now()->format('Y-m-d'));
+        
+        $routes = \DB::table('routes')
+            ->where('date', $date)
+            ->get();
+        
+        if ($routes->isEmpty()) {
+            return response()->json([
+                'total' => $this->emptyStats(),
+                'carriers' => []
+            ]);
+        }
+        
+        $routeIds = $routes->pluck('id');
+        
+        // Task statistics
+        $tasks = \DB::table('logistic_tasks')
+            ->whereIn('route_id', $routeIds)
+            ->get();
+        
+        // Замените блок с $statusField на:
+        $settings = get_settings();
+
+        $statusLabels = [];
+        if (isset($settings['logistic_tasks']['fields']['point_status'])) {
+            $fieldId = $settings['logistic_tasks']['fields']['point_status']->id;
+            if (isset($settings['list_values'][$fieldId])) {
+                foreach ($settings['list_values'][$fieldId] as $fv) {
+                    $statusLabels[$fv['value']] = [
+                        'name' => $fv['label']['text'] ?? "Статус {$fv['value']}",
+                        'color' => $fv['label']['color'] ?? '#ccc'
+                    ];
+                }
+            }
+        }
+        
+        // Build total stats
+        $total = $this->buildStats($routes, $tasks, $statusLabels);
+        
+        // Carriers: group by company_id from routes table
+        $companyIds = $routes->pluck('company_id')->filter()->unique();
+        $companies = \DB::table('companies')
+            ->whereIn('id', $companyIds)
+            ->get()
+            ->keyBy('id');
+        
+        $carrierGroups = [];
+        foreach ($routes as $route) {
+            $companyId = $route->company_id ?? 0;
+            $companyName = 'Без перевозчика';
+            if (isset($companies[$companyId])) {
+                $rawName = $companies[$companyId]->name;
+                if (is_string($rawName) && str_starts_with(trim($rawName), '{')) {
+                    $decoded = json_decode($rawName, true);
+                    $companyName = $decoded['value'] ?? $rawName;
+                } else {
+                    $companyName = $rawName;
+                }
+            }
+            
+            if (!isset($carrierGroups[$companyId])) {
+                $carrierGroups[$companyId] = [
+                    'id' => $companyId,
+                    'name' => $companyName,
+                    'route_ids' => []
+                ];
+            }
+            $carrierGroups[$companyId]['route_ids'][] = $route->id;
+        }
+        
+        $carriers = [];
+        foreach ($carrierGroups as $group) {
+            $carrierRoutes = $routes->whereIn('id', $group['route_ids']);
+            $carrierTasks = $tasks->whereIn('route_id', $group['route_ids']);
+            $carriers[] = array_merge(
+                ['id' => $group['id'], 'name' => $group['name']],
+                $this->buildStats($carrierRoutes, $carrierTasks, $statusLabels)
+            );
+        }
+        
+        return response()->json([
+            'total' => $total,
+            'carriers' => array_values($carriers)
+        ]);
+    }
+
+    protected function buildStats($routes, $tasks, $statusLabels)
+    {
+        $validStatusIds = array_keys($statusLabels);
+        $defaultStatus = !empty($validStatusIds) ? $validStatusIds[0] : null;
+        
+        // Group tasks by status, fixing null/deleted statuses
+        $tasksByStatus = $tasks->groupBy(function($task) use ($validStatusIds, $defaultStatus) {
+            $status = (int) $task->point_status;
+            if (!$status || !in_array($status, $validStatusIds)) {
+                return $defaultStatus ?? 0;
+            }
+            return $status;
+        });
+        
+        $orderStats = [];
+        foreach ($tasksByStatus as $status => $items) {
+            $orderStats[] = [
+                'status_id' => $status,
+                'name' => $statusLabels[$status]['name'] ?? "Статус $status",
+                'color' => $statusLabels[$status]['color'] ?? '#ccc',
+                'count' => $items->count()
+            ];
+        }
+        
+        $totalReserve = $routes->sum('reserve_for_delivery');
+        $totalDeliveryPrice = $routes->sum('delivery_price');
+        
+        return [
+            'order_stats' => $orderStats,
+            'total_orders' => $tasks->count(),
+            'car_count' => $routes->count(),
+            'mileage' => $routes->sum('mileage'),
+            'duration' => $routes->sum('time'),
+            'reserve_for_delivery' => $routes->sum('reserve_for_delivery'),
+            'delivery_price' => $routes->sum('delivery_price'),
+            'total_weight' => $routes->sum('weight'),
+            'arrival_percent' => $totalReserve > 0 
+                ? round(($totalDeliveryPrice - $totalReserve) / $totalReserve * 100, 1) 
+                : 0,
+        ];
+    }
+
+    protected function emptyStats()
+    {
+        return [
+            'order_stats' => [],
+            'total_orders' => 0,
+            'car_count' => 0,
+            'mileage' => 0,
+            'duration' => 0,
+            'reserve_for_delivery' => 0,
+            'delivery_price' => 0,
+            'total_weight' => 0,
+            'arrival_percent' => 0,
+        ];
+    }
+
     public function get_all_analytics(AnalyticsRequest $request)
 	{
 	    $data = $this->analyticsService->getAllAnalyticsData($request);
 	    
-	    return response()->json([
-	        'success' => true,
-	        'data' => $data,
-	        // 'modules' => [
-	        //     'gibdd' => $analyticsService->isModuleEnabled('gibdd')
-	        // ]
-	    ]);
+	    return response()->json($data);
 	}
 
     public function settings(Request $request)

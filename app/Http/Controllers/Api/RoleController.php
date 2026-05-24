@@ -94,8 +94,26 @@ class RoleController extends Controller
         $table = \App\Models\Table::roles();
         $roles = Role::list();
 
+        $res_perms = array(
+            'count' => count($permissions),
+            'current_page' => 1,
+            'last_page' => 1,
+            'per_page' => 100,
+            'total' => count($permissions),
+            'from' => 0,
+            'to' => 100,
+            'data' => array_values($permissions),
+            'buttons' => [],
+            'sort_field' => 'id',
+            'sort_order' => 'asc',
+            'restrictions' => [],
+            'empty_text' => 'Нет данных',
+            'category_slug' => null,
+            'guide' => null
+        );
+
         $data = array(
-            'list' => array_values($permissions),
+            'list' => $res_perms,
             'table' => $table,
             'roles' => $roles
         );
@@ -167,24 +185,24 @@ class RoleController extends Controller
         }
         \App\Models\Settings::clear_cache();
 
-        $permissions = array();
+        // $permissions = array();
 
-        $data_types = \DB::table('data_types')->where('enable', 1)->get()->keyBy('id')->toArray();
-        $res = Permission::whereNotNull('entity_id')->where('role_id', $id)->get()->keyBy('entity_id')->toArray();
-        foreach($res as $entity => $entity_permission) {
-            if(isset($data_types[$entity]))
-                $permissions[] = array(
-                    'id' => $entity_permission['id'],
-                    'entity_id' => $entity_permission['entity_id'],
-                    'name' => $data_types[$entity_permission['entity_id']]->title_plural,
-                    'read_p' => $entity_permission['read_p'],
-                    'create_p' => $entity_permission['create_p'],
-                    'update_p' => $entity_permission['update_p'],
-                    'delete_p' => $entity_permission['delete_p'],
-                    'export_p' => $entity_permission['export_p'],
-                    'import_p' => $entity_permission['import_p'],
-                );
-        }
+        // $data_types = \DB::table('data_types')->where('enable', 1)->get()->keyBy('id')->toArray();
+        // $res = Permission::whereNotNull('entity_id')->where('role_id', $id)->get()->keyBy('entity_id')->toArray();
+        // foreach($res as $entity => $entity_permission) {
+        //     if(isset($data_types[$entity]))
+        //         $permissions[] = array(
+        //             'id' => $entity_permission['id'],
+        //             'entity_id' => $entity_permission['entity_id'],
+        //             'name' => $data_types[$entity_permission['entity_id']]->title_plural,
+        //             'read_p' => $entity_permission['read_p'],
+        //             'create_p' => $entity_permission['create_p'],
+        //             'update_p' => $entity_permission['update_p'],
+        //             'delete_p' => $entity_permission['delete_p'],
+        //             'export_p' => $entity_permission['export_p'],
+        //             'import_p' => $entity_permission['import_p'],
+        //         );
+        // }
 
         $now = Carbon::now();
         if(\DB::table('local_cache')->where(['url' => 'roles', 'user_id' => \Auth::user()->id])->exists())
@@ -192,7 +210,9 @@ class RoleController extends Controller
         else
             \DB::table('local_cache')->insert(['url' => 'roles', 'user_id' => \Auth::user()->id, 'created_at' => $now, 'updated_at' => $now]);
 
-        return response()->json($permissions);
+        $res = $role->format();
+
+        return response()->json($res);
     }
 
     public function store(Request $request)
@@ -209,22 +229,24 @@ class RoleController extends Controller
             \DB::table('permissions')->insert([['entity_id' => $entity_id, 'role_id' => $role->id]]);
         }
 
-        $res = Permission::whereNotNull('entity_id')->where('role_id', $role->id)->get()->keyBy('entity_id')->toArray();
-        foreach($res as $entity => $entity_permission) {
-            $permissions[] = array(
-                'id' => $entity_permission['id'],
-                'entity_id' => $entity_permission['entity_id'],
-                'name' => $data_types[$entity_permission['entity_id']]->title_plural,
-                'read_p' => $entity_permission['read_p'],
-                'create_p' => $entity_permission['read_p'],
-                'update_p' => $entity_permission['update_p'],
-                'delete_p' => $entity_permission['delete_p'],
-                'export_p' => $entity_permission['export_p'],
-                'import_p' => $entity_permission['import_p'],
-            );
-        }
+        // $res = Permission::whereNotNull('entity_id')->where('role_id', $role->id)->get()->keyBy('entity_id')->toArray();
+        // foreach($res as $entity => $entity_permission) {
+        //     $permissions[] = array(
+        //         'id' => $entity_permission['id'],
+        //         'entity_id' => $entity_permission['entity_id'],
+        //         'name' => $data_types[$entity_permission['entity_id']]->title_plural,
+        //         'read_p' => $entity_permission['read_p'],
+        //         'create_p' => $entity_permission['read_p'],
+        //         'update_p' => $entity_permission['update_p'],
+        //         'delete_p' => $entity_permission['delete_p'],
+        //         'export_p' => $entity_permission['export_p'],
+        //         'import_p' => $entity_permission['import_p'],
+        //     );
+        // }
 
-        return response()->json($permissions);
+        $res = $role->format();
+
+        return response()->json($res);
     }
 
     public function destroy($id)

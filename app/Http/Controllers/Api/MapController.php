@@ -32,22 +32,10 @@ class MapController extends Controller
             $fields = array_merge($fields, $countries);
         }
         $result = $dadata->suggest("address", $fields);
-        //$result = $dadata->clean("address", "москва сухонская 11 89");
-        // echo '<pre>';
-        // print_r($result);
-        // echo '</pre>';
+
         $dadata->close();
 
-        // $settings = \DB::table('settings')->where('key', 'yandex_key')->first();
-        // //$ch = curl_init('https://geocode-maps.yandex.ru/1.x/?apikey='.$settings->value.'&format=json&geocode=' . urlencode($request->address));
-        // $ch = curl_init('https://suggest-maps.yandex.ru/suggest-geo?callback=&apikey='.$settings->value.'&v=5&search_type=tp&part='.urlencode($request->address).'&lang=ru_RU&n=6&origin=jsapi2Geocoder&bbox=-180%2C-90%2C180%2C90');
-        // curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        // curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        // curl_setopt($ch, CURLOPT_HEADER, false);
-        // $res = curl_exec($ch);
-        // curl_close($ch);
-         
-        //$res = json_decode($res, true);
+
         $data = array();
         if(isset($result['suggestions'])) {
             foreach($result['suggestions'] as $item) {
@@ -70,49 +58,47 @@ class MapController extends Controller
     {
         $dadata = new \App\Services\Dadata('1aae835b4ef406e670f2fed34e0e1f44a7a2fc46', '12b85f4474f0fab219a2307f13a33c05f8418355');
         $dadata->init();
-
-        $fields = array("query" => $request->address, "count" => 5);
-        $result = $dadata->suggest("address", $fields);
-        $dadata->close();
-
-
-        // $settings = \DB::table('settings')->where('key', 'yandex_key')->first();
-        // //$ch = curl_init('https://geocode-maps.yandex.ru/1.x/?apikey='.$settings->value.'&format=json&geocode=' . urlencode($request->address));
-        // $ch = curl_init('https://geocode-maps.yandex.ru/1.x/?results=1&strictBounds=true&apikey='.$settings->value.'&format=json&geocode=' . urlencode($request->address));
-        // curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        // curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        // curl_setopt($ch, CURLOPT_HEADER, false);
-        // $res = curl_exec($ch);
-        // curl_close($ch);
-         
-        // $res = json_decode($res, true);
-        // $data = array();
-        // if(isset($res['response']['GeoObjectCollection']['featureMember'])) {
-
-        //     $data = array();
-        //     foreach($res['response']['GeoObjectCollection']['featureMember'] as $location) {
-        //         $coordinates = $location['GeoObject']['Point']['pos'];
-        //         $coordinates = explode(' ', $coordinates);
-        //         $data[] = array(
-        //             'text' => $location['GeoObject']['metaDataProperty']['GeocoderMetaData']['text'],
-        //             'coords' => $coordinates
-        //         );
-        //     }
-        // }
-
+        
+        $address = $request->address;
         $data = array();
-        if(isset($result['suggestions'])) {
-            foreach($result['suggestions'] as $item) {
-                $data[] = array(
-                    'text' => $item['value'],
-                    'coords' => array(
-                        $item['data']['geo_lat'],
-                        $item['data']['geo_lon']
-                    )
-                );
+        
+        // Check if input looks like coordinates
+        $coordPattern = '/^[\s]*(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)[\s]*$/';
+        if (preg_match($coordPattern, $address, $matches)) {
+            $lat = floatval($matches[1]);
+            $lon = floatval($matches[2]);
+            
+            $result = $dadata->geolocate($lat, $lon, 5);
+            
+            if (isset($result['suggestions'])) {
+                foreach ($result['suggestions'] as $item) {
+                    $data[] = array(
+                        'text' => $item['value'],
+                        'coords' => array(
+                            $item['data']['geo_lat'],
+                            $item['data']['geo_lon']
+                        )
+                    );
+                }
+            }
+        } else {
+            $fields = array("query" => $address, "count" => 5);
+            $result = $dadata->suggest("address", $fields);
+            
+            if (isset($result['suggestions'])) {
+                foreach ($result['suggestions'] as $item) {
+                    $data[] = array(
+                        'text' => $item['value'],
+                        'coords' => array(
+                            $item['data']['geo_lat'],
+                            $item['data']['geo_lon']
+                        )
+                    );
+                }
             }
         }
-
+        
+        $dadata->close();
         return response()->json($data);
     }
 }

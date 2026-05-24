@@ -2,449 +2,518 @@
 
 namespace App\Http\Controllers\Api;
 
-use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use Validator;
-use Storage;
-use Auth;
-use App\Helpers\ValueHelper;
-use App\Models\Field;
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Hash;
-use App\Exports\ObjectExport;
-use Maatwebsite\Excel\Facades\Excel;
 use App\Services\CrudService;
 use App\Services\SearchService;
+use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Exports\ObjectExport;
+use App\Models\EntityObject;
+use App\Models\Table;
+use App\Models\Field;
+use App\Models\Menu;
+use App\Models\History;
+use App\Models\Role;
+use App\Models\Filter;
+use App\Models\Permission;
+use App\Models\Module;
+use App\Models\Settings;
 
 class ObjectController extends Controller
 {
     private CrudService $crudService;
     private SearchService $searchService;
-
+ 
     public function __construct(CrudService $crudService, SearchService $searchService)
     {
         $this->crudService = $crudService;
         $this->searchService = $searchService;
     }
 
-    public function list($slug, Request $request)
+    public function list($slug, Request $request): JsonResponse
     {
-        $data = \App\Models\EntityObject::list($slug, $request);
-
-        return response()->json($data);
-
-    }
-
-    public function compose_list($slug, Request $request)
-    {
-        $profile = \Auth::user();
-        $data_type_id = \DB::table('data_types')->where('slug', $slug)->first()->id;
-        $permissions = array();
-        if($profile->role_id) {
-            $permissions = $profile->role->permissions()->select([
-                'read_p',
-                'create_p',
-                'update_p',
-                'delete_p',
-                'export_p',
-                'import_p'
-            ])->where('entity_id', $data_type_id)->first();
-        }
-            
-        if(!$profile->is_admin && isset($permissions['read_p']) && $permissions['read_p'] == 'N' || !$profile->is_admin && !isset($permissions))
-            return response()->json([
-                'message' => 'Forbidden'
-            ], 403);
-        if(isset($permissions) && !is_array($permissions))
-            $permissions = $permissions->toArray();
-        //api/tables/$slug
-        $table = \App\Models\Table::get($slug);
-        if(isset($table['error'])) {
-            return response()->json([
-                    'message' => $table['error']['message']
-                ], $table['error']['code']);
-        }
-        
-        //api/objects/$slug
-        $add_params = [];//['sort_order' => $sort_order, 'sort_field' => $sort_field];
-        if(isset($permissions['read_p']) && $permissions['read_p'] == 'Y' && !$profile->is_admin)
-            $add_params['filter']['user_id'] = \Auth::user()->id;
-        $request->merge($add_params);
-        $list = \App\Models\EntityObject::list($slug, $request);
-        if(isset($list['error'])) {
-            return response()->json([
-                    'message' => $list['error']['message']
-                ], $list['error']['code']);
-        }
-        //api/fields/$slug
-        $fields = \App\Models\Field::list($slug);
-        //api/entities
-        $entities = \DB::table('data_types')->select(['slug', 'title_singular', 'title_plural', 'color'])->get();
-        //api/roles
-        $roles = \App\Models\Role::list();
-        
-        //api/sidebar/get
-        $sidebar = \Auth::user()->getSidebar();
-        //api/filter/$slug
-        $filters = \App\Models\Filter::list($slug);
-        $categories = array();
-        if($slug == 'products') {
-            $categories = \Modules\Products\Entities\Category::get()->toTree()->toArray();
-        }
-        if($slug == 'instructions') {
-            $categories = \Modules\Instructions\Entities\Category::get()->toTree()->toArray();
-        }
-        if($slug == 'faq') {
-            $categories = \App\Models\FaqCategory::get()->toTree()->toArray();
-        }
-        if($slug == 'knowledge') {
-            $categories = \App\Models\KnowledgeCategory::get()->toTree()->toArray();
-        }
-        if($slug == 'articles') {
-            $categories = \App\Models\BlogCategory::get()->toTree()->toArray();
-        }
-        if($slug == 'guides') {
-            $categories = \App\Models\GuideCategory::get()->toTree()->toArray();
-        }
-        foreach($categories as $k => $category) {
-            $name = json_decode($category['name'], true);
-            if(isset($name['value'])) {
-                $categories[$k]['name'] = $name['value'];
-            }
-
-            foreach($category['children'] as $i => $child) {
-                $name = json_decode($child['name'], true);
-                if(isset($name['value'])) {
-                    $categories[$k]['children'][$i]['name'] = $name['value'];
-                }
-            }
-
-            
-        }
-
-        $tabs = \App\Models\Menu::tabs($slug);
-        
-        
-        $data = array(
-            'list' => $list,
-            'table' => $table,
-            'fields' => $fields,
-            'entities' => $entities,
-            'filters' => $filters,
-            'categories' => $categories,
-            'permissions' => $permissions
-        );
-
+        $data = EntityObject::list($slug, $request);
         return response()->json($data);
     }
 
-    public function compose_show($slug, $id, Request $request)
+    public function compose_list($slug, Request $request): JsonResponse
     {
-        $isExternalAccess = !$request->headers->has('Authorization') && !app('auth')->guard('api')->check();
-        $entity = \DB::table('data_types')->where('slug', $slug)->first();
-        if(!$entity)
-            return response()->json([
-                'message' => 'Entity not found'
-            ], 404);
-        $data_type_id = $entity->id;
-        $permissions = array();
+        $user = Auth::user();
+        
+        // 1. Получение и проверка прав (вынесено в отдельный метод)
+        $permissions = $this->getPermissions($user, $slug);
+        
+        // Проверка на запрет чтения
+        if (!$user->is_admin && isset($permissions['read_p']) && $permissions['read_p'] === 'N') {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
 
-        if(!$isExternalAccess && \Auth::user()->role_id) {
-            $permissions = \Auth::user()->role->permissions()->select([
-                'read_p',
-                'create_p',
-                'update_p',
-                'delete_p',
-                'export_p',
-                'import_p'
-            ])->where('entity_id', $data_type_id)->first();
-            if(!$permissions) {
-                $data_types = \DB::table('data_types')->where('enable', 1)->where('hidden', 0)->get()->keyBy('id')->toArray();
-                $permissions = array();
-                $res = \App\Models\Permission::whereNotNull('entity_id')->where('role_id', \Auth::user()->role_id)->get()->keyBy('entity_id')->toArray();
+        // 2. Получение настроек таблицы
+        $table = Table::get($slug);
+        if (isset($table['error'])) {
+            return response()->json(['message' => $table['error']['message']], $table['error']['code']);
+        }
 
-                $new_permissions_exist = false;
-                foreach($data_types as $entity_id => $entity) {
-                    if(!array_key_exists($entity_id, $res)) {
-                        \DB::table('permissions')->insert([['entity_id' => $entity_id, 'role_id' => \Auth::user()->role_id]]);
-                        $new_permissions_exist = true;
-                    }
-                }
-                $permissions = \Auth::user()->role->permissions()->select([
-                    'read_p',
-                    'create_p',
-                    'update_p',
-                    'delete_p',
-                    'export_p',
-                    'import_p'
-                ])->where('entity_id', $data_type_id)->first();
-            }
-            $permissions = $permissions->toArray();
-        } elseif($isExternalAccess) {
+        // 3. Подготовка параметров запроса
+        if (isset($permissions['read_p']) && $permissions['read_p'] === 'Y' && !$user->is_admin) {
+            $request->merge(['filter' => array_merge($request->input('filter', []), ['user_id' => $user->id])]);
+        }
+
+        // 4. Получение списка объектов
+        $list = EntityObject::list($slug, $request);
+        if (isset($list['error'])) {
+            return response()->json(['message' => $list['error']['message']], $list['error']['code']);
+        }
+
+        // 5. Загрузка категорий (Замена if/else на маппинг)
+        $categories = $this->getCategoriesForSlug($slug);
+
+        // 6. Сборка финального ответа
+        // Оптимизация: параллельные запросы здесь не сделать в PHP синхронно без доп. библиотек,
+        // но код стал чище.
+        return response()->json([
+            'list'        => $list,
+            'table'       => $table,
+            'fields'      => Field::list($slug),
+            'entities'    => DB::table('data_types')->select(['slug', 'title_singular', 'title_plural', 'color'])->get(),
+            'filters'     => Filter::list($slug),
+            'categories'  => $categories,
+            'permissions' => $permissions,
+            'tabs'        => Menu::tabs($slug),
+            // 'sidebar' можно не передавать, если фронт запрашивает его отдельно, или раскомментировать ниже
+            // 'sidebar'     => $user->getSidebar(), 
+        ]);
+    }
+
+    public function compose_show($slug, $id, Request $request): JsonResponse
+    {
+        $user = Auth::guard('api')->user(); // Получаем юзера корректно для API
+        $isExternalAccess = !$user;
+
+        $entity = DB::table('data_types')->where('slug', $slug)->first();
+        if (!$entity) {
+            return response()->json(['message' => 'Entity not found'], 404);
+        }
+
+        // 1. Логика прав доступа
+        $permissions = [];
+        if ($user && $user->role_id) {
+            $permissions = $this->getPermissions($user, $slug, $entity->id);
+        } elseif ($isExternalAccess) {
             $permissions = ['read_p' => 'A'];
         }
-        if(\Auth::user() && $slug == 'users' && $id == \Auth::user()->id || \Auth::user() && \Auth::user()->is_admin)
+
+        // Специфичная логика для Users
+        if ($user && ($slug === 'users' && $id == $user->id || $user->is_admin)) {
             $permissions['update_p'] = 'A';
-        if(isset($permissions['read_p']) && $permissions['read_p'] == 'N' && ($slug != 'users' || 
-            $slug == 'users' && \Auth::user()->id != $id) && !\Auth::user()->is_admin) {
-            return response()->json([
-                'message' => 'Forbidden'
-            ], 403);
-        }
-        //api/objects/$slug/$id
-        $add_params = [];
-        if(\Auth::user() && isset($permissions['read_p']) && $permissions['read_p'] == 'Y')
-            $add_params['user_id'] = \Auth::user()->id;
-        if($request->is_copy)
-            $add_params['is_copy'] = 1;
-        $request->merge($add_params);
-
-        $detail = \App\Models\EntityObject::detail($slug, $id, $request);
-        if(isset($detail['error'])) {
-            return response()->json([
-                    'message' => $detail['error']['message']
-                ], $detail['error']['code']);
-        }
-        //api/objects/products?order_id=$id
-        $products = array();
-        if($slug == 'logistic_tasks' && $id) {
-            $nrequest = new Request(['order_id' => $id]);
-            $products = \App\Models\EntityObject::list('products', $nrequest);
-        }
-        //api/tables/order_products
-        $table = array();
-        if($slug == 'logistic_tasks')
-            $table = \App\Models\Table::get_order_products();
-        //api/entities
-        $entities = \DB::table('data_types')->select(['slug', 'title_singular', 'title_plural', 'color'])->get();
-        //api/history/$slug/$id
-        if(!$id || $request->is_copy) {
-            $history_events = $history_fields = array();
-        } else {
-            $history_events = \App\Models\History::list($slug, $id, null, new Request(['filter' => 'events']));
-            $history_fields = \App\Models\History::list($slug, $id, null);
         }
 
-        //api/entities/$slug/menu
-        $menu = \App\Models\Menu::get($slug);
+        // Проверка запрета
+        $isForbidden = isset($permissions['read_p']) && $permissions['read_p'] === 'N';
+        $isSelfUser = $slug === 'users' && $user && $user->id == $id;
+
+        if ($isForbidden && !$isSelfUser && !($user && $user->is_admin)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        // 2. Параметры запроса
+        if ($user && isset($permissions['read_p']) && $permissions['read_p'] === 'Y') {
+            $request->merge(['user_id' => $user->id]);
+        }
+        if ($request->is_copy) {
+            $request->merge(['is_copy' => 1]);
+        }
+
+        // 3. Получение деталей
+        $detail = EntityObject::detail($slug, $id, $request);
+        if (isset($detail['error'])) {
+            return response()->json(['message' => $detail['error']['message']], $detail['error']['code']);
+        }
+
+        // 4. Дополнительные данные (продукты, история)
+        $products = [];
+        $tableKeys = [];
         
-        $data = array(
-            'detail' => $detail,
-            'table' => array(
-                'tableKeys' => $table,
+        if ($slug === 'logistic_tasks') {
+            $tableKeys = Table::get_order_products();
+            if ($id) {
+                $products = EntityObject::list('products', new Request(['order_id' => $id]));
+            }
+        }
+
+        $history_events = [];
+        $history_fields = [];
+
+        if ($id && !$request->is_copy) {
+            // Оптимизация: запрос истории только если это не копирование и есть ID
+            $history_events = History::list($slug, $id, null, new Request(['filter' => 'events']));
+            $history_fields = History::list($slug, $id, null);
+        }
+
+        return response()->json([
+            'detail'         => $detail,
+            'table'          => [
+                'tableKeys' => $tableKeys,
                 'tableBody' => $products
-            ),
+            ],
             'history_events' => $history_events,
             'history_fields' => $history_fields,
-            'tabs' => $menu,
-            'permissions' => $permissions
-        );
-
-        return response()->json($data);
+            'tabs'           => Menu::get($slug),
+            'permissions'    => $permissions
+        ]);
     }
 
-    public function compose_show_module($slug, $id, $module, Request $request)
+    public function compose_show_module($slug, $id, $module, Request $request): JsonResponse
     {
-        //api/objects/$slug/$id
-        $request = new Request([]);
-        $detail = \App\Models\EntityObject::detail_module($slug, $id, $module, $request);
-        if(isset($detail['error'])) {
-            return response()->json([
-                    'message' => $detail['error']['message']
-                ], $detail['error']['code']);
+        // Базовые данные
+        $detail = EntityObject::detail_module($slug, $id, $module, new Request());
+        if (isset($detail['error'])) {
+            return response()->json(['message' => $detail['error']['message']], $detail['error']['code']);
         }
-        //api/objects/products?order_id=$id
-        $products = array();
-        if($slug == 'logistic_tasks') {
-            $request = new Request(['order_id' => $id]);
-            $products = \App\Models\EntityObject::list('products', $request);
+
+        // Данные для specific cases
+        $products = [];
+        if ($slug === 'logistic_tasks') {
+            $products = EntityObject::list('products', new Request(['order_id' => $id]));
         }
-        //api/tables/order_products
-        $table = \App\Models\Table::get_order_products();
-        //api/entities
-        $entities = \DB::table('data_types')->select(['slug', 'title_singular', 'title_plural', 'color'])->get();
-        //api/history/$slug/$id
-        $history_events = \App\Models\History::list($slug, $id, $module, new Request(['filter' => 'events']));
-        $history_fields = \App\Models\History::list($slug, $id, $module);
-        //api/entities/$slug/menu
-        $menu = \App\Models\Menu::get($slug);
 
-        //check module entities
-        $module = \App\Models\Module::where('slug', $module)->firstOrFail();
-        $related_entities = $module->statusesEntities($slug, $id);
+        // Проверка прав (используем уже существующего юзера из Auth)
+        $user = Auth::user();
+        $dataTypeId = DB::table('data_types')->where('slug', $slug)->value('id'); // Используем value для оптимизации
+        
+        // Получаем permissions только если есть ID типа данных
+        $permissions = [];
+        if ($dataTypeId && $user) {
+            $permissions = $user->role->permissions()
+                ->select(['read_p', 'create_p', 'update_p', 'delete_p', 'export_p', 'import_p'])
+                ->where('entity_id', $dataTypeId)
+                ->first();
+             
+             if ($permissions) {
+                 $permissions = $permissions->toArray();
+             }
+        }
 
-        $data_type_id = \DB::table('data_types')->where('slug', $slug)->first()->id;
-
-        $permissions = \Auth::user()->role->permissions()->select([
-            'read_p',
-            'create_p',
-            'update_p',
-            'delete_p',
-            'export_p',
-            'import_p'
-        ])->where('entity_id', $data_type_id)->get()->toArray();
-            
-        $data = array(
-            'detail' => $detail,
-            'products' => $products,
-            'table' => $table,
-            'history_events' => $history_events,
-            'history_fields' => $history_fields,
-            'menu' => $menu,
-            'related_entities' => $related_entities,
-            'permissions' => $permissions
-        );
-
-        return response()->json($data);
+        // Связанные сущности модуля
+        $moduleModel = Module::where('slug', $module)->firstOrFail();
+        
+        return response()->json([
+            'detail'           => $detail,
+            'products'         => $products,
+            'table'            => Table::get_order_products(),
+            'history_events'   => History::list($slug, $id, $module, new Request(['filter' => 'events'])),
+            'history_fields'   => History::list($slug, $id, $module),
+            'menu'             => Menu::get($slug),
+            'related_entities' => $moduleModel->statusesEntities($slug, $id),
+            'permissions'      => $permissions
+        ]);
     }
-   
 
-    public function batch($slug, Request $request)
+    public function batch($slug, Request $request): JsonResponse
     {
         $result = $this->crudService->batch($slug, $request->rows);
-
         return response()->json($result, $result['status']);
     }
 
-    public function delete($slug, Request $request)
+    public function delete($slug, Request $request): JsonResponse
     {
         $result = $this->crudService->delete($slug, $request->ids);
-
         return response()->json($result, $result['status']);
-
     }
 
-    public function restore($slug, Request $request)
+    public function restore($slug, Request $request): JsonResponse
     {
         $result = $this->crudService->restore($slug, $request->ids);
-
         return response()->json($result, $result['status']);
     }
 
-    public function restore_single($slug, $id)
+    public function restore_single($slug, $id): JsonResponse
     {
         $settings = app('settings');
-        if(!isset($settings['models'][$slug]) || !$settings['models'][$slug]->enable) {
-            return response()->json([
-                'message' => 'Entity not found'
-            ], 404);
+        if (!isset($settings['models'][$slug]) || !$settings['models'][$slug]->enable) {
+            return response()->json(['message' => 'Entity not found'], 404);
         }
-        $entity = $settings['models'][$slug];
-        $entity_class = $entity->model_name;
-        $item = $entity_class::withTrashed()->where('id', $id)->first();
-        $history_text = 'Восстановлена запись: '.$item->id;
-        $history = new \App\Models\History(['entity' => $slug, 'entity_id' => $item->id, 'user_id' => \Auth::user()->id, 'text' => $history_text, 'event' => 'OBJECT_RESTORED']);
-        $history->save();
-        $history_response_events[] = \App\Models\History::getDataList([$history]);
-        $item->restore();
-        \App\Models\Settings::clear_cache();
-        $settings = \App\Models\Settings::get(true);
-        $data = $item->getData(array(), $settings);
 
+        $entityClass = $settings['models'][$slug]->model_name;
+        $item = $entityClass::withTrashed()->findOrFail($id); // Fail сразу, если не найден
+
+        // Логика восстановления
+        $item->restore();
+
+        // Запись истории
+        $history = new History([
+            'entity'    => $slug,
+            'entity_id' => $item->id,
+            'user_id'   => Auth::id(),
+            'text'      => 'Восстановлена запись: ' . $item->id,
+            'event'     => 'OBJECT_RESTORED'
+        ]);
+        $history->save();
+
+        Settings::clear_cache();
+        $freshSettings = Settings::get(true);
+        $data = $item->getData([], $freshSettings);
+
+        // Событие
         \App\Events\ObjectUpdated::dispatch('ObjectRestored', $data, tenant('id'));
-        
-        return response()->json(['success' => true, 'details' => $data['viewDetail'], 'history_events' => $history_response_events]);
+
+        // Формирование ответа истории через существующий метод
+        $historyResponse = [History::getDataList([$history])];
+
+        return response()->json([
+            'success'        => true,
+            'details'        => $data['viewDetail'],
+            'history_events' => $historyResponse
+        ]);
     }
 
-    public function search(Request $request)
+    public function search(Request $request): JsonResponse
     {
         $result = $this->searchService->find($request->all());
-
         return response()->json($result);
     }
 
-    public function export($slug, Request $request) 
+    public function export($slug, Request $request): JsonResponse
     {
-        info($slug);
-        info($request->all());
-        $settings = app('settings');
-        $params = $request->all();
-
-        $user = \Auth::user();
-        $tables = \Auth::user()->tables;
-        if($tables)
-            $tables = json_decode($tables, true);
-        else
-            $tables = array();
-        if(!isset($tables[$slug])) {
-            $role = \App\Models\Role::findOrFail(\Auth::user()->role_id);
-            if($role && $role->tables) {
-                $role_tables = json_decode($role->tables, true);
-                if(!is_array($role_tables))
-                    $role_tables = array();
-                if(isset($role_tables[$slug])) {
-                    $tables[$slug] = $role_tables[$slug];
-                    $user->tables = json_encode($tables);
-                    $user->saveQuietly();
-                }
-            }
-
-            if(!isset($tables[$slug])) {
-                $settings_table = \DB::table('settings')->where('key', 'tables')->first();
-                if($settings_table && $settings_table->value) {
-                    $tables_all = json_decode($settings_table->value, true);
-                    if(isset($tables_all[$slug])) {
-                        $tables[$slug] = $tables_all[$slug];
-                        $user->tables = json_encode($tables);
-                        $user->saveQuietly();
-                    }
-                }
-            }
-        }
-        if(isset($tables[$slug]) && !$request->fields) {
-            if(!isset($settings['models'][$slug]) || !$settings['models'][$slug]->enable) {
-                return response()->json([
-                    'message' => 'Entity not found'
-                ], 404);
-            }
-            $entity = $settings['models'][$slug];
-            $entity_class = $entity->model_name;
-            $model_fields = collect($settings[$slug]['fields']);//$entity_class::getFields();
-            $table_columns = collect($tables[$slug]);
-            $table_columns = $table_columns->keyBy('key')->toArray();
-            foreach($table_columns as $key => $column) {
-                if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'iconDrag' && $key != 'iconDelete') {
-                    
-                    unset($table_columns[$key]);
-                }
-                    
-            }
-            
-        } else {
-            if($slug == 'balance')
-                $slug = 'balance_operations';
-            $entity = $settings['models'][$slug];
-            $entity_class = $entity->model_name;
-            $model_fields = $settings[$slug]['fields'];//$entity_class::getFields();
-            $table_columns = array();
-            $i = 0;
-            foreach ($model_fields as $field) {
-                if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group'/* && $field->type != 'file'*/ && $field->type != 'password') {
-                    if($request->fields && in_array($field->field, $request->fields)) {
-                        $table_columns[$field->field] = array('title' => $field->display_parent_name ? $field->display_parent_name.', '.$field->title : $field->title, 'key' => $field->field, 'sort' => array_search($field->field, $request->fields));
-                    } elseif(!$request->fields) {
-                        $table_columns[$field->field] = array('title' => $field->display_parent_name ? $field->display_parent_name.', '.$field->title : $field->title, 'key' => $field->field, 'sort' => $i);
-                        $i++;
-                    }
-                }
-            }
-            array_sort_by_column($table_columns, 'sort', SORT_ASC, SORT_NATURAL);
-        }
-
-        $params['headings']['fields'] = array();
-        foreach($table_columns as $column) {
-            if(isset($column['title']) && $column['key'] != 'isChoose' && $column['key'] != 'actions' && $column['key'] != 'iconDrag' && $column['key'] != 'iconDelete') {
-                $params['headings']['names'][] = $column['title'];
-                $params['headings']['fields'][] = $column['key'];
-            }
-        }
-        $now = strtotime(now());
-        Excel::store(new ObjectExport($slug, $params), 'export'.$now.'.xlsx');
+        // Убрал info(), если они нужны для дебага, можно вернуть
+        $user = Auth::user();
         
-        if(tenant('id'))
-            return response()->json(['link' => 'https://'.tenant('id').'.compas.pro/storage/tenant'.tenant('id').'/app/public/export'.$now.'.xlsx']);
-        else
-            return response()->json(['link' => 'https://compas.pro/storage/app/public/export'.$now.'.xlsx']);
+        // Логика получения настроек таблиц
+        $tables = $this->getUserTables($user, $slug);
+
+        $fieldsForExport = [];
+        $headings = [];
+
+        // Получение полей модели
+        $settings = app('settings');
+        if (!isset($settings['models'][$slug]) || !$settings['models'][$slug]->enable) {
+             return response()->json(['message' => 'Entity not found'], 404);
+        }
+        
+        $modelFields = collect($settings[$slug]['fields']);
+        
+        // Логика фильтрации колонок
+        if (isset($tables[$slug]) && !$request->fields) {
+            // Если есть сохраненные настройки таблицы у юзера (оставляем без изменений)
+            $tableColumns = collect($tables[$slug])->keyBy('key');
+            
+            $systemKeys = ['isChoose', 'actions', 'iconDrag', 'iconDelete'];
+            $filteredColumns = $tableColumns->filter(function($val, $key) use ($modelFields, $systemKeys) {
+                 return $modelFields->contains('field', $key) || in_array($key, $systemKeys);
+            });
+            
+            foreach ($filteredColumns as $column) {
+                if (isset($column['title']) && !in_array($column['key'], $systemKeys)) {
+                    $headings[] = $column['title'];
+                    $fieldsForExport[] = $column['key'];
+                }
+            }
+        } else {
+            // ИЗМЕНЕННАЯ ЛОГИКА ЗДЕСЬ
+
+            if ($request->fields && is_array($request->fields)) {
+                // ВАРИАНТ 1: Если переданы конкретные поля, соблюдаем их порядок
+                
+                // Преобразуем modelFields в ассоциативный массив для быстрого поиска по ключу
+                $modelFieldsMap = $modelFields->keyBy('field');
+
+                foreach ($request->fields as $requestedFieldKey) {
+                    // Ищем описание поля в настройках
+                    $fieldData = $modelFieldsMap->get($requestedFieldKey);
+
+                    // Если поле найдено в настройках и не запрещено
+                    if ($fieldData && !in_array($fieldData->type, ['text_group', 'password'])) {
+                        
+                        $title = $fieldData->display_parent_name 
+                            ? "$fieldData->display_parent_name, $fieldData->title" 
+                            : $fieldData->title;
+
+                        // Добавляем в том порядке, в котором они пришли в $request->fields
+                        $headings[] = $title;
+                        $fieldsForExport[] = $requestedFieldKey;
+                    }
+                    
+                    // Если нужно экспортировать системные поля (id, created_at), которых может не быть в $settings[$slug]['fields'],
+                    // но они есть в модели, добавьте проверку здесь. 
+                    // Обычно id и даты есть в $modelFields, так что код выше их подхватит.
+                }
+
+            } else {
+                // ВАРИАНТ 2: Дефолтная логика (если fields не переданы), берем порядок из модели
+                $sortedFields = $modelFields->filter(function($field) {
+                     return !in_array($field->type, ['text_group', 'password']);
+                });
+
+                foreach ($sortedFields as $field) {
+                    $title = $field->display_parent_name 
+                        ? "$field->display_parent_name, $field->title" 
+                        : $field->title;
+
+                    $headings[] = $title;
+                    $fieldsForExport[] = $field->field;
+                }
+            }
+        }
+
+        $params = $request->all();
+        $params['headings'] = [
+            'names'  => $headings,
+            'fields' => $fieldsForExport
+        ];
+
+        $filename = 'export' . time() . '.xlsx';
+        Excel::store(new ObjectExport($slug, $params), $filename, 'public'); 
+
+        $url = Storage::disk('public')->url($filename);
+        
+        if (tenant('id')) {
+             $url = 'https://'.tenant('id').'.compas.pro/storage/tenant'.tenant('id').'/app/public/'.$filename;
+        }
+
+        return response()->json(['link' => $url]);
     }
 
+    // --- Private Helpers (Вынесенная логика) ---
+
+    /**
+     * Получает права доступа пользователя к сущности
+     */
+    private function getPermissions($user, $slug, $dataTypeId = null): array
+    {
+        if (!$dataTypeId) {
+            $dataType = DB::table('data_types')->where('slug', $slug)->first();
+            if (!$dataType) return [];
+            $dataTypeId = $dataType->id;
+        }
+
+        $permissions = [];
+        if ($user && $user->role_id) {
+            $permissions = $user->role->permissions()
+                ->select(['read_p', 'create_p', 'update_p', 'delete_p', 'export_p', 'import_p'])
+                ->where('entity_id', $dataTypeId)
+                ->first();
+
+            // Если прав нет, пытаемся инициализировать (старая логика)
+            if (!$permissions) {
+                $this->initializePermissions($user);
+                $permissions = $user->role->permissions()
+                    ->select(['read_p', 'create_p', 'update_p', 'delete_p', 'export_p', 'import_p'])
+                    ->where('entity_id', $dataTypeId)
+                    ->first();
+            }
+        }
+        
+        return $permissions ? $permissions->toArray() : [];
+    }
+
+    /**
+     * Инициализация прав, если их нет (Legace logic refactored)
+     */
+    private function initializePermissions($user)
+    {
+        $existingPermissions = Permission::where('role_id', $user->role_id)
+            ->whereNotNull('entity_id')
+            ->pluck('entity_id')
+            ->toArray();
+
+        $dataTypes = DB::table('data_types')
+            ->where('enable', 1)
+            ->where('hidden', 0)
+            ->pluck('id');
+
+        $toInsert = [];
+        foreach ($dataTypes as $id) {
+            if (!in_array($id, $existingPermissions)) {
+                $toInsert[] = ['entity_id' => $id, 'role_id' => $user->role_id];
+            }
+        }
+
+        if (!empty($toInsert)) {
+            DB::table('permissions')->insert($toInsert);
+        }
+    }
+
+    /**
+     * Маппинг категорий вместо if/elseif
+     */
+    private function getCategoriesForSlug($slug): array
+    {
+        $categoryModels = [
+            'products'     => \Modules\Products\Entities\Category::class,
+            'instructions' => \Modules\Instructions\Entities\Category::class,
+            'faq'          => \App\Models\FaqCategory::class,
+            'knowledge'    => \App\Models\KnowledgeCategory::class,
+            'articles'     => \App\Models\BlogCategory::class,
+            'guides'       => \App\Models\GuideCategory::class,
+        ];
+
+        if (!isset($categoryModels[$slug])) {
+            return [];
+        }
+
+        $modelClass = $categoryModels[$slug];
+        if (!class_exists($modelClass)) {
+            return [];
+        }
+
+        $tree = $modelClass::get()->toTree()->toArray();
+
+        // Рекурсивная обработка имен (вынесена, чтобы не дублировать)
+        return $this->processCategoryNames($tree);
+    }
+
+    private function processCategoryNames(array $categories): array
+    {
+        foreach ($categories as $k => $category) {
+            $name = json_decode($category['name'], true);
+            if (isset($name['value'])) {
+                $categories[$k]['name'] = $name['value'];
+            }
+
+            if (!empty($category['children'])) {
+                $categories[$k]['children'] = $this->processCategoryNames($category['children']);
+            }
+        }
+        return $categories;
+    }
+
+    /**
+     * Получение таблиц пользователя (для export)
+     */
+    private function getUserTables($user, $slug)
+    {
+        $userTables = $user->tables ? json_decode($user->tables, true) : [];
+
+        // Если у пользователя уже есть настройка для этого слага, возвращаем
+        if (isset($userTables[$slug])) {
+            return $userTables;
+        }
+
+        // Проверяем роль
+        $role = $user->role;
+        $roleTables = $role && $role->tables ? json_decode($role->tables, true) : [];
+        
+        if (isset($roleTables[$slug])) {
+            $userTables[$slug] = $roleTables[$slug];
+            $user->tables = json_encode($userTables);
+            $user->saveQuietly();
+            return $userTables;
+        }
+
+        // Проверяем глобальные настройки
+        $globalTablesJson = DB::table('settings')->where('key', 'tables')->value('value');
+        $globalTables = $globalTablesJson ? json_decode($globalTablesJson, true) : [];
+
+        if (isset($globalTables[$slug])) {
+            $userTables[$slug] = $globalTables[$slug];
+            $user->tables = json_encode($userTables);
+            $user->saveQuietly();
+        }
+
+        return $userTables;
+    }
 }

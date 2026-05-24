@@ -109,23 +109,17 @@ class SearchService
                 
                 
                 if($params['entity'] == 'articles' || $params['entity'] == 'faq' || $params['entity'] == 'knowledge' || $params['entity'] == 'guides') {
-                    $items = $entity_class::where([
-                        [$field_name, 'LIKE', $q],
-                        ['deleted_at', null],
-                        ['is_active', 1]
-                    ])->orWhere([
-                        ['id', (int)$params['q']],
-                        ['deleted_at', null],
-                        ['is_active', 1]
-                    ])->limit(20)->get();
+                    $items = $entity_class::where(function($query) use ($field_name, $q, $params) {
+                        $query->where($field_name, 'LIKE', $q)
+                              ->orWhere("{$field_name}->value", 'LIKE', $q)
+                              ->orWhere('id', (int)$params['q']);
+                    })->whereNull('deleted_at')->where('is_active', 1)->limit(20)->get();
                 } else {
-                    $items = $entity_class::where([
-                        [$field_name, 'LIKE', $q],
-                        ['deleted_at', null]
-                    ])->orWhere([
-                        ['id', (int)$params['q']],
-                        ['deleted_at', null]
-                    ])->limit(20)->get();
+                    $items = $entity_class::where(function($query) use ($field_name, $q, $params) {
+                        $query->where($field_name, 'LIKE', $q)
+                              ->orWhere("{$field_name}->value", 'LIKE', $q)
+                              ->orWhere('id', (int)$params['q']);
+                    })->whereNull('deleted_at')->limit(20)->get();
                 }
                 if(!$items) {
 

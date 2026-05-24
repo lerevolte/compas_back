@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="20px" height="20px" viewBox="0 0 20 20" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>Group 20</title>
+    <g id="--Страница-аналитики" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Аналитика-4-Copy-2" transform="translate(-1129, -145)">
+            <g id="Group" transform="translate(254, 81)">
+                <g id="Group-17-Copy-6" transform="translate(865, 0)">
+                    <g id="Group-26" transform="translate(0, 57)">
+                        <g id="Group-20" transform="translate(10, 7)">
+                            <rect id="Rectangle" x="0" y="0" width="20" height="20" rx="3"></rect>
+                            <g id="line_chart" transform="translate(1, 3.6)" fill-rule="nonzero">
+                                <polygon id="Shape" fill="#C0C0C0" points="0 11.3363766 0 12.6476574 18 12.6476574 18 11.3363766"></polygon>
+                                <polygon id="Path" fill="#00B5E0" points="9 7.58610938 17.9506992 2.55642647 17.9506992 0 9 5.0294825 3.85588314 2.3983032 0 3.6510644 0 6.20749087 3.85588314 4.95472967"></polygon>
+                            </g>
+                        </g>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>

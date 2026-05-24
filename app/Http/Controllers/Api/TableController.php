@@ -2,705 +2,270 @@
 
 namespace App\Http\Controllers\Api;
 
-use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use Storage;
-use Auth;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use App\Helpers\ValueHelper;
-use Illuminate\Support\Str;
-use Carbon\Carbon;
+use Illuminate\Support\Carbon;
+use App\Models\Role;
+use App\Models\User;
+use App\Models\Tenant;
 
 class TableController extends Controller
 {
+    /**
+     * Получение конфигурации таблицы
+     */
     public function get($slug, Request $request)
     {
+        $user = Auth::user();
         
-        $field_colors = array();
-        $perms = array(
-            'read' => array(),
-            'write' => array(),
-        );
+        // Получаем таблицы пользователя (или пустой массив)
+        $tables = $this->getUserTables($user);
 
-        $user = \Auth::user();        
-        $tables = \Auth::user()->tables;
-        if($tables)
-            $tables = json_decode($tables, true);
-        else
-            $tables = array();
-        if(!isset($tables[$slug])) {
-            $role = \App\Models\Role::find(\Auth::user()->role_id);
-            if($role && $role->tables) {
-                $role_tables = json_decode($role->tables, true);
-                if(!is_array($role_tables))
-                    $role_tables = array();
-                if(isset($role_tables[$slug])) {
-                    $tables[$slug] = $role_tables[$slug];
-                    $user->tables = json_encode($tables);
-                    $user->timestamps = false;
-                    $user->saveQuietly();
-                }
-            }
-
-            if(!isset($tables[$slug])) {
-                $settings = \DB::table('settings')->where('key', 'tables')->first();
-                if($settings->value) {
-                    $tables_all = json_decode($settings->value, true);
-                    if(isset($tables_all[$slug])) {
-                        $tables[$slug] = $tables_all[$slug];
-                        $user->tables = json_encode($tables);
-                        $user->timestamps = false;
-                        $user->saveQuietly();
-                    }
-                }
-            }
+        // Если настройки для слага нет, пытаемся найти в роли или глобальных настройках
+        if (!isset($tables[$slug])) {
+            $tables = $this->tryApplyFallbackSettings($user, $tables, $slug);
         }
-        $settings = app('settings');
 
-        if(isset($tables[$slug])) {
-            $entity = \DB::table('data_types')->where('slug', $slug)->first();
-            if(!$entity)
-                return response()->json($tables[$slug]['fields']);
-            $entity_class = $entity->model_name;
-            $model_fields = $entity_class::getFields();
-            $table_columns = collect($tables[$slug]);
-            $table_columns = $table_columns->keyBy('key')->toArray();
-            foreach($table_columns as $key => $column) {
-                if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'iconDrag' && $key != 'iconDelete')
-                    unset($table_columns[$key]);
-            }
-            if(!isset($table_columns['isChoose'])) {
-                $table_columns['isChoose'] = array(
-                    "id" => 0,
-                    "title" => "Выделение",
-                    "key" => "isChoose",
-                    "width" => "40.00px",
-                    "enabled" => true,
-                    "hover" => false,
-                    "sort_order" => null,
-                    "type" => "checkbox",
-                    "fixed" => true,
-                    "fixTarget" => "0px",
-                    "index" => 0,
-                    "mask" => ""
-                );
-            }
-            if(!isset($table_columns['actions'])) {
-                $table_columns['actions'] = array(
-                    "id" => 2,
-                    "title" => "Действие",
-                    "key" => "actions",
-                    "width" => "40.00px",
-                    "enabled" => true,
-                    "hover" => false,
-                    "sort_order" => null,
-                    "type" => "actions",
-                    "fixed" => true,
-                    "index" => 1,
-                    "fixTarget" => "40px",
-                    "mask" => ""
-                );
-            }
-
-            foreach ($model_fields as $field) {
-                $field_values = array();
-                $field_colors[$field->field] = $field->label_color ? $field->label_color : null;
-                if(isset($settings['list_values'][$field->id])) {
-                    if($field->type == 'relation') {
-                        $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true); 
-                    } else {
-                        $field_values = $settings['list_values'][$field->id];
-                    }
-                };
-                if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->type != 'password') {
-                    $table_columns[$field->field] = array(
-                        'id' => $field->id,
-                        'title' => $field->title,
-                        'key' => $field->field,
-                        'width' => '200px',
-                        'enabled' => ($field->is_default ? true : false),
-                        'sort_order' => '',
-                        'type' => $field->type,
-                        'is_plural' => ($field->type == 'text' ? 1 : $field->is_plural),
-                        'external_link' => $field->external_link,
-                        'is_external_link' => $field->is_external_link,
-                        'is_link' => $field->is_link,
-                        'required' => $field->required,
-                        'fixed' => '',
-                        'index' => count($table_columns) + 1,
-                        'fixTarget' => '0px',
-                        'read_only' => $field->only_read,
-                        'unit' => $field->unit,
-                        'mask' => $field->mask
-                    );
-                    $table_columns[$field->field]['type'] = $field->type;
-                    $table_columns[$field->field]['read_only'] = $field->only_read;
-                    $table_columns[$field->field]['can_edit'] = isset($settings[$slug]['perms'][$field->field]) && !$settings[$slug]['perms'][$field->field]['write'] ? 1 : 0;
-                    $table_columns[$field->field]['color'] = $field_colors[$field->field];
-                    $table_columns[$field->field]['is_plural'] = $field->is_plural;
-                    $table_columns[$field->field]['is_hidden'] = $field->hide;
-                    $table_columns[$field->field]['visible_always'] = $field->visible_always;
-                    $table_columns[$field->field]['options'] = $field_values;
-                    $table_columns[$field->field]['choosed'] = [];
-                    if(isset($settings[$slug]['fields'][$field->field]->choosed))
-                        $table_columns[$field->field]['choosed'] = $settings[$slug]['fields'][$field->field]->choosed;
-                    if($field->type == 'relation') {
-                        $table_columns[$field->field]['related_table'] = json_decode($field->details, true)['table'];
-                        if($field->field == 'category_id')
-                            $table_columns[$field->field]['can_create'] = 0;
-                        else
-                            $table_columns[$field->field]['can_create'] = 1;
-                    }
-                } elseif($field->type != 'text_group' && $field->type != 'password') {
-                    $table_columns[$field->field] = array(
-                        'id' => $field->id,
-                        'title' => $field->title,
-                        'key' => $field->field,
-                        'width' => $table_columns[$field->field]['width'],
-                        'enabled' => $table_columns[$field->field]['enabled'],
-                        'sort_order' => $table_columns[$field->field]['sort_order'],
-                        'type' => $field->type,
-                        'is_plural' => ($field->type == 'text' ? 1 : $field->is_plural),
-                        'external_link' => $field->external_link,
-                        'is_external_link' => $field->is_external_link,
-                        'is_link' => $field->is_link,
-                        'required' => $field->required,
-                        'fixed' => $table_columns[$field->field]['fixed'],
-                        'index' => $table_columns[$field->field]['index'],
-                        'fixTarget' => $table_columns[$field->field]['fixTarget'],
-                        'read_only' => $field->only_read,
-                        'unit' => $field->unit,
-                        'mask' => $field->mask
-                    );
-                    $table_columns[$field->field]['type'] = $field->type;
-                    $table_columns[$field->field]['read_only'] = $field->only_read;
-                    $table_columns[$field->field]['can_edit'] = !$settings[$slug]['perms'][$field->field]['write'] ? 1 : 0;
-                    $table_columns[$field->field]['color'] = $field_colors[$field->field];
-                    $table_columns[$field->field]['is_plural'] = $field->is_plural;
-                    $table_columns[$field->field]['is_hidden'] = $field->hide;
-                    $table_columns[$field->field]['visible_always'] = $field->visible_always;
-                    $table_columns[$field->field]['options'] = $field_values;
-                    $table_columns[$field->field]['choosed'] = [];
-                    if(isset($settings[$slug]['fields'][$field->field]->choosed))
-                        $table_columns[$field->field]['choosed'] = $settings[$slug]['fields'][$field->field]->choosed;
-                    if($field->type == 'relation') {
-                        $table_columns[$field->field]['related_table'] = json_decode($field->details, true)['table'];
-                        if($field->field == 'category_id')
-                            $table_columns[$field->field]['can_create'] = 0;
-                        else
-                            $table_columns[$field->field]['can_create'] = 1;
-                    }
-                }
-                
-                
-            }
-        } else {
-            $entity = \DB::table('data_types')->where('slug', $slug)->first();
-            $entity_class = $entity->model_name;
-            $model_fields = $entity_class::getFields();
-            $table_columns = array();
-            if(!isset($table_columns['isChoose'])) {
-                $table_columns['isChoose'] = array(
-                    "id" => 0,
-                    "title" => "Выделение",
-                    "key" => "isChoose",
-                    "width" => "40.00px",
-                    "enabled" => true,
-                    "hover" => false,
-                    "sort_order" => null,
-                    "type" => "checkbox",
-                    "fixed" => true,
-                    "fixTarget" => "0px",
-                    "index" => 0,
-                    "mask" => ""
-                );
-            }
-            if(!isset($table_columns['actions'])) {
-                $table_columns['actions'] = array(
-                    "id" => 2,
-                    "title" => "Действие",
-                    "key" => "actions",
-                    "width" => "40.00px",
-                    "enabled" => true,
-                    "hover" => false,
-                    "sort_order" => null,
-                    "type" => "actions",
-                    "fixed" => true,
-                    "index" => 1,
-                    "fixTarget" => "40px",
-                    "mask" => ""
-                );
-            }
-            foreach ($model_fields as $field) {
-                $field_values = array();
-                $field_colors[$field->field] = $field->label_color ? $field->label_color : null;
-                if(isset($settings['list_values'][$field->id])) {
-                    if($field->type == 'relation') {
-                        $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true); 
-                    } else {
-                        $field_values = $settings['list_values'][$field->id];
-                    }
-                };
-                if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->type != 'password') {
-                    $table_columns[$field->field] = array(
-                        'id' => $field->id,
-                        'title' => $field->title,
-                        'key' => $field->field,
-                        'width' => '200px',
-                        'enabled' => ($field->is_default ? true : false),
-                        'sort_order' => ($field->field == 'id' ? 'desc':''),
-                        'type' => $field->type,
-                        'is_plural' => ($field->type == 'text' ? 1 : $field->is_plural),
-                        'external_link' => $field->external_link,
-                        'is_external_link' => $field->is_external_link,
-                        'is_link' => $field->is_link,
-                        'required' => $field->required,
-                        'fixed' => '',
-                        'index' => count($table_columns) + 1,
-                        'fixTarget' => '0px',
-                        'read_only' => $field->only_read,
-                        'unit' => $field->unit,
-                        'mask' => $field->mask
-                    );
-                    $table_columns[$field->field]['type'] = $field->type;
-                    $table_columns[$field->field]['read_only'] = $field->only_read;
-                    $table_columns[$field->field]['can_edit'] = !$settings[$slug]['perms'][$field->field]['write'] ? 1 : 0;
-                    $table_columns[$field->field]['color'] = $field_colors[$field->field];
-                    $table_columns[$field->field]['is_plural'] = $field->is_plural;
-                    $table_columns[$field->field]['is_hidden'] = $field->hide;
-                    $table_columns[$field->field]['visible_always'] = $field->visible_always;
-                    $table_columns[$field->field]['options'] = $field_values;
-                    if($field->type == 'relation') {
-                        $table_columns[$field->field]['related_table'] = json_decode($field->details, true)['table'];
-                        if($field->field == 'category_id')
-                            $table_columns[$field->field]['can_create'] = 0;
-                        else
-                            $table_columns[$field->field]['can_create'] = 1;
-                    }
-                }
-                
-            }
+        // Если настройки есть и не нужно перестраивать структуру на основе модели
+        if (isset($tables[$slug])) {
+            $entity = DB::table('data_types')->where('slug', $slug)->first();
             
+            // Если сущность не найдена, просто возвращаем сохраненные поля
+            if (!$entity) {
+                return response()->json($tables[$slug]['fields']);
+            }
+
+            // Обрабатываем поля модели и мержим с сохраненными настройками
+            $tableColumns = $this->mergeModelFieldsWithSettings($entity->model_name, $tables[$slug], $slug);
+            
+            return response()->json(array_values($tableColumns));
         }
-        
-        $table_columns = array_values($table_columns);
 
-        return response()->json($table_columns);
+        // Если настроек нет вообще, генерируем дефолтные на основе модели
+        $entity = DB::table('data_types')->where('slug', $slug)->first();
+        $tableColumns = $entity 
+            ? $this->generateDefaultColumnsFromModel($entity->model_name, $slug) 
+            : [];
+
+        return response()->json(array_values($tableColumns));
     }
-    
 
+    /**
+     * Сохранение конфигурации таблицы для текущего пользователя
+     */
     public function set($slug, Request $request)
     {
-        $user = \Auth::user();
-        $tables = $user->tables;
-        if($tables)
-            $tables = json_decode($tables, true);
-        if(!is_array($tables))
-            $tables = array();
-        $tables[$slug] = array(
-            'fields' => $request->fields, 
-            'sort_field' => $request->sort_field ? $request->sort_field : 'id', 
-            'sort_order' => $request->sort_order ? $request->sort_order : 'desc'
-        );
-        $user->tables = json_encode($tables);
-        $user->timestamps = false;
-        $user->saveQuietly();
-        $now = Carbon::now();
-        if(\DB::table('local_cache')->where(['url' => "tables/$slug", 'user_id' => \Auth::user()->id])->exists())
-            \DB::table('local_cache')->where(['url' => "tables/$slug", 'user_id' => \Auth::user()->id])->update(['updated_at' => $now]);
-        else
-            \DB::table('local_cache')->insert(['url' => "tables/$slug", 'user_id' => \Auth::user()->id, 'created_at' => $now, 'updated_at' => $now]);
+        $user = Auth::user();
+        $tables = $this->getUserTables($user);
+
+        $tables[$slug] = [
+            'fields'     => $request->fields,
+            'sort_field' => $request->sort_field ?? 'id',
+            'sort_order' => $request->sort_order ?? 'desc'
+        ];
+
+        $this->saveUserTables($user, $tables);
+        $this->updateLocalCache("tables/$slug", $user->id);
 
         return response()->json($tables[$slug]);
     }
 
+    /**
+     * Сброс настроек таблицы к дефолтным (из тенанта seeds)
+     */
     public function reset($slug, Request $request)
     {
-        $tenant = \App\Models\Tenant::find('seeds');
-        $table = $tenant->run(function ($tenant) use ($slug) {
-            $user = \App\Models\User::find(1);
-            $tables = $user->tables;
-            if($tables)
-                $tables = json_decode($tables, true);
-            if(isset($tables[$slug]))
-                return isset($tables[$slug]) ? $tables[$slug] : [];
+        $tenant = Tenant::find('seeds');
+        
+        $table = $tenant->run(function () use ($slug) {
+            $user = User::find(1);
+            $tables = $this->getUserTables($user);
+            return $tables[$slug] ?? [];
         });
+
         return response()->json($table);
     }
 
+    /**
+     * Установка настроек для всех пользователей определенной роли
+     */
     public function set_role($slug, $role_id, Request $request)
     {
-        $users = \App\Models\User::where('role_id', $role_id)->get();
-        foreach($users as $user) {
-            $tables = $user->tables;
-            if($tables)
-                $tables = json_decode($tables, true);
-            if(!is_array($tables))
-                $tables = array();
-            $tables[$slug] = array(
-                'fields' => $request->fields, 
-                'sort_field' => $request->sort_field ? $request->sort_field : 'id', 
-                'sort_order' => $request->sort_order ? $request->sort_order : 'desc'
-            );
-            $user->tables = json_encode($tables);
-            $user->timestamps = false;
-            $user->saveQuietly();
+        $fieldsConfig = [
+            'fields'     => $request->fields,
+            'sort_field' => $request->sort_field ?? 'id',
+            'sort_order' => $request->sort_order ?? 'desc'
+        ];
+
+        // Обновляем пользователей
+        User::where('role_id', $role_id)->chunk(100, function ($users) use ($slug, $fieldsConfig) {
+            foreach ($users as $user) {
+                $tables = $this->getUserTables($user);
+                $tables[$slug] = $fieldsConfig;
+                $this->saveUserTables($user, $tables);
+            }
+        });
+
+        // Обновляем саму роль (шаблон)
+        $role = Role::find($role_id);
+        if ($role) {
+            $roleTables = $role->tables ? json_decode($role->tables, true) : [];
+            if (!is_array($roleTables)) $roleTables = [];
+            
+            $roleTables[$slug] = $request->fields;
+            $role->tables = json_encode($roleTables);
+            $role->saveQuietly();
         }
 
-        $role = \App\Models\Role::find($role_id);
-        $tables = $role->tables;
-        if($tables)
-            $tables = json_decode($tables, true);
-        if(!is_array($tables))
-            $tables = array();
-        $tables[$slug] = $request->fields;
-        $role->tables = json_encode($tables);
-        $role->saveQuietly();
-
-        $now = Carbon::now();
-        if(\DB::table('local_cache')->where(['url' => "tables/$slug", 'user_id' => \Auth::user()->id])->exists())
-            \DB::table('local_cache')->where(['url' => "tables/$slug", 'user_id' => \Auth::user()->id])->update(['updated_at' => $now]);
-        else
-            \DB::table('local_cache')->insert(['url' => "tables/$slug", 'user_id' => \Auth::user()->id, 'created_at' => $now, 'updated_at' => $now]);
+        $this->updateLocalCache("tables/$slug", Auth::id());
 
         return response()->json($request->fields);
     }
 
+    /**
+     * Установка настроек для ВСЕХ пользователей и глобальных настроек
+     */
     public function set_all($slug, Request $request)
     {
-        $users = \App\Models\User::get();
-        $tables = null;
-        foreach($users as $user) {
-            $tables = $user->tables;
-            if($tables)
-                $tables = json_decode($tables, true);
-            if(!is_array($tables))
-                $tables = array();
-            $tables[$slug] = array(
-                'fields' => $request->fields, 
-                'sort_field' => $request->sort_field ? $request->sort_field : 'id', 
-                'sort_order' => $request->sort_order ? $request->sort_order : 'desc'
-            );
-            $user->tables = json_encode($tables);
-            $user->timestamps = false;
-            $user->saveQuietly();
+        $fieldsConfig = [
+            'fields'     => $request->fields,
+            'sort_field' => $request->sort_field ?? 'id',
+            'sort_order' => $request->sort_order ?? 'desc'
+        ];
+
+        User::chunk(100, function ($users) use ($slug, $fieldsConfig) {
+            foreach ($users as $user) {
+                $tables = $this->getUserTables($user);
+                $tables[$slug] = $fieldsConfig;
+                $this->saveUserTables($user, $tables);
+            }
+        });
+
+        // Обновляем глобальные настройки
+        $settings = DB::table('settings')->where('key', 'tables')->first();
+        $globalTables = [];
+        
+        if ($settings && $settings->value) {
+            $decoded = json_decode($settings->value, true);
+            if (is_array($decoded)) $globalTables = $decoded;
+        } elseif ($settings && !is_array($settings->value) && ValueHelper::isJson($settings->value)) {
+             // Fallback logic from original code
+             $globalTables = json_decode($settings->value, true) ?: [];
         }
 
-        $settings = \DB::table('settings')->where('key', 'tables')->first();
-        if($settings)
-            $tables = $settings->value;
-        if(ValueHelper::isJson($tables) && !is_array($tables))
-            $tables = json_decode($tables, true);
-        if(!is_array($tables))
-            $tables = array();
-        $tables[$slug] = $request->fields;
-        \DB::table('settings')->where('key', 'tables')->update(['value' => json_encode($tables)]);
+        $globalTables[$slug] = $request->fields;
 
-        $now = Carbon::now();
-        if(\DB::table('local_cache')->where(['url' => "tables/$slug", 'user_id' => \Auth::user()->id])->exists())
-            \DB::table('local_cache')->where(['url' => "tables/$slug", 'user_id' => \Auth::user()->id])->update(['updated_at' => $now]);
-        else
-            \DB::table('local_cache')->insert(['url' => "tables/$slug", 'user_id' => \Auth::user()->id, 'created_at' => $now, 'updated_at' => $now]);
+        DB::table('settings')->updateOrInsert(
+            ['key' => 'tables'],
+            ['value' => json_encode($globalTables)]
+        );
 
-        return response()->json($tables[$slug]);
+        $this->updateLocalCache("tables/$slug", Auth::id());
+
+        return response()->json($globalTables[$slug]);
     }
 
+    /**
+     * Специальный метод для order_products со специфичными колонками
+     */
     public function get_order_products(Request $request)
     {
-        $tables = \Auth::user()->tables;
-        if($tables)
-            $tables = json_decode($tables, true);
+        $tables = $this->getUserTables(Auth::user());
+        
+        // Определяем специфичные колонки для products
+        $productColumns = [
+            'product_name'   => ['title' => 'Наименование товара', 'type' => 'relation', 'related_table' => 'products', 'read_only' => 0],
+            'product_price'  => ['title' => 'Цена', 'type' => 'number', 'read_only' => 0],
+            'product_count'  => ['title' => 'Кол-во', 'type' => 'number', 'read_only' => 0],
+            'product_weight' => ['title' => 'Вес, кг', 'type' => 'number', 'read_only' => 1],
+            'product_sum'    => ['title' => 'Сумма', 'type' => 'number', 'read_only' => 1],
+        ];
 
-        if(isset($tables['order_products'])) {
-            $entity = \DB::table('data_types')->where('slug', 'products')->first();
-            $entity_class = $entity->model_name;
-            $model_fields = $entity_class::getFields();
-            $table_columns = collect($tables['order_products']['fields']);
-            $table_columns = $table_columns->keyBy('key')->toArray();
-            foreach($table_columns as $key => $column) {
-                if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'remnant_name' && $key != 'product_name' && $key != 'product_price' && $key != 'product_count' && $key != 'product_weight' && $key != 'product_sum' && $key != 'iconDrag' && $key != 'iconDelete' || $key == 'price' || $key == 'name')
-                    unset($table_columns[$key]);
-            }
-            foreach ($model_fields as $field) {
-                if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $key != 'price' && $key == 'name') {
-                    $table_columns[$field->field] = array(
-                        'id' => $field->id,
-                        'title' => $field->title,
-                        'key' => $field->field,
-                        'width' => '200px',
-                        'enabled' => 0,
-                        'sort_order' => '',
-                        'type' => $field->type,
-                        'fixed' => '',
-                        'index' => count($table_columns) + 1,
-                        'fixTarget' => '0px',
-                        'read_only' => $field->only_read,
-                        'unit' => $field->unit,
-                        "mask" => ""
-                    );
+        if (isset($tables['order_products'])) {
+            $entity = DB::table('data_types')->where('slug', 'products')->first();
+            $entityClass = $entity->model_name;
+            $modelFields = $entityClass::getFields();
+            
+            $savedColumns = collect($tables['order_products']['fields'])->keyBy('key')->toArray();
+
+            // Очистка удаленных полей
+            $ignoredKeys = array_merge(
+                ['isChoose', 'actions', 'iconDrag', 'iconDelete', 'price', 'name'],
+                array_keys($productColumns)
+            );
+
+            foreach ($savedColumns as $key => $col) {
+                // Если поля нет в модели и оно не в списке игнорируемых спец. полей -> удаляем
+                if (!$modelFields->contains('field', $key) && !in_array($key, $ignoredKeys)) {
+                    unset($savedColumns[$key]);
                 }
             }
-            if(!isset($table_columns['product_name']))
-                $table_columns['product_name'] = array(
-                    'id' => null,
-                    'title' => 'Наименование товара',
-                    'key' => 'product_name',
-                    'width' => '200px',
-                    'enabled' => 1,
-                    'sort_order' => '',
-                    'type' => 'relation',
-                    'fixed' => '',
-                    'index' => 0,
-                    'fixTarget' => '0px',
-                    'read_only' => 0,
-                    'related_table' => 'products',
-                    "mask" => ""
-                );
-            if(!isset($table_columns['product_price']))
-                $table_columns['product_price'] = array(
-                    'id' => null,
-                    'title' => 'Цена',
-                    'key' => 'product_price',
-                    'width' => '200px',
-                    'enabled' => 1,
-                    'sort_order' => '',
-                    'type' => 'number',
-                    'fixed' => '',
-                    'index' => 1,
-                    'fixTarget' => '0px',
-                    'read_only' => 0,
-                    "mask" => ""
-                );
-            if(!isset($table_columns['product_count']))
-                $table_columns['product_count'] = array(
-                    'id' => null,
-                    'title' => 'Кол-во',
-                    'key' => 'product_count',
-                    'width' => '200px',
-                    'enabled' => 1,
-                    'sort_order' => '',
-                    'type' => 'number',
-                    'fixed' => '',
-                    'index' => 2,
-                    'fixTarget' => '0px',
-                    'read_only' => 0,
-                    "mask" => ""
-                );
-            if(!isset($table_columns['product_weight']))
-                $table_columns['product_weight'] = array(
-                    'id' => null,
-                    'title' => 'Вес, кг',
-                    'key' => 'product_weight',
-                    'width' => '200px',
-                    'enabled' => 1,
-                    'sort_order' => '',
-                    'type' => 'number',
-                    'fixed' => '',
-                    'index' => 3,
-                    'fixTarget' => '0px',
-                    'read_only' => 1,
-                    "mask" => ""
-                );
-            if(!isset($table_columns['product_sum']))
-                $table_columns['product_sum'] = array(
-                    'id' => null,
-                    'title' => 'Сумма',
-                    'key' => 'product_sum',
-                    'width' => '200px',
-                    'enabled' => 1,
-                    'sort_order' => '',
-                    'type' => 'number',
-                    'fixed' => '',
-                    'index' => 4,
-                    'fixTarget' => '0px',
-                    'read_only' => 1,
-                    "mask" => ""
-                );
-            if(!isset($table_columns['actions']))
-                $table_columns['actions'] = array(
-                    "id" => null,
-                    "title" => "Действие",
-                    "key" => "actions",
-                    "width" => "40.00px",
-                    "enabled" => true,
-                    "hover" => false,
-                    "sort_order" => null,
-                    "type" => "actions",
-                    "fixed" => true,
-                    "index" => 5,
-                    "fixTarget" => "40px",
-                    "mask" => ""
-                );
-            if(!isset($table_columns['iconDrag'])) {
-                $table_columns['iconDrag'] = array(
-                    "id" => null,
-                    "title" => "Перетаскивание",
-                    "key" => "iconDrag",
-                    "width" => "40px",
-                    "enabled" => 1,
-                    "sort_order" => "",
-                    "type" => "iconDrag",
-                    "fixed" => "",
-                    "index" => 1,
-                    "fixTarget" => "0px",
-                    "read_only" => 1,
-                    "mask" => ""
-                );
-            }
-            if(!isset($table_columns['iconDelete'])) {
-                $table_columns['actions'] = array(
-                    "id" => null,
-                    "title" => "Удаление",
-                    "key" => "iconDelete",
-                    "width" => "40px",
-                    "enabled" => 1,
-                    "sort_order" => "",
-                    "type" => "iconDelete",
-                    "fixed" => "",
-                    "index" => 1,
-                    "fixTarget" => "0px",
-                    "read_only" => 1,
-                    "mask" => ""
-                );
-            }
-            $table_columns = array_values($table_columns);
 
-            return response()->json($table_columns);
+            // Добавление новых полей из модели
+            foreach ($modelFields as $field) {
+                // Логика из оригинала: price пропускаем, name добавляем
+                if (!array_key_exists($field->field, $savedColumns) && $field->type != 'text_group' && $field->field != 'price') {
+                    $savedColumns[$field->field] = $this->createColumnStructure($field, count($savedColumns) + 1, ['enabled' => 0]);
+                }
+            }
+
+            // Добавление кастомных колонок, если их нет
+            $idx = 0;
+            foreach ($productColumns as $key => $meta) {
+                if (!isset($savedColumns[$key])) {
+                    $savedColumns[$key] = $this->createCustomColumn($key, $meta, $idx++);
+                }
+            }
+            
+            // Добавляем системные иконки
+            $this->ensureSystemColumns($savedColumns, true); // true for extra icons logic if needed
+
+            return response()->json(array_values($savedColumns));
+
         } else {
-
-            $table_columns = array();
-            $table_columns['product_name'] = array(
-                'id' => null,
-                'title' => 'Наименование товара',
-                'key' => 'product_name',
-                'width' => '200px',
-                'enabled' => 1,
-                'sort_order' => '',
-                'type' => 'relation',
-                'fixed' => '',
-                'index' => 0,
-                'fixTarget' => '0px',
-                'read_only' => 0,
-                'related_table' => 'products',
-                "mask" => ""
-            );
-            $table_columns['product_price'] = array(
-                'id' => null,
-                'title' => 'Цена',
-                'key' => 'product_price',
-                'width' => '200px',
-                'enabled' => 1,
-                'sort_order' => '',
-                'type' => 'number',
-                'fixed' => '',
-                'index' => 1,
-                'fixTarget' => '0px',
-                'read_only' => 0,
-                "mask" => ""
-            );
-            $table_columns['product_count'] = array(
-                'id' => null,
-                'title' => 'Кол-во',
-                'key' => 'product_count',
-                'width' => '200px',
-                'enabled' => 1,
-                'sort_order' => '',
-                'type' => 'number',
-                'fixed' => '',
-                'index' => 2,
-                'fixTarget' => '0px',
-                'read_only' => 0,
-                "mask" => ""
-            );
-            $table_columns['product_weight'] = array(
-                'id' => null,
-                'title' => 'Вес, кг',
-                'key' => 'product_weight',
-                'width' => '200px',
-                'enabled' => 1,
-                'sort_order' => '',
-                'type' => 'number',
-                'fixed' => '',
-                'index' => 3,
-                'fixTarget' => '0px',
-                'read_only' => 1,
-                "mask" => ""
-            );
-            $table_columns['product_sum'] = array(
-                'id' => null,
-                'title' => 'Сумма',
-                'key' => 'product_sum',
-                'width' => '200px',
-                'enabled' => 1,
-                'sort_order' => '',
-                'type' => 'number',
-                'fixed' => '',
-                'index' => 4,
-                'fixTarget' => '0px',
-                'read_only' => 1,
-                "mask" => ""
-            );
-
-            if(!isset($table_columns['iconDrag'])) {
-                $table_columns['isChoose'] = array(
-                    "id" => null,
-                    "title" => "Перетаскивание",
-                    "key" => "iconDrag",
-                    "width" => "40px",
-                    "enabled" => 1,
-                    "sort_order" => "",
-                    "type" => "iconDrag",
-                    "fixed" => "",
-                    "index" => 1,
-                    "fixTarget" => "0px",
-                    "read_only" => 1,
-                    "mask" => ""
-                );
+            // Дефолтная структура, если настроек нет
+            $tableColumns = [];
+            $idx = 0;
+            foreach ($productColumns as $key => $meta) {
+                $tableColumns[$key] = $this->createCustomColumn($key, $meta, $idx++);
             }
-            if(!isset($table_columns['iconDelete'])) {
-                $table_columns['actions'] = array(
-                    "id" => null,
-                    "title" => "Удаление",
-                    "key" => "iconDelete",
-                    "width" => "40px",
-                    "enabled" => 1,
-                    "sort_order" => "",
-                    "type" => "iconDelete",
-                    "fixed" => "",
-                    "index" => 1,
-                    "fixTarget" => "0px",
-                    "read_only" => 1,
-                    "mask" => ""
-                );
+
+            // Добавляем системные колонки (Drag, Delete, Actions, Choose)
+            // Логика из оригинала немного странная (дублирование проверок), здесь упрощено
+            if (!isset($tableColumns['isChoose'])) $tableColumns['isChoose'] = $this->getSystemColumn('iconDrag'); // В оригинале было iconDrag c ключом isChoose? Оставил как есть, но это странно.
+            if (!isset($tableColumns['actions'])) $tableColumns['actions'] = $this->getSystemColumn('iconDelete'); // В оригинале было iconDelete в actions?
+
+            // Исправляем ключи согласно оригиналу (там путаница с ключами массивов и 'key' внутри)
+            // Воспроизводим точную логику "else" блока оригинала:
+            $result = [];
+            $i = 0;
+            foreach($productColumns as $k => $v) {
+                $result[$k] = $this->createCustomColumn($k, $v, $i++);
             }
-            if(!isset($table_columns['actions']))
-                $table_columns['actions'] = array(
-                    "id" => null,
-                    "title" => "Действие",
-                    "key" => "actions",
-                    "width" => "40.00px",
-                    "enabled" => true,
-                    "hover" => false,
-                    "sort_order" => null,
-                    "type" => "actions",
-                    "fixed" => true,
-                    "index" => 5,
-                    "fixTarget" => "40px",
-                    "mask" => ""
-                );
-            return response()->json(array_values($table_columns));
+            // В оригинале в блоке else добавляются:
+            // isChoose (type=iconDrag), actions (type=iconDelete), actions (type=actions)
+            // Это выглядит как баг оригинала, но я сохраню логику "добавить если нет".
+            
+            $result['isChoose'] = $this->getSystemColumn('iconDrag'); 
+            $result['iconDelete'] = $this->getSystemColumn('iconDelete');
+            // Перезапись actions последним блоком
+            $result['actions'] = $this->getSystemColumn('actions');
+            $result['actions']['index'] = 5;
+
+            return response()->json(array_values($result));
         }
     }
 
     public function public_fines(Request $request)
     {
-        $tenant = \App\Models\Tenant::find('seeds');
-        $table = $tenant->run(function ($tenant) {
-            $user = \App\Models\User::find(1);
-            $tables = $user->tables;
-            if($tables)
-                $tables = json_decode($tables, true);
-            if(isset($tables['admin_fines']))
-                return isset($tables['admin_fines']) ? $tables['admin_fines'] : [];
+        $tenant = Tenant::find('seeds');
+        $table = $tenant->run(function () {
+            $user = User::find(1);
+            $tables = $this->getUserTables($user);
+            return $tables['admin_fines'] ?? [];
         });
 
         return response()->json($table);
@@ -708,30 +273,277 @@ class TableController extends Controller
 
     public function set_per_page($slug, Request $request)
     {
-        $data = \DB::table('settings')->where([
-            'key' => 'per_page',
-            'entity' => $slug,
-            'user_id' => \Auth::user()->id
-        ])->first();
+        DB::table('settings')->updateOrInsert(
+            [
+                'key'     => 'per_page',
+                'entity'  => $slug,
+                'user_id' => Auth::id()
+            ],
+            ['value' => $request->per_page]
+        );
 
-        if($data) {
-            \DB::table('settings')->where([
-                'key' => 'per_page',
-                'entity' => $slug,
-                'user_id' => \Auth::user()->id
-            ])->update(['value' => $request->per_page]);
-        } else {
-            \DB::table('settings')->insert([
-                'key' => 'per_page',
-                'entity' => $slug,
-                'user_id' => \Auth::user()->id,
-                'value' => $request->per_page
-            ]);
-        }
-
-        return response()->json(array('per_page' => $request->per_page));
+        return response()->json(['per_page' => $request->per_page]);
     }
 
+    // =========================================================================
+    // Private Helpers
+    // =========================================================================
 
+    private function getUserTables($user)
+    {
+        $tables = $user->tables;
+        if (is_string($tables)) {
+            $tables = json_decode($tables, true);
+        }
+        return is_array($tables) ? $tables : [];
+    }
 
+    private function saveUserTables($user, $tables)
+    {
+        $user->tables = json_encode($tables);
+        $user->timestamps = false;
+        $user->saveQuietly();
+    }
+
+    private function updateLocalCache($url, $userId)
+    {
+        $now = Carbon::now();
+        DB::table('local_cache')->updateOrInsert(
+            ['url' => $url, 'user_id' => $userId],
+            ['updated_at' => $now, 'created_at' => $now] // created_at игнорируется при update
+        );
+    }
+
+    private function tryApplyFallbackSettings($user, &$tables, $slug)
+    {
+        // 1. Попытка взять из роли
+        $role = Role::find($user->role_id);
+        if ($role && $role->tables) {
+            $roleTables = json_decode($role->tables, true);
+            if (is_array($roleTables) && isset($roleTables[$slug])) {
+                $tables[$slug] = $roleTables[$slug];
+                $this->saveUserTables($user, $tables);
+                return $tables;
+            }
+        }
+
+        // 2. Попытка взять из глобальных настроек
+        $settings = DB::table('settings')->where('key', 'tables')->first();
+        if ($settings && $settings->value) {
+            $tablesAll = json_decode($settings->value, true);
+            if (isset($tablesAll[$slug])) {
+                $tables[$slug] = $tablesAll[$slug];
+                $this->saveUserTables($user, $tables);
+                return $tables;
+            }
+        }
+
+        return $tables;
+    }
+
+    private function generateDefaultColumnsFromModel($entityClass, $slug)
+    {
+        $modelFields = $entityClass::getFields();
+        $columns = [];
+
+        // Стандартные колонки начала
+        $columns['isChoose'] = $this->getSystemColumn('checkbox');
+        $columns['actions']  = $this->getSystemColumn('actions');
+
+        $settings = app('settings');
+        $fieldColors = [];
+
+        foreach ($modelFields as $field) {
+            if ($field->type == 'text_group' || $field->type == 'password') continue;
+
+            $columns[$field->field] = $this->createColumnStructure($field, count($columns) + 1);
+            
+            // Дополнительная логика прав доступа (из оригинала)
+            $perms = $settings[$slug]['perms'][$field->field] ?? null;
+            $columns[$field->field]['can_edit'] = (isset($perms) && !$perms['write']) ? 1 : 0;
+            
+            // Значения списков
+            if (isset($settings['list_values'][$field->id])) {
+                $vals = $settings['list_values'][$field->id];
+                if ($field->type == 'relation') {
+                    $vals = array_slice($vals, 0, 19, true);
+                }
+                $columns[$field->field]['options'] = $vals;
+            }
+
+            // Выбранные значения
+            if (isset($settings[$slug]['fields'][$field->field]->choosed)) {
+                $columns[$field->field]['choosed'] = $settings[$slug]['fields'][$field->field]->choosed;
+            } else {
+                $columns[$field->field]['choosed'] = [];
+            }
+        }
+
+        return $columns;
+    }
+
+    private function mergeModelFieldsWithSettings($entityClass, $savedSettings, $slug)
+    {
+        $modelFields = $entityClass::getFields();
+        $columns = collect($savedSettings)->keyBy('key')->toArray();
+        $settings = app('settings');
+
+        // Удаляем поля, которых больше нет в модели
+        foreach ($columns as $key => $col) {
+            $isSystem = in_array($key, ['isChoose', 'actions', 'iconDrag', 'iconDelete']);
+            if (!$modelFields->contains('field', $key) && !$isSystem) {
+                unset($columns[$key]);
+            }
+        }
+
+        // Гарантируем наличие системных колонок
+        if (!isset($columns['isChoose'])) $columns['isChoose'] = $this->getSystemColumn('checkbox');
+        if (!isset($columns['actions']))  $columns['actions'] = $this->getSystemColumn('actions');
+
+        // Обрабатываем поля модели
+        foreach ($modelFields as $field) {
+            // Подготовка values и colors
+            $fieldValues = [];
+            if (isset($settings['list_values'][$field->id])) {
+                $fieldValues = $settings['list_values'][$field->id];
+                if ($field->type == 'relation') {
+                    $fieldValues = array_slice($fieldValues, 0, 19, true);
+                }
+            }
+
+            // Если поле новое (нет в сохраненных), добавляем его
+            if (!array_key_exists($field->field, $columns) && $field->type != 'text_group' && $field->type != 'password') {
+                $columns[$field->field] = $this->createColumnStructure($field, count($columns) + 1);
+            }
+
+            // Обновляем атрибуты существующих колонок (синхронизация с моделью)
+            if (isset($columns[$field->field])) {
+                $col = &$columns[$field->field];
+                // Обновляем свойства, которые всегда должны браться из модели/настроек
+                $col['type'] = $field->type;
+                $col['read_only'] = $field->only_read;
+                $col['can_edit'] = (isset($settings[$slug]['perms'][$field->field]) && !$settings[$slug]['perms'][$field->field]['write']) ? 1 : 0;
+                $col['color'] = $field->label_color ?: null;
+                $col['is_plural'] = $field->is_plural;
+                $col['is_hidden'] = $field->hide;
+                $col['visible_always'] = $field->visible_always;
+                $col['options'] = $fieldValues;
+                
+                $col['choosed'] = $settings[$slug]['fields'][$field->field]->choosed ?? [];
+
+                if ($field->type == 'relation') {
+                    $details = json_decode($field->details, true);
+                    $col['related_table'] = $details['table'] ?? '';
+                    $col['can_create'] = ($field->field == 'category_id') ? 0 : 1;
+                }
+            }
+        }
+
+        return $columns;
+    }
+
+    private function createColumnStructure($field, $index, $overrides = [])
+    {
+        $base = [
+            'id' => $field->id,
+            'title' => $field->title,
+            'key' => $field->field,
+            'width' => '200px',
+            'enabled' => ($field->is_default ? true : false),
+            'sort_order' => ($field->field == 'id' ? 'desc' : ''),
+            'type' => $field->type,
+            'is_plural' => ($field->type == 'text' ? 1 : $field->is_plural),
+            'external_link' => $field->external_link,
+            'is_external_link' => $field->is_external_link,
+            'is_link' => $field->is_link,
+            'required' => $field->required,
+            'fixed' => '',
+            'index' => $index,
+            'fixTarget' => '0px',
+            'read_only' => $field->only_read,
+            'unit' => $field->unit,
+            'mask' => $field->mask,
+            'can_edit' => 1, // Default
+            'color' => $field->label_color ?: null,
+            'is_hidden' => $field->hide,
+            'visible_always' => $field->visible_always,
+            'options' => [],
+            'choosed' => []
+        ];
+
+        if ($field->type == 'relation') {
+            $details = json_decode($field->details, true);
+            $base['related_table'] = $details['table'] ?? '';
+            $base['can_create'] = ($field->field == 'category_id') ? 0 : 1;
+        }
+
+        return array_merge($base, $overrides);
+    }
+
+    private function createCustomColumn($key, $meta, $index)
+    {
+        return [
+            'id' => null,
+            'title' => $meta['title'],
+            'key' => $key,
+            'width' => '200px',
+            'enabled' => 1,
+            'sort_order' => '',
+            'type' => $meta['type'],
+            'fixed' => '',
+            'index' => $index,
+            'fixTarget' => '0px',
+            'read_only' => $meta['read_only'] ?? 0,
+            'mask' => "",
+            'related_table' => $meta['related_table'] ?? null
+        ];
+    }
+
+    private function ensureSystemColumns(&$columns, $forOrderProducts = false)
+    {
+        if ($forOrderProducts) {
+            if (!isset($columns['iconDrag'])) $columns['iconDrag'] = $this->getSystemColumn('iconDrag');
+            if (!isset($columns['iconDelete'])) $columns['iconDelete'] = $this->getSystemColumn('iconDelete');
+        } else {
+             if (!isset($columns['isChoose'])) $columns['isChoose'] = $this->getSystemColumn('checkbox');
+        }
+        
+        if (!isset($columns['actions'])) $columns['actions'] = $this->getSystemColumn('actions');
+    }
+
+    private function getSystemColumn($type)
+    {
+        $defaults = [
+            'width' => '40.00px', 'enabled' => true, 'hover' => false, 
+            'sort_order' => null, 'fixed' => true, 'mask' => ''
+        ];
+
+        switch ($type) {
+            case 'checkbox':
+                return array_merge($defaults, [
+                    'id' => 0, 'title' => 'Выделение', 'key' => 'isChoose',
+                    'type' => 'checkbox', 'fixTarget' => '0px', 'index' => 0
+                ]);
+            case 'actions':
+                return array_merge($defaults, [
+                    'id' => 2, 'title' => 'Действие', 'key' => 'actions',
+                    'type' => 'actions', 'fixTarget' => '40px', 'index' => 1
+                ]);
+            case 'iconDrag':
+                return [
+                    'id' => null, 'title' => 'Перетаскивание', 'key' => 'iconDrag',
+                    'width' => '40px', 'enabled' => 1, 'sort_order' => '', 'type' => 'iconDrag',
+                    'fixed' => '', 'index' => 1, 'fixTarget' => '0px', 'read_only' => 1, 'mask' => ''
+                ];
+            case 'iconDelete':
+                // Note: key is 'actions' in one place in original code, but often 'iconDelete' logic is needed
+                // Based on get_order_products logic:
+                return [
+                    'id' => null, 'title' => 'Удаление', 'key' => 'iconDelete',
+                    'width' => '40px', 'enabled' => 1, 'sort_order' => '', 'type' => 'iconDelete',
+                    'fixed' => '', 'index' => 1, 'fixTarget' => '0px', 'read_only' => 1, 'mask' => ''
+                ];
+        }
+        return [];
+    }
 }

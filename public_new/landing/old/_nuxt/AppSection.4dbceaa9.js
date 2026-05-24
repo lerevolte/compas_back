@@ -1,0 +1,1 @@
+import{s as t,b as n,f as c,aa as r}from"./entry.cf7462cf.js";const _={__name:"AppSection",setup(a,{expose:o}){const e=t();return o({sectionRef:e}),(s,p)=>(n(),c("section",{ref_key:"sectionRef",ref:e},[r(s.$slots,"default")],512))}};export{_};

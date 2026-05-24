@@ -21,6 +21,7 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
+        $schedule->command('gps:fetch')->everyMinute();
         //$schedule->command('gibdd:update')->everyMinute();
         $tenants = \App\Models\Tenant::get();
         //info('SCHEDULER');

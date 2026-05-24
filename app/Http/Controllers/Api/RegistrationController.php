@@ -32,7 +32,9 @@ class RegistrationController extends Controller
     public function __invoke(RegistrationRequest $request)
     {
         $data = $request->toArray();
+        info('beforecreate');
         $res = $this->tenantService->create($data);
+        info('aftercreate');
         $res['user_id'] = 1;
         $res['account_id'] = tenant('id');
 

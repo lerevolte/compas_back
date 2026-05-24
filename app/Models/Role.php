@@ -49,6 +49,19 @@ class Role extends \TCG\Voyager\Models\Role
         return $data;
     }
 
+    public function format()
+    {
+        $res = array(
+            'id' => $this->id,
+            'label' => $this->display_name,
+            'value' => $this->id,
+            'is_admin' => $this->is_admin,
+            'is_permanent' => $this->is_permanent
+        );
+
+        return $res;
+    }
+
     public function tabs()
     {
         return $this->belongsToMany(Tab::class, 'tab_roles');

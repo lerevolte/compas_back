@@ -85,7 +85,7 @@ class Filter extends Model
                                     'key' => $field_key,
                                     'type' =>  $fields_data[$field_key]->type,
                                     'options' => $options ? array_values($options) : array(),
-                                    'value' =>  $value['value']
+                                    'value' =>  isset($value['value']) ? $value['value'] : null
                                 );
                                 $fields[] = $fdata;
                             }

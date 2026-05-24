@@ -388,7 +388,7 @@ class RouteController extends Controller
         $settings = get_settings();
         $tenant = tenant('id');
 
-        $entity = \DB::table('data_types')->where('slug', 'tasks')->first();
+        $entity = \DB::table('data_types')->where('slug', 'logistic_tasks')->first();
         if(!$entity || !$entity->enable) {
             return response()->json(
                 array(
@@ -452,6 +452,43 @@ class RouteController extends Controller
         return response()->json($res);
     }
 
+    public function map_data($id, Request $request)
+    {
+        $route = Route::find($id);
+        $color = \DB::table('field_values')->where('id', $route->color)->first();
+        
+        if (!$route) {
+            return response()->json(['error' => 'Route not found'], 404);
+        }
+
+        $actualPath = [];
+        if ($route->car_id && $route->date) {
+            $factDate = \Carbon\Carbon::parse($route->date)->format('d.m.Y');
+            
+            $actualPath = \DB::table('car_points')
+                ->where('car_id', $route->car_id)
+                ->where('date', $factDate)
+                ->orderBy('time', 'asc')
+                ->get(['latitude', 'longitude', 'speed', 'time'])
+                ->map(function ($point) {
+                    return [
+                        'lat'   => (float) $point->latitude,
+                        'lon'   => (float) $point->longitude,
+                        'speed' => (float) $point->speed,
+                        'time'  => \Carbon\Carbon::parse($point->time)->format('H:i'),
+                    ];
+                })
+                ->toArray();
+        }
+
+        return response()->json([
+            'actual_path' => $actualPath,
+            'loading_time' => $route->loading_time ?? '07:00',
+            'color' => $color ? $color->color : '#8601ff',
+            'name' => $route->name,
+        ]);
+    }
+
     public function update_tasks($id, Request $request) 
     {
         $old_tasks = Route::find($id)->tasks;
@@ -481,7 +518,7 @@ class RouteController extends Controller
         $settings = get_settings();
         $tenant = tenant('id');
 
-        $entity = \DB::table('data_types')->where('slug', 'tasks')->first();
+        $entity = \DB::table('data_types')->where('slug', 'logistic_tasks')->first();
         if(!$entity || !$entity->enable) {
             return response()->json(
                 array(
@@ -543,6 +580,106 @@ class RouteController extends Controller
             'to' => count($new_tasks),
             'data' => $objects
         );
+
+        // Recalculate route statistics
+        $route = Route::find($id);
+
+        // Number of tasks
+        $route->number_tasks = count($new_tasks);
+
+        // Total weight from products
+        $totalWeight = 0;
+        foreach ($new_tasks as $task) {
+            $products = json_decode($task->products, true);
+            if (is_array($products)) {
+                foreach ($products as $product) {
+                    $totalWeight += ($product['weight'] ?? 0) * ($product['count'] ?? 1);
+                }
+            }
+        }
+        $route->weight = $totalWeight;
+
+        // Mileage and time — calculate via OSRM if tasks have addresses
+        $addresses = [];
+        $totalServiceTime = 0;
+        foreach ($new_tasks as $task) {
+            $address = json_decode($task->address, true);
+            if ($address && isset($address['coords']) && count($address['coords']) == 2) {
+                $addresses[] = $address['coords'][1] . ',' . $address['coords'][0];
+            }
+            $totalServiceTime += (int) ($task->service_time ?? 0); // service_time in minutes
+        }
+
+        if (count($addresses) >= 2) {
+            $coordsStr = implode(';', $addresses);
+            try {
+                $ch = curl_init();
+                curl_setopt($ch, CURLOPT_URL, "http://compas-osrm.ru:5000/route/v1/driving/{$coordsStr}?overview=false");
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+                $data = curl_exec($ch);
+                curl_close($ch);
+                
+                $osrm = json_decode($data, true);
+                if ($osrm && $osrm['code'] === 'Ok' && isset($osrm['routes'][0])) {
+                    $route->mileage = round($osrm['routes'][0]['distance'] / 1000, 1);
+                    $route->time = round($osrm['routes'][0]['duration'] / 60) + $totalServiceTime; // driving + service
+                }
+            } catch (\Exception $e) {
+                // OSRM unavailable — at least save service time
+                $route->time = $totalServiceTime;
+            }
+        } else {
+            $route->time = $totalServiceTime;
+        }
+
+        if (count($addresses) >= 2 && isset($osrm) && $osrm && $osrm['code'] === 'Ok') {
+            $legs = $osrm['routes'][0]['legs'] ?? [];
+            $loadingTime = $route->loading_time ?? '07:00';
+            $currentTime = \Carbon\Carbon::createFromFormat('H:i', $loadingTime);
+            
+            foreach ($new_tasks as $index => $task) {
+                if ($index > 0 && isset($legs[$index - 1])) {
+                    $travelMinutes = round($legs[$index - 1]['duration'] / 60);
+                    $currentTime->addMinutes($travelMinutes);
+                }
+                $task->plan_time = $currentTime->format('H:i');
+                $task->saveQuietly();
+                $serviceTime = (int) ($task->service_time ?? 0);
+                $currentTime->addMinutes($serviceTime);
+            }
+        }
+
+        // Fix tasks with null or deleted status — set default status
+        $statusField = collect(get_settings()['logistic_tasks']['fields'])->where('field', 'point_status')->first();
+        if ($statusField) {
+            $validStatuses = \DB::table('field_values')
+                ->where('field_id', $statusField->id)
+                ->orderBy('sort')
+                ->pluck('id')
+                ->toArray();
+            
+            if (count($validStatuses)) {
+                $defaultStatus = $validStatuses[0];
+                
+                foreach ($new_tasks as $task) {
+                    if (!$task->point_status || !in_array($task->point_status, $validStatuses)) {
+                        $task->point_status = $defaultStatus;
+                        $task->saveQuietly();
+                    }
+                }
+            }
+        }
+
+        $route->save();
+
         return response()->json($res);
+    }
+
+    public function task_filter($id, Request $request)
+    {
+        $route = Route::find($id);
+
+        return response()->json($route->getTaskFilters());
     }
 }

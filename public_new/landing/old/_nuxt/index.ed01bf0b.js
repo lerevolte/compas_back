@@ -1,0 +1,1 @@
+import{u as s,r as t,o,a as c,c as l,w as u,V as r,d as i,e as p,s as _}from"./entry.c2c1492d.js";const h={__name:"index",setup(d){const a=i(),n=s(),e=t(null);return o(()=>{e.value=`${a.public.baseURL}${n.path.replace("/landing","")}`,c({link:[{rel:"canonical",href:e.value}]})}),(f,m)=>(p(),l(r,null,{default:u(()=>[_(" Продукты ")]),_:1}))}};export{h as default};

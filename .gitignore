@@ -34,3 +34,61 @@ resources/
 storage/
 crest/
 bootstrap/
+
+# Dependencies
+/vendor
+/node_modules
+
+# Environment
+.env
+.env.backup
+.env.production
+.env.*.local
+
+# Laravel
+/storage/*.key
+/storage/pail
+/storage/app/public
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/testing/*
+/storage/framework/views/*
+/storage/logs/*
+!/storage/framework/cache/.gitignore
+!/storage/framework/sessions/.gitignore
+!/storage/framework/testing/.gitignore
+!/storage/framework/views/.gitignore
+!/storage/logs/.gitignore
+
+# Bootstrap cache
+/bootstrap/cache/*.php
+!/bootstrap/cache/.gitignore
+
+# Public — сюда Nuxt деплоится
+/public/*
+!/public/index.php
+!/public/.htaccess
+!/public/robots.txt
+!/public/favicon.ico
+
+# Тестирование и кеш
+.phpunit.result.cache
+.phpunit.cache
+/.phpactor.json
+Homestead.json
+Homestead.yaml
+
+# IDE
+/.idea
+/.vscode
+/.fleet
+/.zed
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code (опционально)
+.claude/settings.local.json

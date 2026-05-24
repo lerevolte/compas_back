@@ -32,7 +32,7 @@ class TabController extends Controller
         $sort = 0;
         $last_tabs = array();
         foreach($types as $model => $entity) {
-            if(!strstr($model,'TCG') && $entity->slug != 'roles' && isset($fields[$entity->id])) {
+            if(!strstr($model,'TCG') && $entity->slug != 'roles' && isset($fields[$entity->id]) && $entity->slug != 'analytics') {
                 if(isset($sidebar[$entity->slug])) {
                     $tabs[] = array(
                         'id' => $entity->id,

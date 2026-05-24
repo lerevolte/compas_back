@@ -343,9 +343,9 @@ Route::middleware([
 
         Route::post('files/store', [App\Http\Controllers\Api\FileController::class, 'store']);
 
-        Route::get('entities', [App\Http\Controllers\Api\EntityController::class, 'list']);
-        Route::post('entities', [App\Http\Controllers\Api\EntityController::class, 'update']);
-        Route::get('entities/compose', [App\Http\Controllers\Api\EntityController::class, 'compose_list']);
+        //Route::get('entities', [App\Http\Controllers\Api\EntityController::class, 'list']);
+        Route::put('entities', [App\Http\Controllers\Api\EntityController::class, 'update']);
+        Route::get('entities', [App\Http\Controllers\Api\EntityController::class, 'compose_list']);
         Route::get('entities/{slug}/menu', [App\Http\Controllers\Api\EntityController::class, 'get_menu']);
         Route::get('entities/{slug}/menu/reset', [App\Http\Controllers\Api\EntityController::class, 'reset_menu']);
         Route::put('entities/{slug}/menu', [App\Http\Controllers\Api\EntityController::class, 'set_menu']);
@@ -378,8 +378,10 @@ Route::middleware([
         Route::post('routes', [App\Http\Controllers\Api\RouteController::class, 'store'])->name('routes.store');
         Route::put('routes/batch', [App\Http\Controllers\Api\RouteController::class, 'batch'])->name('routes.batch');
         Route::delete('routes', [App\Http\Controllers\Api\RouteController::class, 'delete']);
+        Route::get('routes/{id}/map_data', [App\Http\Controllers\Api\RouteController::class, 'map_data'])->name('routes.map_data');
         Route::get('routes/{id}/tasks', [App\Http\Controllers\Api\RouteController::class, 'tasks'])->name('routes.tasks');
         Route::put('routes/{id}/tasks', [App\Http\Controllers\Api\RouteController::class, 'update_tasks'])->name('routes.update_tasks');
+        Route::get('routes/{id}/task_filter', [App\Http\Controllers\Api\RouteController::class, 'task_filter'])->name('routes.task_filter');
 
         Route::put(
             'logistic_tasks/{id}/set_products', 
@@ -399,15 +401,16 @@ Route::middleware([
             [App\Http\Controllers\Api\AnalyticsController::class, 'get_settings']
         );
 
-        Route::prefix('analytics/logistics')->group(function () {
-            Route::get('/car-count', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_car_count']);
-            Route::get('/order-stats', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_order_stats']);
-            Route::get('/route-mileage', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_route_mileage']);
-            Route::get('/route-duration', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_route_duration']);
-            Route::get('/reserve-for-delivery', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_reserve_for_delivery']);
-            Route::get('/delivery-price', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_delivery_price']);
-            Route::get('/total-weight', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_total_weight']);
-            Route::get('/all', [App\Http\Controllers\Api\AnalyticsController::class, 'get_all_logistics_analytics']);
+        Route::prefix('analytics')->group(function () {
+            Route::get('/logistics-car-count', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_car_count']);
+            Route::get('/logistics-order-stats', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_order_stats']);
+            Route::get('/logistics-route-mileage', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_route_mileage']);
+            Route::get('/logistics-route-duration', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_route_duration']);
+            Route::get('/logistics-reserve-for-delivery', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_reserve_for_delivery']);
+            Route::get('/logistics-delivery-price', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_delivery_price']);
+            Route::get('/logistics-total-weight', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_total_weight']);
+            Route::get('/logistics-all', [App\Http\Controllers\Api\AnalyticsController::class, 'get_all_logistics_analytics']);
+            Route::get('logistics-day-summary', [App\Http\Controllers\Api\AnalyticsController::class, 'logisticsDaySummary']);
         });
         
         Route::post('analytics/export/{type}', [App\Http\Controllers\Api\AnalyticsController::class, 'export']);
@@ -441,6 +444,7 @@ Route::middleware([
 ])->group(function () {
 
     Route::get('/test_api', function(Request $request) {
+        
         $startTotal = microtime(true);
         $client = new \GuzzleHttp\Client();
         try {

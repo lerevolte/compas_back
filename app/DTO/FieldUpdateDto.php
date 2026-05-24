@@ -1,10 +1,7 @@
 <?
 namespace App\DTO;
-
 final class FieldUpdateDto
 {
-    
-    
     public function __construct(
         public readonly ?string $title,
         public readonly ?int $set_color,
@@ -25,10 +22,9 @@ final class FieldUpdateDto
         public readonly ?array $subfields,
         public readonly array $roles_write,
         public readonly ?int $change_section,
-        public readonly ?int $sort
+        public readonly ?int $sort,
+        public readonly ?int $can_create = null,
     ) 
     {
     }
-    
 }
-

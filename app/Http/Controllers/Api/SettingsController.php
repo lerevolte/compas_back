@@ -82,7 +82,7 @@ class SettingsController extends Controller
         $timezones_data = array();
         foreach($timezones as $timezone) {
             $timezones_data[] = array(
-                'label' => array('text' => $timezone->name),
+                'label' => $timezone->name,
                 'value' => $timezone->value
             );
 

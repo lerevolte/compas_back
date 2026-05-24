@@ -7,6 +7,7 @@ use App\Providers\CRest;
 use App\Traits\FieldValue, App\Traits\ModelActions;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Auth;
+use App\Models\Route;
 
 class Task extends Model
 {
@@ -25,6 +26,43 @@ class Task extends Model
             if(!$model->user_id && $user)
                 $model->user_id = $user->id;
        });
+
+       // 1. Логика пересчета маршрута при сохранении задачи
+       static::saved(function($model) {
+            // Если изменился route_id (задача привязана к новому или отвязана)
+            if ($model->isDirty('route_id')) {
+                $newRouteId = $model->route_id;
+                $oldRouteId = $model->getOriginal('route_id');
+
+                // Пересчитываем СТАРЫЙ маршрут (если был)
+                if ($oldRouteId) {
+                    $oldRoute = Route::find($oldRouteId);
+                    if ($oldRoute) $oldRoute->recalculateTotals();
+                }
+
+                // Пересчитываем НОВЫЙ маршрут (если есть)
+                if ($newRouteId) {
+                    $newRoute = Route::find($newRouteId);
+                    if ($newRoute) $newRoute->recalculateTotals();
+                }
+            } else {
+                // Если маршрут тот же, но поменялись вес или объем, нужно обновить текущий маршрут
+                if ($model->route_id && ($model->isDirty('weight') || $model->isDirty('volume'))) {
+                    if ($model->route) {
+                        $model->route->recalculateTotals();
+                    }
+                }
+            }
+       });
+
+       // 1. Логика пересчета маршрута при удалении задачи
+       static::deleted(function($model) {
+           if ($model->route_id) {
+               $route = Route::find($model->route_id);
+               if ($route) $route->recalculateTotals();
+           }
+       });
+
        static::updating(function($model)
         {
 

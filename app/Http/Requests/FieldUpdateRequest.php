@@ -39,7 +39,8 @@ final class FieldUpdateRequest extends FormRequest
             $this->has('subfields') ? $this->get('subfields') : array(),
             $this->has('roles_write') ? $this->get('roles_write') : array(),
             $this->has('change_section') ? $this->get('change_section') : null,
-            $this->has('sort') ? $this->get('sort') : null
+            $this->has('sort') ? $this->get('sort') : null,
+            $this->has('can_create') ? (int)$this->get('can_create') : null,
         );
     }
 

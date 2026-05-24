@@ -27,7 +27,7 @@ class ExternalLinkController extends Controller
         ]);
 
         return response()->json([
-            'url' => route('external.show', $link->token),
+            'url' => "/api/external/{$link->token}",
             'token' => $link->token,
             'expires_at' => $link->expires_at,
             'max_visits' => $link->max_visits,

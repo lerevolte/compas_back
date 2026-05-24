@@ -1,0 +1,1 @@
+import{q as s,b as n,e as c,a9 as r}from"./entry.a072d2fd.js";const p={__name:"AppSection",setup(a,{expose:o}){const e=s();return o({sectionRef:e}),(t,f)=>(n(),c("section",{ref_key:"sectionRef",ref:e},[r(t.$slots,"default")],512))}},_=p;export{_ as A};

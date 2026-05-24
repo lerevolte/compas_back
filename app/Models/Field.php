@@ -567,6 +567,14 @@ class Field extends Model
             'dependency_fields' => isset($this->dependency_fields) ? json_decode($this->dependency_fields, true) : null
 
         );
+
+        if ($this->details) {
+            $details = json_decode($this->details, true);
+            if (isset($details['can_create'])) {
+                $data['can_create'] = $details['can_create'] ? 1 : 0;
+            }
+        }
+        
         return $data;
     }
 
@@ -615,7 +623,7 @@ class Field extends Model
                                 $v = "<span data-slug='$field->relation_table' data-id='$val'>$v</span>";
                             $res[$k] = $v;
                             $values_res[] = $val;
-                        } else {
+                        } elseif($field->relation_table) {
                             $new_ob = \DB::table($field->relation_table)->where('id', $val)->first();
                             if(!$new_ob) {
                                 unset($res[$k]);

@@ -502,6 +502,12 @@ class User extends \TCG\Voyager\Models\User
                 continue;
             }
             if(!in_array($item['id'], $sidebar_ids) || in_array($item['slug'], $blocked_pages)) {
+                if($item['slug'] == 'trash') {
+                    // info('$sidebar_ids');
+                    // info($sidebar_ids);
+                    // info('$blocked_pages');
+                    // info($blocked_pages);
+                }
                 unset($menu[$k]);
             }
             if(isset($sidebar_items[$item['id']]) && $sidebar_items[$item['id']]['enabled'] && isset($menu[$k])) {

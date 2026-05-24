@@ -467,7 +467,7 @@ class History extends Model
                             $title = preg_replace('/(<span.*?>).*?(<\/span>)/', '${1}'.($copied_elements[$changed_value]->name ? $copied_elements[$changed_value]->name : $copied_elements[$changed_value]->id).'$2', $title);
                     }
                 }
-                if($item->is_relation) {
+                if($item->is_relation && isset($settings[$model]['fields'][$item->field])) {
                     $field_id = $settings[$model]['fields'][$item->field]->id;
                     if($item->old_value) {
                         $old_value = explode(', ', $item->old_value);
