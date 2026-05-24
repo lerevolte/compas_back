@@ -1,1 +1,0 @@
-import{r as o,o as r,c as l,b as u,g as i,M as m,u as _}from"./CY283Igc.js";const f={__name:"[token]",emits:["openModal","closeDetail"],setup(c,{emit:d}){const a=o(),s=e=>{_({title:e?.title})};return(e,t)=>(r(),l("main",null,[u(m,{id:i(a).params.token,slug:null,is_external:!0,onUpdateMetaHeader:t[0]||(t[0]=n=>s(n))},null,8,["id"])]))}};export{f as default};

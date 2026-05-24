@@ -1,1 +1,0 @@
-import"./entry.9a6ae83b.js";const o=""+globalThis.__publicAssetsURL("tariffs/program.webp");export{o as _};

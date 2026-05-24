@@ -1,1 +1,0 @@
-import{W as e,Y as t}from"./entry.87b968d0.js";const r=e("finesStore",{state:()=>({fields:null,fines:[],tableSettings:null}),persist:{storage:t.localStorage},actions:{}});export{r as u};

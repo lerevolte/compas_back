@@ -1,6 +1,0 @@
-const List = ".docs{margin-bottom:100px}.docs h1{margin-bottom:30px}.docs__list{display:grid;grid-gap:20px;grid-template-columns:repeat(auto-fit,263px)}.docs__item{background-color:#fff;border:1px solid #e2e2e2;border-radius:10px;display:flex;flex-direction:column;padding:25px 15px}.docs__title{color:#1253a2;font-weight:600;margin-bottom:15px}.docs__desc{flex:1;font-size:16px;margin-bottom:30px}.docs__footer{font-size:14px}.docs__subtitle{color:#8f8f8f;margin-bottom:5px}";
-
-const indexStyles_a620eebd = [List];
-
-export { indexStyles_a620eebd as default };
-//# sourceMappingURL=index-styles.a620eebd.mjs.map

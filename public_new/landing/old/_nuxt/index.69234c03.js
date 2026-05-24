@@ -1,1 +1,0 @@
-import{o,a as e,b as s,c as a,_ as r}from"./entry.331c7686.js";const d={__name:"index",setup(n){return o(()=>{document.body.classList.add("error")}),e(()=>{document.body.classList.remove("error")}),(t,c)=>(s(),a(r))}};export{d as default};

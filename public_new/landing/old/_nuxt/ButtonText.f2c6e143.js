@@ -1,1 +1,0 @@
-import{r as n,e as s,g as r,af as a}from"./entry.c2c1492d.js";const c={__name:"ButtonText",setup(u,{expose:e}){const t=n(null);return e({buttonTextRef:t}),(o,f)=>(s(),r("div",{class:"button-text",ref_key:"buttonTextRef",ref:t},[a(o.$slots,"default")],512))}},x=c;export{x as B};

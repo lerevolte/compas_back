@@ -1,40 +1,3 @@
-/vendor/
-node_modules/
-npm-debug.log
-yarn-error.log
-
-# Laravel 4 specific
-bootstrap/compiled.php
-app/storage/
-
-
-public/
-
-# Laravel 5 & Lumen specific with changed public path
-public_html/storage
-public_html/hot
-
-storage/*.key
-.env
-Homestead.yaml
-Homestead.json
-/.vagrant
-.phpunit.result.cache
-
-/storage/pail
-.env.backup
-.env.production
-.phpactor.json
-auth.json
-firebase.json
-
-# Ignored directories
-project/
-resources/
-storage/
-crest/
-bootstrap/
-
 # Dependencies
 /vendor
 /node_modules
@@ -44,8 +7,10 @@ bootstrap/
 .env.backup
 .env.production
 .env.*.local
+auth.json
+firebase.json
 
-# Laravel
+# Laravel storage
 /storage/*.key
 /storage/pail
 /storage/app/public
@@ -60,23 +25,36 @@ bootstrap/
 !/storage/framework/views/.gitignore
 !/storage/logs/.gitignore
 
-# Bootstrap cache
+# Bootstrap cache (но НЕ всю папку bootstrap/)
 /bootstrap/cache/*.php
 !/bootstrap/cache/.gitignore
 
-# Public — сюда Nuxt деплоится
-/public/*
-!/public/index.php
-!/public/.htaccess
-!/public/robots.txt
-!/public/favicon.ico
+# Public — гибрид с Nuxt
+# Игнорируем артефакты Nuxt-сборки, но оставляем Laravel-файлы и landing
+/public/_nuxt
+/public/index2.html
+/public/hot
+/public/build
+/public/auth
+/public/logistic
+/public/roles
+/public/profile
+/public/settings
+/public/analytics
+/public/tariffs
+/public/trash
+/public/users
+/public/external
 
 # Тестирование и кеш
 .phpunit.result.cache
 .phpunit.cache
 /.phpactor.json
+
+# Homestead/Vagrant
 Homestead.json
 Homestead.yaml
+/.vagrant
 
 # IDE
 /.idea
@@ -90,5 +68,5 @@ Homestead.yaml
 .DS_Store
 Thumbs.db
 
-# Claude Code (опционально)
-.claude/settings.local.json
+# Claude Code (личные настройки)
+.claude/settings.local.json/public_new/

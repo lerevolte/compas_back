@@ -1,1 +1,0 @@
-import{o as e,a as o,c as r,b as s,d as t}from"./entry.77f05093.js";const m={__name:"index",setup(a){return e(()=>{document.body.classList.add("error")}),o(()=>{document.body.classList.remove("error")}),(c,n)=>(s(),r(t))}};export{m as default};

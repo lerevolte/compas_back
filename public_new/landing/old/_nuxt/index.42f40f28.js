@@ -1,1 +1,0 @@
-import{u as o,r as s,o as c,a as t,b as r,c as u,d as l,e as i,g as p}from"./entry.e4838604.js";const g={__name:"index",setup(d){const a=l(),n=o(),e=s(null);return c(()=>{e.value=`${a.public.baseURL}${n.path.replace("/landing","")}`,t({link:[{rel:"canonical",href:e.value}]})}),r(()=>{}),(_,f)=>(i(),u(p))}};export{g as default};
