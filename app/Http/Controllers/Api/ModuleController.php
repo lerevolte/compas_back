@@ -177,11 +177,64 @@ class ModuleController extends Controller
         if(isset($data['fields']))
             $data = $data['fields'];
         foreach($data as $key => $param) {
+            if(!is_array($param)) continue;
             if(isset($param['related_table']) && $param['related_table'] == 'users') {
                 $data[$key]['value']['localOptions'] = $this->searchService->find(['q' => '', 'field_id' => 458]);
             } elseif(isset($param['related_table']) && $param['related_table'] == 'roles') {
                 $data[$key]['value']['localOptions'] = $this->searchService->find(['q' => '', 'field_id' => 2025]);
             }
+            // Поля настроек модулей должны быть редактируемыми. У части тенантов в БД
+            // лежит старый конфиг с can_edit=0/read_only=1 — нормализуем при чтении.
+            $data[$key]['can_edit'] = 1;
+            $data[$key]['read_only'] = 0;
+        }
+
+        // Нормализация конфига модуля «Логистика» для существующих тенантов:
+        // 1) переименовать legacy-ключ «email» → «main_city»
+        // 2) добавить отсутствующее поле «map_type»
+        if($slug === 'logistic') {
+            $hasMainCity = false;
+            $hasMapType = false;
+            foreach($data as $key => $param) {
+                if(!is_array($param)) continue;
+                if(($param['key'] ?? null) === 'email' && ($param['title'] ?? null) === 'Главный город') {
+                    $data[$key]['key'] = 'main_city';
+                    $data[$key]['type'] = 'address';
+                    $data[$key]['subtype'] = 'city';
+                    $hasMainCity = true;
+                }
+                if(($param['key'] ?? null) === 'main_city') {
+                    $hasMainCity = true;
+                    $data[$key]['type'] = 'address';
+                    if(!isset($data[$key]['subtype'])) $data[$key]['subtype'] = 'city';
+                }
+                if(($param['key'] ?? null) === 'map_type') {
+                    $hasMapType = true;
+                    $data[$key]['options'] = [
+                        ['label' => 'OpenStreetMap', 'value' => 'openstreet'],
+                        ['label' => 'Яндекс.Карты', 'value' => 'yandex'],
+                    ];
+                }
+            }
+            if(!$hasMapType) {
+                $data[] = [
+                    'id' => 2,
+                    'key' => 'map_type',
+                    'title' => 'Тип карты',
+                    'type' => 'select_dropdown',
+                    'value' => 'openstreet',
+                    'visible_always' => 1,
+                    'required' => 1,
+                    'read_only' => 0,
+                    'can_read' => 1,
+                    'can_edit' => 1,
+                    'options' => [
+                        ['label' => 'OpenStreetMap', 'value' => 'openstreet'],
+                        ['label' => 'Яндекс.Карты', 'value' => 'yandex'],
+                    ],
+                ];
+            }
+            $data = array_values($data);
         }
 
         return response()->json($data);
@@ -467,25 +520,64 @@ class ModuleController extends Controller
                 )
             );
         $config = json_decode($local_module->config, true);
+
+        // Алиасы legacy-ключей. Для модуля Logistic ключ «email» исторически
+        // использовался для поля «Главный город» — теперь это «main_city».
+        $keyAliases = [];
+        if($slug === 'logistic') {
+            $keyAliases['email'] = 'main_city';
+            $keyAliases['main_city'] = 'email';
+        }
+        $matchesKey = function($fieldKey, $reqKey) use ($keyAliases) {
+            if($fieldKey === $reqKey) return true;
+            return isset($keyAliases[$fieldKey]) && $keyAliases[$fieldKey] === $reqKey;
+        };
+
+        $applyValue = function(&$config, $path, $new_value) {
+            // $path: ['fields', $k] | [$k]
+            $ref = &$config;
+            foreach($path as $p) $ref = &$ref[$p];
+            if(isset($ref['value']) && is_array($ref['value']) && isset($ref['value']['value'])) {
+                $ref['value']['value'] = $new_value;
+            } else {
+                $ref['value'] = $new_value;
+            }
+        };
+
         if(isset($config['fields'])) {
+            // Гарантируем наличие поля map_type для логистики, если конфиг старый.
+            if($slug === 'logistic') {
+                $hasMapType = false;
+                foreach($config['fields'] as $param) {
+                    if(is_array($param) && ($param['key'] ?? null) === 'map_type') $hasMapType = true;
+                }
+                if(!$hasMapType) {
+                    $config['fields'][] = ['key' => 'map_type', 'value' => 'openstreet'];
+                }
+            }
             foreach($config['fields'] as $k => $param) {
+                if(!is_array($param) || !isset($param['key'])) continue;
                 foreach($request->all() as $key => $new_value) {
-                    if($param['key'] == $key) {
-                        if(isset($config['fields'][$k]['value']['value']))
-                            $config['fields'][$k]['value']['value'] = $new_value;
-                        else
-                            $config['fields'][$k]['value'] = $new_value;
+                    if($matchesKey($param['key'], $key)) {
+                        $applyValue($config, ['fields', $k], $new_value);
                     }
                 }
             }
         } else {
+            if($slug === 'logistic') {
+                $hasMapType = false;
+                foreach($config as $param) {
+                    if(is_array($param) && ($param['key'] ?? null) === 'map_type') $hasMapType = true;
+                }
+                if(!$hasMapType) {
+                    $config[] = ['key' => 'map_type', 'value' => 'openstreet'];
+                }
+            }
             foreach($config as $k => $param) {
+                if(!is_array($param) || !isset($param['key'])) continue;
                 foreach($request->all() as $key => $new_value) {
-                    if($param['key'] == $key) {
-                        if(isset($config[$k]['value']['value']))
-                            $config[$k]['value']['value'] = $new_value;
-                        else
-                            $config[$k]['value'] = $new_value;
+                    if($matchesKey($param['key'], $key)) {
+                        $applyValue($config, [$k], $new_value);
                     }
                 }
             }

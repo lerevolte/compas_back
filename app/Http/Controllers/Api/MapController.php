@@ -83,8 +83,16 @@ class MapController extends Controller
             }
         } else {
             $fields = array("query" => $address, "count" => 5);
+            // Ограничение по типу административной единицы (например ?restrict=city).
+            if ($request->restrict) {
+                $fields = array_merge($fields, [
+                    'from_bound' => ['value' => $request->restrict],
+                    'to_bound' => ['value' => $request->restrict],
+                    'locations' => [['country' => '*']],
+                ]);
+            }
             $result = $dadata->suggest("address", $fields);
-            
+
             if (isset($result['suggestions'])) {
                 foreach ($result['suggestions'] as $item) {
                     $data[] = array(

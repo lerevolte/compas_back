@@ -97,18 +97,74 @@ routes/api.php + Modules/[Name]/Routes/api.php:
 - ВСЕ эндпоинты для фронта
 - Префикс /api автоматический
 
-## Команды
+## Команды (обновлено)
+
 - Тесты: `php artisan test` или `./vendor/bin/phpunit`
 - Линт: `./vendor/bin/pint` (если установлен)
-- Миграции: `php artisan migrate`, `php artisan migrate:rollback`
-- Миграции модуля: `php artisan module:migrate [Name]`
-- Список модулей: `php artisan module:list`
+- **Central-миграции**: `php artisan migrate`
+- **Tenant-миграции**: `php artisan tenants:migrate`
+- **Откат тенантских миграций**: `php artisan tenants:migrate-rollback`
+- **Список тенантов**: `php artisan tenants:list`
+- **Команда для конкретного тенанта**: `php artisan tenants:run [command] --tenants=UUID`
 - Локально: `php artisan serve`
 - Очереди: `php artisan queue:work`
-- Vite dev: `npm run dev`
-- Vite билд: `npm run build`
+- Vite dev: `npm run dev`, Vite билд: `npm run build`
 - Очистка: `php artisan optimize:clear`
 - Роуты: `php artisan route:list`
+
+## ⚠️ Multi-tenant архитектура (stancl/tenancy)
+
+Это multi-tenant приложение. КАЖДЫЙ клиент = отдельная БД (тенант).
+
+### Два набора миграций
+
+1. **database/migrations/** — central БД (одна на всё приложение)
+   Содержит: users (админы), tenants, domains, voyager-таблицы,
+   permissions, settings, общие справочники.
+
+2. **database/migrations/tenant/** — тенантские БД (одна на каждого клиента)
+   Содержит: бизнес-данные клиента — chat_messages, journal_records,
+   employees, cars, mileages, products, и т.д.
+
+### Команды миграций — РАЗНЫЕ для разных БД
+
+- `php artisan migrate` → ТОЛЬКО для central БД
+  Применяет миграции из database/migrations/ (не из tenant/)
+
+- `php artisan tenants:migrate` → для ВСЕХ тенантов
+  Применяет миграции из database/migrations/tenant/ ко всем существующим тенантам
+
+- `php artisan tenants:migrate --tenants=UUID` → для одного тенанта
+
+- Новый тенант создаётся через регистрацию портала, и при создании
+  автоматически применяются миграции из database/migrations/tenant/
+
+### ⚠️ Куда класть новые миграции
+
+Если фича работает с данными клиента (счета, журналы, машины, чаты,
+сотрудники, что угодно "про работу клиента") → миграция в
+**database/migrations/tenant/**
+
+Если фича работает с central-данными (новый тип админа, общий справочник,
+конфиг приложения) → миграция в **database/migrations/**
+
+В сомнениях — СПРОСИТЬ. По умолчанию: tenant.
+
+### ⚠️ deploy.sh и миграции
+
+В deploy.sh `php artisan migrate --force` гонит ТОЛЬКО central-миграции.
+Это безопасно, но обычно НЕ НУЖНО (central-миграции почти не меняются).
+
+Для тенантских миграций после деплоя — отдельная команда вручную:
+ssh server "php artisan tenants:migrate --force"
+
+Запускать только если знаешь, что добавил миграции в tenant/.
+
+### Модели тенантов
+
+При работе с tenant-данными в коде — нужно быть внутри tenant-контекста.
+Обычно это делается через middleware или через tenancy()->initialize($tenant).
+Без инициализации тенанта запросы к tenant-таблицам пойдут не туда или упадут.
 
 ## Конвенции (для НОВОГО кода)
 

@@ -59,10 +59,45 @@
             "can_edit": 1,
             "used_in_module": [],
             "choosed": [],
-            "key": "email",
+            "key": "main_city",
             "title": "Главный город",
             "type": "address",
-            "value": ""
+            "subtype": "city",
+            "value": null
+        },{
+            "id": 2,
+            "has_roles_read": 0,
+            "has_roles_write": 0,
+            "roles_read": [],
+            "roles_write": [],
+            "set_color": 0,
+            "visible_always": 1,
+            "is_hidden": 0,
+            "is_plural": 0,
+            "is_external_link": 0,
+            "required": 1,
+            "read_only": 0,
+            "permanent_required": 0,
+            "permanent_name": 0,
+            "is_permanent": null,
+            "color": null,
+            "unit": "",
+            "module": null,
+            "mask": null,
+            "show_file_name": 0,
+            "button_name": "",
+            "can_read": 1,
+            "can_edit": 1,
+            "used_in_module": [],
+            "choosed": [],
+            "key": "map_type",
+            "title": "Тип карты",
+            "type": "select_dropdown",
+            "value": "openstreet",
+            "options": [
+                {"label": "OpenStreetMap", "value": "openstreet"},
+                {"label": "Яндекс.Карты", "value": "yandex"}
+            ]
         }]
     },
     "entities": [{

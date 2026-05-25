@@ -20,8 +20,12 @@ echo "=== 4. Очистка кешей ==="
 ssh $SERVER "cd $SERVER_PATH && php artisan route:clear && php artisan config:clear && php artisan view:clear"
 
 echo ""
-echo "=== 5. Миграции (если есть новые) ==="
-ssh $SERVER "cd $SERVER_PATH && php artisan migrate --force"
+# === Миграции отключены в автодеплое ===
+# Это multi-tenant приложение.
+# - Central-миграции (database/migrations/) меняются редко — запускать руками:
+#   ssh root@178.20.41.51 "cd /home/admin/web/compas.pro/public_html && php artisan migrate --force"
+# - Tenant-миграции (database/migrations/tenant/) — отдельной командой:
+#   ssh root@178.20.41.51 "cd /home/admin/web/compas.pro/public_html && php artisan tenants:migrate --force"
 
 echo ""
 echo "=== 6. Restart queue worker ==="
