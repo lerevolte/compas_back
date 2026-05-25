@@ -190,49 +190,34 @@ class ModuleController extends Controller
         }
 
         // Нормализация конфига модуля «Логистика» для существующих тенантов:
-        // 1) переименовать legacy-ключ «email» → «main_city»
-        // 2) добавить отсутствующее поле «map_type»
+        // 1) поле «Главный город» — переименовать legacy-ключ «email» → «main_city», тип address с subtype city
+        // 2) поле «Используемая карта» — гарантировать ключ used_map и набор опций
         if($slug === 'logistic') {
-            $hasMainCity = false;
-            $hasMapType = false;
             foreach($data as $key => $param) {
                 if(!is_array($param)) continue;
-                if(($param['key'] ?? null) === 'email' && ($param['title'] ?? null) === 'Главный город') {
+                $title = $param['title'] ?? null;
+                $paramKey = $param['key'] ?? null;
+
+                if($title === 'Главный город' || $paramKey === 'main_city' || $paramKey === 'email') {
                     $data[$key]['key'] = 'main_city';
-                    $data[$key]['type'] = 'address';
-                    $data[$key]['subtype'] = 'city';
-                    $hasMainCity = true;
-                }
-                if(($param['key'] ?? null) === 'main_city') {
-                    $hasMainCity = true;
                     $data[$key]['type'] = 'address';
                     if(!isset($data[$key]['subtype'])) $data[$key]['subtype'] = 'city';
                 }
-                if(($param['key'] ?? null) === 'map_type') {
-                    $hasMapType = true;
+
+                if($title === 'Используемая карта' || $paramKey === 'used_map') {
+                    $data[$key]['key'] = 'used_map';
+                    $data[$key]['type'] = 'select_dropdown';
                     $data[$key]['options'] = [
-                        ['label' => 'OpenStreetMap', 'value' => 'openstreet'],
-                        ['label' => 'Яндекс.Карты', 'value' => 'yandex'],
+                        ['label' => 'OpenStreetMap', 'value' => 'OpenStreetMap'],
+                        ['label' => 'Яндекс.Карты', 'value' => 'Яндекс.Карты'],
                     ];
+                    // Старые значения вроде "Openstreet" / "Яндекс Карты" приводим к новому виду
+                    $val = $data[$key]['value'] ?? null;
+                    if(is_string($val)) {
+                        if(stripos($val, 'openstreet') !== false) $data[$key]['value'] = 'OpenStreetMap';
+                        elseif(stripos($val, 'яндекс') !== false) $data[$key]['value'] = 'Яндекс.Карты';
+                    }
                 }
-            }
-            if(!$hasMapType) {
-                $data[] = [
-                    'id' => 2,
-                    'key' => 'map_type',
-                    'title' => 'Тип карты',
-                    'type' => 'select_dropdown',
-                    'value' => 'openstreet',
-                    'visible_always' => 1,
-                    'required' => 1,
-                    'read_only' => 0,
-                    'can_read' => 1,
-                    'can_edit' => 1,
-                    'options' => [
-                        ['label' => 'OpenStreetMap', 'value' => 'openstreet'],
-                        ['label' => 'Яндекс.Карты', 'value' => 'yandex'],
-                    ],
-                ];
             }
             $data = array_values($data);
         }
@@ -544,17 +529,24 @@ class ModuleController extends Controller
             }
         };
 
-        if(isset($config['fields'])) {
-            // Гарантируем наличие поля map_type для логистики, если конфиг старый.
-            if($slug === 'logistic') {
-                $hasMapType = false;
-                foreach($config['fields'] as $param) {
-                    if(is_array($param) && ($param['key'] ?? null) === 'map_type') $hasMapType = true;
-                }
-                if(!$hasMapType) {
-                    $config['fields'][] = ['key' => 'map_type', 'value' => 'openstreet'];
+        // Перед сохранением в legacy-конфиге (без явного key) проставим key по title.
+        $titleToKey = [
+            'Главный город' => 'main_city',
+            'Используемая карта' => 'used_map',
+        ];
+        $normalizeKeys = function(&$items) use ($titleToKey) {
+            foreach($items as &$param) {
+                if(!is_array($param)) continue;
+                $title = $param['title'] ?? null;
+                if(!isset($param['key']) && $title && isset($titleToKey[$title])) {
+                    $param['key'] = $titleToKey[$title];
                 }
             }
+            unset($param);
+        };
+
+        if(isset($config['fields'])) {
+            if($slug === 'logistic') $normalizeKeys($config['fields']);
             foreach($config['fields'] as $k => $param) {
                 if(!is_array($param) || !isset($param['key'])) continue;
                 foreach($request->all() as $key => $new_value) {
@@ -564,15 +556,7 @@ class ModuleController extends Controller
                 }
             }
         } else {
-            if($slug === 'logistic') {
-                $hasMapType = false;
-                foreach($config as $param) {
-                    if(is_array($param) && ($param['key'] ?? null) === 'map_type') $hasMapType = true;
-                }
-                if(!$hasMapType) {
-                    $config[] = ['key' => 'map_type', 'value' => 'openstreet'];
-                }
-            }
+            if($slug === 'logistic') $normalizeKeys($config);
             foreach($config as $k => $param) {
                 if(!is_array($param) || !isset($param['key'])) continue;
                 foreach($request->all() as $key => $new_value) {
