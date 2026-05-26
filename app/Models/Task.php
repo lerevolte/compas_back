@@ -27,6 +27,21 @@ class Task extends Model
                 $model->user_id = $user->id;
        });
 
+       // Задача создаётся/привязывается к маршруту — подтягиваем дату
+       // маршрута в delivery_date. Срабатывает и на create, и на update,
+       // т.к. для нового объекта isDirty('route_id') == true. Обратная
+       // сторона уже работает в Route::boot (updating: isDirty('date') ->
+       // update всех logistic_tasks).
+       static::saving(function($model)
+       {
+            if ($model->isDirty('route_id') && $model->route_id) {
+                $route = Route::find($model->route_id);
+                if ($route && $route->date) {
+                    $model->delivery_date = $route->date;
+                }
+            }
+       });
+
        // 1. Логика пересчета маршрута при сохранении задачи
        static::saved(function($model) {
             // Если изменился route_id (задача привязана к новому или отвязана)
