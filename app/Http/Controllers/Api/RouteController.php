@@ -455,34 +455,19 @@ class RouteController extends Controller
     public function map_data($id, Request $request)
     {
         $route = Route::find($id);
-        $color = \DB::table('field_values')->where('id', $route->color)->first();
-        
+
         if (!$route) {
             return response()->json(['error' => 'Route not found'], 404);
         }
 
-        $actualPath = [];
-        if ($route->car_id && $route->date) {
-            $factDate = \Carbon\Carbon::parse($route->date)->format('d.m.Y');
-            
-            $actualPath = \DB::table('car_points')
-                ->where('car_id', $route->car_id)
-                ->where('date', $factDate)
-                ->orderBy('time', 'asc')
-                ->get(['latitude', 'longitude', 'speed', 'time'])
-                ->map(function ($point) {
-                    return [
-                        'lat'   => (float) $point->latitude,
-                        'lon'   => (float) $point->longitude,
-                        'speed' => (float) $point->speed,
-                        'time'  => \Carbon\Carbon::parse($point->time)->format('H:i'),
-                    ];
-                })
-                ->toArray();
-        }
+        $color = \DB::table('field_values')->where('id', $route->color)->first();
 
+        // actual_path исторически собирался из car_points (фактические треки
+        // от Pilot GPS). Таблицы car_points в текущем тенанте нет и логика
+        // не используется — убрана, чтобы перенос задачи в маршрут не падал
+        // с 1146 (см. FetchGpsData команду, если потребуется вернуть).
         return response()->json([
-            'actual_path' => $actualPath,
+            'actual_path' => [],
             'loading_time' => $route->loading_time ?? '07:00',
             'color' => $color ? $color->color : '#8601ff',
             'name' => $route->name,

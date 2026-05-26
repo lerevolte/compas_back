@@ -219,8 +219,9 @@ class SearchService
                             ? \Carbon\Carbon::parse($item->delivery_date)->format('Y-m-d')
                             : null;
 
-                        // Имя у задачи часто пустое — собираем человекочитаемый
-                        // лейбл из id и адреса, чтобы дропдаун был полезен.
+                        // У задачи часто пустой name — показываем адрес как
+                        // основной заголовок. ID отдельно рендерится фронтом
+                        // через label.id, дублировать его в text не нужно.
                         $addressText = '';
                         if ($item->address) {
                             $addr = is_string($item->address) ? json_decode($item->address, true) : $item->address;
@@ -230,10 +231,11 @@ class SearchService
                                 $addressText = $item->address;
                             }
                         }
-                        $displayParts = ['#'.$item->id];
-                        if ($addressText) $displayParts[] = $addressText;
-                        elseif ($name) $displayParts[] = $name;
-                        $item_data['label']['text'] = implode(' — ', $displayParts);
+                        if ($addressText) {
+                            $item_data['label']['text'] = $addressText;
+                        } elseif (!$name) {
+                            $item_data['label']['text'] = 'Задача';
+                        }
                     }
 
                     $data[] = $item_data;
