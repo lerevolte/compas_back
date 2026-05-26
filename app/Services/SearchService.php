@@ -114,6 +114,15 @@ class SearchService
                               ->orWhere("{$field_name}->value", 'LIKE', $q)
                               ->orWhere('id', (int)$params['q']);
                     })->whereNull('deleted_at')->where('is_active', 1)->limit(20)->get();
+                } elseif($params['entity'] == 'logistic_tasks') {
+                    // У задач логистики name часто пустой/служебный — ищем ещё
+                    // по адресу и по id, чтобы поиск был полезен для пользователя.
+                    $items = $entity_class::where(function($query) use ($field_name, $q, $params) {
+                        $query->where($field_name, 'LIKE', $q)
+                              ->orWhere("{$field_name}->value", 'LIKE', $q)
+                              ->orWhere("address->text", 'LIKE', $q)
+                              ->orWhere('id', (int)$params['q']);
+                    })->whereNull('deleted_at')->limit(20)->get();
                 } else {
                     $items = $entity_class::where(function($query) use ($field_name, $q, $params) {
                         $query->where($field_name, 'LIKE', $q)
@@ -200,7 +209,33 @@ class SearchService
                         $slug = json_decode($item->slug, true);
                         $item_data['label']['slug'] = is_array($slug) ? $slug['value'] : $item->slug;
                     }
-                    
+                    // Для задач логистики прокидываем route_id и delivery_date,
+                    // чтобы фронтовый поиск мог решить, куда вести по клику:
+                    // в /logistic на конкретную дату с авто-выбором маршрута,
+                    // на /logistic без маршрута, или в общий список с фильтром.
+                    if($params['entity'] == 'logistic_tasks') {
+                        $item_data['label']['route_id'] = $item->route_id;
+                        $item_data['label']['delivery_date'] = $item->delivery_date
+                            ? \Carbon\Carbon::parse($item->delivery_date)->format('Y-m-d')
+                            : null;
+
+                        // Имя у задачи часто пустое — собираем человекочитаемый
+                        // лейбл из id и адреса, чтобы дропдаун был полезен.
+                        $addressText = '';
+                        if ($item->address) {
+                            $addr = is_string($item->address) ? json_decode($item->address, true) : $item->address;
+                            if (is_array($addr) && isset($addr['text'])) {
+                                $addressText = $addr['text'];
+                            } elseif (is_string($item->address)) {
+                                $addressText = $item->address;
+                            }
+                        }
+                        $displayParts = ['#'.$item->id];
+                        if ($addressText) $displayParts[] = $addressText;
+                        elseif ($name) $displayParts[] = $name;
+                        $item_data['label']['text'] = implode(' — ', $displayParts);
+                    }
+
                     $data[] = $item_data;
                 }
             }
