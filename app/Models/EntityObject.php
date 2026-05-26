@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Hash;
 
 class EntityObject
 {
-    
+
 
     public static function detail($slug, $id, Request $request, $settings = null)
     {
@@ -94,8 +94,8 @@ class EntityObject
                         $current->policyholder_patronymic = $config_fields['policyholder_patronymic']['value'] ?? null;
                         $current->policyholder_email = $config_fields['policyholder_email']['value'] ?? null;
                         $current->policyholder_phone = $config_fields['policyholder_phone']['value'] ?? null;
-                        $current->policyholder_address = isset($config_fields['policyholder_address']['value']['text']) 
-                            ? json_encode($config_fields['policyholder_address']['value']) 
+                        $current->policyholder_address = isset($config_fields['policyholder_address']['value']['text'])
+                            ? json_encode($config_fields['policyholder_address']['value'])
                             : null;
                         $current->policyholder_passport_number = $config_fields['policyholder_passport_number']['value'] ?? null;
                         $current->policyholder_passport_series = $config_fields['policyholder_passport_series']['value'] ?? null;
@@ -130,7 +130,7 @@ class EntityObject
 
         if (ValueHelper::isJson($data['title'])) {
             $data['title'] = json_decode($data['title'], true);
-            $data['title'] = isset($data['title']['value']) 
+            $data['title'] = isset($data['title']['value'])
                 ? ['name' => $data['title']['value'], 'key' => 'name']
                 : ['name' => null, 'key' => 'name'];
         } else {
@@ -152,8 +152,8 @@ class EntityObject
         }
 
         $name = $data['title']['name'];
-        $data['header_title'] = $id 
-            ? "$name | $entity->title_plural | Compas.pro" 
+        $data['header_title'] = $id
+            ? "$name | $entity->title_plural | Compas.pro"
             : "Создание $entity->title_singular | $entity->title_plural | Compas.pro";
 
         if (isset($current->deleted_at) && $current->deleted_at) {
@@ -162,18 +162,18 @@ class EntityObject
 
         // Обработка полей модели
         foreach ($model_fields as $field) {
-            if (!array_key_exists($field->field, $fields_data) && 
-                (!isset($settings[$slug]['perms'][$field->field]['read']) || 
-                 $settings[$slug]['perms'][$field->field]['read'] || 
-                 $isAdmin)) 
+            if (!array_key_exists($field->field, $fields_data) &&
+                (!isset($settings[$slug]['perms'][$field->field]['read']) ||
+                 $settings[$slug]['perms'][$field->field]['read'] ||
+                 $isAdmin))
             {
                 if ($field->type == 'relation' && $field->relation_table && !$settings['models'][$field->relation_table]->enable) {
                     continue;
                 }
 
                 $val = (string)($current->{$field->field} ?? '');
-                $field_value = ValueHelper::isJson($val) && $field->field != 'products' && is_array(json_decode($val, true)) 
-                    ? json_decode($val, true) 
+                $field_value = ValueHelper::isJson($val) && $field->field != 'products' && is_array(json_decode($val, true))
+                    ? json_decode($val, true)
                     : $val;
 
                 if ($field->type == 'relation' && $field->is_plural && $field->relation_table) {
@@ -184,7 +184,7 @@ class EntityObject
 
                 $fields_data[$field->field] = $settings[$slug]['field_data'][$field->field];
                 $fields_data[$field->field]['can_read'] = $settings[$slug]['perms'][$field->field]['read'] || $isAdmin ? 1 : 0;
-                $fields_data[$field->field]['can_edit'] = isset($data['deleted_at']) || $field->only_read || 
+                $fields_data[$field->field]['can_edit'] = isset($data['deleted_at']) || $field->only_read ||
                     !$settings[$slug]['perms'][$field->field]['write'] && !$isAdmin ? 0 : 1;
                 if ($slug == 'logistic_tasks' && $field->field == 'delivery_date' && $current->route_id) {
                     $fields_data[$field->field]['can_edit'] = 0;
@@ -193,8 +193,6 @@ class EntityObject
                 if ($request->is_copy) {
                     if ($field->field == 'created_at') {
                         $field_value = \Carbon\Carbon::now();
-                    } elseif ($field->field == 'name') {
-                        $field_value = null;
                     } elseif ($field->field == 'id' || $field->field == 'updated_at') {
                         $field_value = null;
                     } elseif ($field->field == 'user_id' && $isAuthenticated) {
@@ -242,7 +240,7 @@ class EntityObject
                     );
                     $fields_data[$field->field]['value']['localOptions'] = array($list_values[$field_value]);
                     $fields_data[$field->field]['value']['value'] = array($list_values[$field_value]['value']);
-                    
+
                 } elseif($field->type == 'relation') {
                     $fields_data[$field->field]['value'] = array(
                         'value' => array(),
@@ -256,7 +254,7 @@ class EntityObject
                     $fields_data[$field->field]['can_create'] = 1;
 
                     if(isset($permissions_all[$settings['models'][$field->relation_table]->id]['create_p']) && !$isAdmin)
-                        
+
                         $fields_data[$field->field]['can_create'] = $permissions_all[$settings['models'][$field->relation_table]->id]['create_p'] == 'N' ? 0 : 1;
 
                 }
@@ -307,7 +305,7 @@ class EntityObject
                                     'sort' => $option->sort
                                 );
                             }
-                            
+
                         }
                     } else {
                         if($field->type == 'relation') {
@@ -354,13 +352,13 @@ class EntityObject
                         } else {
                             $subfield_data = $settings[$slug]['field_data'][$subfield->field];
                         }
-                        
+
                         $subfield_data['can_read'] = $settings[$slug]['perms'][$subfield->field]['read'] || $isAdmin ? 1 : 0;
                         $subfield_data['can_edit'] = $subfield->only_read || !$settings[$slug]['perms'][$subfield->field]['write'] && !$isAdmin ? 0 : 1;
                         if(!$id && $permissions['create_p'] == 'Y' && $field->field == 'user_id' && !$isAdmin) {
                             $subfield_data['can_edit'] = 0;
                         }
-                        if($id && $permissions['update_p'] == 'Y' && \Auth::user() && $current->user_id != \Auth::user()->id && !$isAdmin && $slug != 'users' && \Auth::user() && \Auth::user()->id != $id || 
+                        if($id && $permissions['update_p'] == 'Y' && \Auth::user() && $current->user_id != \Auth::user()->id && !$isAdmin && $slug != 'users' && \Auth::user() && \Auth::user()->id != $id ||
                             $id && $permissions['update_p'] == 'N' && !$isAdmin) {
                                 $subfield_data['can_edit'] = 0;
                         }
@@ -369,7 +367,7 @@ class EntityObject
                         if($subfield->type == 'relation' && $subfield->is_plural && $subfield->relation_table) {
                             $relation_table = $subfield->relation_table;
                             $field_value = $current->{$relation_table}->pluck('id')->toArray();
-                            
+
                         }
                         $subfield_data['value'] = $field_value;
                         // if($subfield->type == 'relation')
@@ -397,14 +395,14 @@ class EntityObject
                             );
                             $subfield_data['value']['localOptions'] = array($list_values[$field_value]);
                             $subfield_data['value']['value'] = array($list_values[$field_value]['value']);
-                            
+
                         } elseif($subfield->type == 'relation') {
                             $subfield_data['value'] = array(
                                 'value' => array(),
                                 'localOptions' => array()
                             );
                         }
-                        
+
                         $fields_data[$field->field]['fields'][] = $subfield_data;
                     }
                 }
@@ -434,8 +432,8 @@ class EntityObject
                 // Обработка полей секции
                 if ($section->fields && count($section->fields)) {
                     foreach ($section->fields as $field) {
-                        if (isset($settings[$slug]['perms'][$field->field]['read']) && 
-                            $settings[$slug]['perms'][$field->field]['read'] == 'disabled' && 
+                        if (isset($settings[$slug]['perms'][$field->field]['read']) &&
+                            $settings[$slug]['perms'][$field->field]['read'] == 'disabled' &&
                             !$isAdmin) {
                             continue;
                         }
@@ -458,8 +456,8 @@ class EntityObject
 
                         if ($subsection->fields && count($subsection->fields)) {
                             foreach ($subsection->fields as $subfield) {
-                                if (isset($settings[$slug]['perms'][$subfield->field]['read']) && 
-                                    $settings[$slug]['perms'][$subfield->field]['read'] == 'disabled' && 
+                                if (isset($settings[$slug]['perms'][$subfield->field]['read']) &&
+                                    $settings[$slug]['perms'][$subfield->field]['read'] == 'disabled' &&
                                     !$isAdmin) {
                                     continue;
                                 }
@@ -480,8 +478,8 @@ class EntityObject
         // Обработка скрытых полей
         $data['hidden_fields'] = [];
         foreach ($hidden_fields as $field) {
-            if (isset($settings[$slug]['perms'][$field->field]['read']) && 
-                $settings[$slug]['perms'][$field->field]['read'] == 'disabled' && 
+            if (isset($settings[$slug]['perms'][$field->field]['read']) &&
+                $settings[$slug]['perms'][$field->field]['read'] == 'disabled' &&
                 !$isAdmin) {
                 continue;
             }
@@ -498,7 +496,7 @@ class EntityObject
         $settings = app('settings');//\App\Models\Settings::get();
         $guides = Settings::getGuidesWithCache();
         $show_hints = Settings::hints();
-        
+
         $data = array(
             'title' => '',
             'deleted_at' => null,
@@ -511,7 +509,7 @@ class EntityObject
             'read' => array(),
             'write' => array(),
         );
-        
+
 
         $entity = $settings['models'][$slug];
         if(!$entity || !$entity->enable) {
@@ -588,7 +586,7 @@ class EntityObject
                 if($field->type == 'status')
                     $fields_values[$field->field] = \App\Models\Field::getStatusesVisible($field->id);
                 $field_colors[$field->field] = $field->label_color ? $field->label_color : null;
-                
+
                 $val = (string)$current->{$field->field};
                 $field_value = ValueHelper::isJson($val) && $field->field != 'products' && is_array(json_decode($val, true)) ? json_decode($val, true) : $val;
                 if($field->type == 'relation' && $field->is_plural && $field->relation_table) {
@@ -605,7 +603,7 @@ class EntityObject
                 if ($slug == 'logistic_tasks' && $field->field == 'delivery_date' && $current->route_id) {
                     $fields_data[$field->field]['can_edit'] = 0;
                 }
-                if($id && $permissions['update_p'] == 'Y' && $current->user_id != \Auth::user()->id && !\Auth::user()->is_admin && $slug != 'users' && \Auth::user()->id != $id || 
+                if($id && $permissions['update_p'] == 'Y' && $current->user_id != \Auth::user()->id && !\Auth::user()->is_admin && $slug != 'users' && \Auth::user()->id != $id ||
                     $id && $permissions['update_p'] == 'N' && !\Auth::user()->is_admin/* || $field->field == 'payment'*/) {
                         $fields_data[$field->field]['can_edit'] = 0;
                 }
@@ -661,7 +659,7 @@ class EntityObject
                     );
                     $fields_data[$field->field]['value']['localOptions'] = array($list_values[$field_value]);
                     $fields_data[$field->field]['value']['value'] = array($list_values[$field_value]['value']);
-                    
+
                 } elseif($field->type == 'relation') {
                     $fields_data[$field->field]['value'] = array(
                         'value' => array(),
@@ -682,7 +680,7 @@ class EntityObject
                     $fields_data[$field->field]['can_create'] = 1;
 
                     if(isset($permissions_all[$settings['models'][$field->relation_table]->id]['create_p']) && !\Auth::user()->is_admin)
-                        
+
                         $fields_data[$field->field]['can_create'] = $permissions_all[$settings['models'][$field->relation_table]->id]['create_p'] == 'N' ? 0 : 1;
                     // if(isset($permissions_all[$settings['models'][$field->relation_table]->id]['update_p']) && !\Auth::user()->is_admin)
                     //     $fields_data[$field->field]['can_edit'] = $permissions_all[$settings['models'][$field->relation_table]->id]['update_p'] == 'N' ? 0 : 1;
@@ -735,7 +733,7 @@ class EntityObject
                                     'sort' => $option->sort
                                 );
                             }
-                            
+
                         }
                     } else {
                         if($field->type == 'relation') {
@@ -755,7 +753,7 @@ class EntityObject
                             $simple_options[$k] = $option;
                             $values[] = $option;
                             // $values[] = array(
-                            //     'label' => [    
+                            //     'label' => [
                             //         'id' => $k,
                             //         'sort' => is_array($option) && isset($option['sort']) ? $option['sort'] : $k,
                             //         'file' => $avatar,
@@ -801,7 +799,7 @@ class EntityObject
                         if(!$id && $permissions['create_p'] == 'Y' && $field->field == 'user_id' && !\Auth::user()->is_admin) {
                             $subfield_data['can_edit'] = 0;
                         }
-                        if($id && $permissions['update_p'] == 'Y' && $current->user_id != \Auth::user()->id && !\Auth::user()->is_admin && $slug != 'users' && \Auth::user()->id != $id || 
+                        if($id && $permissions['update_p'] == 'Y' && $current->user_id != \Auth::user()->id && !\Auth::user()->is_admin && $slug != 'users' && \Auth::user()->id != $id ||
                             $id && $permissions['update_p'] == 'N' && !\Auth::user()->is_admin) {
                                 $subfield_data['can_edit'] = 0;
                         }
@@ -833,7 +831,7 @@ class EntityObject
                 $fields_data['payment']['value']['state'] = 1;
             // $fields_data['payment']['value']['value'] = round($fields_data['payment']['value']['value']*\Modules\Gibdd\Entities\Module::getPriceKoef());
         }
-        
+
         $fields_data_entity = array();
         foreach($entity_fields as $field) {
             if($field->module)
@@ -843,15 +841,15 @@ class EntityObject
             // $field_colors[$field->field] = $field->label_color ? $field->label_color : null;
             if(!array_key_exists($field->field, $fields_data_entity)) {
                 $fields_data_entity[$field->field] = Field::getDataByObject($field, $slug, $current);
-                
+
             }
         }
-        
-        
+
+
         $hidden_fields = \App\Models\Field::getHiddenFields($slug);
         $sections_1 = \App\Models\FieldSection::get($slug, 1, $module);
         $sections_2 = \App\Models\FieldSection::get($slug, 2, $module);
-        
+
         $products = array();
         if($slug == 'logistic_tasks' && $current->products)
             $products = json_decode($current->products, true);
@@ -871,7 +869,7 @@ class EntityObject
             $users_arr[$user->id] = $user;
         }
         $users = $users_arr;
-        
+
         foreach($sections_1 as $section) {
             $fields = array();
             $module_fields = $section->module_fields();
@@ -917,11 +915,11 @@ class EntityObject
             if(isset($settings[$slug]['perms'][$field->field]) && $settings[$slug]['perms'][$field->field]['read'] == 'disabled' && !\Auth::user()->isAdmin() || !isset($fields_data[$field->field]))
                         continue;
                 $data['hidden_fields'][] = $fields_data[$field->field];
-            
+
         }
 
         return $data;
-        
+
     }
 
     public static function list($slug, Request $request)
@@ -1026,7 +1024,7 @@ class EntityObject
                 }, SORT_NATURAL, ($sort_order == 'asc' ? false : true))->pluck('id')->toArray();
 
                 $sorted_values = implode(',', $sorted_ids);
-                
+
                 $paginator = $entity_class::orderByRaw("FIELD(id, $sorted_values)");
 
                 break;
@@ -1036,9 +1034,9 @@ class EntityObject
                     return $item['label']['text'];
                 });
                 $sorted_values = $sorted_values->pluck('value')->toArray();
-                
+
                 $sorted_values = implode(',', $sorted_values);
-                
+
                 $paginator = $entity_class::orderByRaw("FIELD($sort_field, $sorted_values) $sort_order");
                 break;
             } elseif($field->field == $sort_field && $field->type == 'file') {
@@ -1131,14 +1129,14 @@ class EntityObject
             $sort_field = 'id';
         }
 
-        
+
         $tabs = array();
         if($request->trashed) {
             $paginator = $paginator->onlyTrashed();
         }
         if($request->ids) {
             $paginator = $paginator->whereIntegerInRaw('id', $request->ids);
-        }   
+        }
         if($request->filter && is_array($request->filter)){
 
             if ($slug == 'logistic_tasks' && isset($request->filter['route_id'])) {
@@ -1216,7 +1214,7 @@ class EntityObject
                             $paginator = $paginator->whereJsonContains($field, (int)$val);
                         } else {
                             //->whereRaw("json_contains(`client_id`, ?)", [15])->whereRaw('json_contains(`tip_tk`, \'"'.$str.'"\')')
-                            
+
                             // Изменено на логику AND: запись должна содержать ВСЕ значения из переданного массива
                             if(is_array($val)) {
                                 foreach($val as $v) {
@@ -1242,7 +1240,7 @@ class EntityObject
                             if(isset($descendants) && is_array($descendants)) {
                                 $paginator = $paginator->whereIntegerInRaw($field, $descendants);
                             }
-                            
+
                         } else {
                             if(is_array($val))
                                 $paginator = $paginator->whereIntegerInRaw($field, $val);
@@ -1252,7 +1250,7 @@ class EntityObject
                                 //          $query->orWhere($column, 'like', "%{$q}%");
                                 //      }
                                 // });
-                                
+
                                 if($settings[$slug]['fields'][$field]->type == 'address')
                                     //$paginator = $paginator->whereJsonContains('address', ['text' => $val]);
                                     $paginator = $paginator->where("{$field}->text",'like', "%{$val}%");
@@ -1260,19 +1258,19 @@ class EntityObject
                                     //$paginator = $paginator->where($field, '%"text": "'.$val.'"%');
                                     //$paginator = $paginator->whereRaw('json_contains('.$field.', \'"'.$val.'"\')');
                                     //$paginator = $paginator->whereJsonContains($field, $val);
-                                elseif($settings[$slug]['fields'][$field]->type == 'text') 
+                                elseif($settings[$slug]['fields'][$field]->type == 'text')
                                     $paginator->where(function ($query) use ($val, $field) {
                                         $query->where($field, 'like', "%{$val}%")
                                           ->orWhere("{$field}->value", 'like', "%{$val}%");
                                     });
                                 else
                                     $paginator = $paginator->where($field, $val);
-                                
+
                             }
                         }
-                        
+
                     }
-                    
+
                 }
             }
         }
@@ -1280,7 +1278,7 @@ class EntityObject
         // Filter logistic_tasks by route requirements
         if ($slug == 'logistic_tasks' && $request->filter) {
             $filter = $request->filter;
-            
+
             // car_requirements: task's requirements must ALL be met by route's car
             if (isset($filter['car_requirements']) && is_array($filter['car_requirements'])) {
                 $reqs = array_filter($filter['car_requirements']);
@@ -1342,7 +1340,7 @@ class EntityObject
             //         $paginator = $paginator->forPage($request->page ?? 1, $request->per_page ?? 25);
             //     }
             // }
-            
+
             // // Volume filter (same logic if tasks have volume in products)
             // if (isset($filter['volume']) && is_array($filter['volume'])) {
             //     $vMin = $filter['volume'][0] ?? null;
@@ -1384,7 +1382,7 @@ class EntityObject
                                 $product_ids[] = $prod->id;
                                 $products[$product_k]['id'] = $prod->id;
                             }
-                            
+
                         } else {
                             $product_ids[] = $product['id'];
                         }
@@ -1412,14 +1410,14 @@ class EntityObject
                 }
             }
         };
-        
+
         if($request->q) {
 
             $q = $request->q;
             $search_columns = $model_fields->filter(function ($field) {
                                 return ($field->type != 'relation' && $field->type != 'status' && $field->type != 'text_group');
                             })->pluck('field')->toArray();
-            
+
 
             $paginator = $paginator->where(function ($query) use ($slug, $settings, $model_fields, $search_columns, $q) {
                 foreach ($search_columns as $column) {
@@ -1455,14 +1453,14 @@ class EntityObject
                     }
                 }
             });
-            
-            
+
+
         };
 
         if ($slug == 'logistic_tasks' && $request->filter && isset($request->filter['route_id']) && $request->filter['route_id'] != 'null') {
             $paginator = $paginator->reorder('sort', 'asc');
         }
-        
+
         $paginator = $paginator->paginate(function($total) use ($limit){
             if(!$limit){
                 return $total;
@@ -1470,7 +1468,7 @@ class EntityObject
             return $limit;
         });
         //$paginator = $paginator->paginate($limit);
-        
+
         $objects = array();
         $field_values = array();
         if($slug == 'fines_gibdd') {
@@ -1534,7 +1532,7 @@ class EntityObject
                         );
                         $data[$field->field]['localOptions'] = array($list_values[$field_value]);
                         $data[$field->field]['value'] = array($list_values[$field_value]['value']);
-                        
+
                     } elseif($field->type == 'relation') {
                         $data[$field->field] = array(
                             'value' => null,
@@ -1566,9 +1564,9 @@ class EntityObject
                     $data['payment']['state'] = 1;
                 //$data['payment']['value'] = round($data['payment']['value']*\Modules\Gibdd\Entities\Module::getPriceKoef());
             }
-            
+
             $objects[$item->id] = $data;
-            
+
         }
 
 
@@ -1593,7 +1591,7 @@ class EntityObject
                     'sort_order' => $sort_order
                 ];
             }
-            
+
             if(is_array($products)) {
                 foreach($products as $num => $product) {
                     if(isset($product['id']) && isset($objects[$product['id']])) {
@@ -1651,7 +1649,7 @@ class EntityObject
         $fields_data[$field->field]['guide'] = null;
         if(is_array($guides) && isset($guides['fields'][$slug][$field->field]) && $show_hints)
                     $fields_data[$field->field]['guide'] = $guides['fields'][$slug][$field->field];
-        
+
         $res = array(
             'count' => $paginator->count(),
             'current_page' => $paginator->currentPage(),
@@ -1699,15 +1697,15 @@ class EntityObject
         if(isset($fields['name'])) {
             $object->name = is_array($fields['name']) ? json_encode($fields['name'], JSON_UNESCAPED_UNICODE) : $fields['name'];
         }
-        
-        
+
+
         $history = new \App\Models\History(['entity' => $slug, 'entity_id' => $source->id, 'user_id' => \Auth::user()->id, 'event' => 'OBJECT_COPIED', 'text' => "Создана копия: <span data-slug='$slug' data-id='$object->id'>$object->name</span>", 'old_value' => $source->id, 'new_value' => $object->id]);
-        
+
         $history->saveQuietly();
 
         $history_items = \App\Models\History::getDataList($history_events);
         $history_response_events = array_merge($history_response_events, $history_items['fields']);
-        
+
         foreach($fields as $field => $value) {
             if($model_fields[$field]->type == 'relation' && $model_fields[$field]->is_plural && $model_fields[$field]->relation_table) {
                 $relation_table = $model_fields[$field]->relation_table;
@@ -1740,7 +1738,7 @@ class EntityObject
                 }
             }
         }
-        
+
         $fields['id'] = $object->id;
         $hobjects = \App\Models\History::saveForObject($slug, array($fields));
         $changed_fields = $hobjects['changed_fields'];
@@ -1759,7 +1757,7 @@ class EntityObject
         unset($fields['id']);
 
         foreach($fields as $field => $value) {
-            if (is_numeric($field)) 
+            if (is_numeric($field))
                 continue;
             if($model_fields[$field]->type == 'relation' && !$model_fields[$field]->is_plural && is_array($value))
                 $value = array_pop($value);
@@ -1785,20 +1783,20 @@ class EntityObject
                 foreach($new as $n_item) {
                     $related_rows[] = array('id' => $n_item, $model_fields[$field]->related_field => $object->id);
                 }
-                
+
                 $h = \App\Models\History::saveForObject($relation_table, $related_rows);
 
                 // if($slug == 'companies')
                 //     \DB::table($relation_table)->whereIntegerInRaw('id', $old_values)->update([$model_fields[$field]->related_field => null, 'choosed_at' => null]);
 
-                // if(is_array($old_values)) 
+                // if(is_array($old_values))
                 //     $only_new_values = array_diff($new_values, $old_values);
                 // foreach($only_new_values as $sort => $v) {
                 //     \DB::table($relation_table)->where('id', $v)->update([$model_fields[$field]->related_field => $object->id, 'choosed_at' => now()->addSeconds($sort)]);
                 // }
                 $object->load($relation_table);
-                
-                
+
+
             } elseif ($model_fields[$field]->type == 'relation' && $model_fields[$field]->field != 'user_id') {
                 $related_rows = array();
                 $relation_table = $model_fields[$field]->relation_table;
@@ -1815,7 +1813,7 @@ class EntityObject
                         $related_rows[] = array('id' => $object->{$model_fields[$field]->field}, $model_fields[$field]->related_field => $old_el_relations);
                     }
                 }
-                
+
                 if($value) {
                     $new_el_relations = $entity_relation_class::where('id',$value)->first()->{$slug}()->pluck('id')->toArray();
                     $new_el_relations[] = $object->id;
@@ -1824,9 +1822,9 @@ class EntityObject
                 $h = \App\Models\History::saveForObject($relation_table, $related_rows);
             }
 
-            
+
             if(!is_array($value) && is_array(json_decode($value, true))) {
-                
+
                 $object->{$field} = json_encode($value, JSON_UNESCAPED_UNICODE);
             } else {
                 $object->{$field} = $value;
@@ -1863,5 +1861,5 @@ class EntityObject
 
         return $data;
     }
-    
+
 }

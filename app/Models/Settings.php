@@ -598,8 +598,7 @@ class Settings extends Model
 		                        	// }
 		                        	$obj_arr = $object->toArray();
 
-		                        	$field_values[$field->id][$object->id] = array(
-		                    				'label' => [	
+		                        	$label = [
 												'id' =>	$object->id,
 												'sort' => $i,
 												'file' => $avatar,
@@ -607,7 +606,17 @@ class Settings extends Model
 												'field_id' => $field->id,
 												'color' => array_key_exists('color', $obj_arr) && !$object->color ? $object->getColor() : ($object->color ?? ''),
 												'text' => $name//.($last_name ? ' '.$last_name:''),
-											],
+											];
+											// Для товаров подкидываем цену/вес/количество — фронт
+											// (getRow в Body.vue) подхватывает их при выборе товара
+											// в таблице задачи логистики.
+											if(isset($details['table']) && $details['table'] === 'products') {
+												if(array_key_exists('price', $obj_arr)) $label['price'] = $object->price;
+												if(array_key_exists('weight', $obj_arr)) $label['weight'] = $object->weight;
+												if(array_key_exists('quantity', $obj_arr)) $label['count'] = $object->quantity;
+											}
+		                        	$field_values[$field->id][$object->id] = array(
+		                    				'label' => $label,
 											'value' => $object->id
 		                    			);
 		                        } elseif(isset($object->id)) {
