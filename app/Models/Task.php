@@ -169,12 +169,28 @@ class Task extends Model
     public function setProducts(array $products)
     {
         $this->products = json_encode($products);
+        // Пересчёт суммарных веса и объёма задачи из товаров.
+        // weight/volume у товара — на единицу, поэтому умножаем на count.
+        $totalWeight = 0;
+        $totalVolume = 0;
+        foreach ($products as $product) {
+            $count = isset($product['count']) ? (float)$product['count'] : 0;
+            $w = isset($product['weight']) ? (float)$product['weight'] : 0;
+            $v = isset($product['volume']) ? (float)$product['volume'] : 0;
+            $totalWeight += $count * $w;
+            $totalVolume += $count * $v;
+        }
+        $this->weight = $totalWeight;
+        $this->volume = $totalVolume;
+
         $objects = History::saveForObject(
-            $this->getTable(), 
+            $this->getTable(),
             array(
                 array(
                     'id' => $this->id,
-                    'products' => $this->products
+                    'products' => $this->products,
+                    'weight' => $this->weight,
+                    'volume' => $this->volume,
                 )
             )
         );

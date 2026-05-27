@@ -27,6 +27,7 @@ class TaskController extends Controller
                 'price' => $product['product_price'],
                 'count' => $product['product_count'],
                 'weight' => $product['product_weight'],
+                'volume' => $product['product_volume'] ?? 0,
                 'sum' => $product['product_sum'],
             );
         }
