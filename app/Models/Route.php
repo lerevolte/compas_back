@@ -26,6 +26,36 @@ class Route extends Model
             if(!$model->user_id && $user)
                 $model->user_id = $user->id;
 
+            // Подстраховка для CrudService.batch: при создании маршрута через
+            // /objects/routes/batch иногда первый Route::create(['name'=>''])
+            // не получает car_id/employee_id, и они подцепляются только
+            // последующим save(). Если в request пришли эти поля — заполним
+            // их прямо здесь, чтобы не зависеть от внешней логики.
+            $request = request();
+            if ($request) {
+                $extractId = function ($v) {
+                    if ($v === null || $v === '') return null;
+                    if (is_array($v)) {
+                        if (isset($v['value'])) return is_array($v['value']) ? ($v['value'][0] ?? null) : $v['value'];
+                        return $v[0] ?? null;
+                    }
+                    return $v;
+                };
+                // batch посылает {rows: [{car_id, employee_id, ...}]} — берём первую строку.
+                $rows = $request->input('rows');
+                $row = (is_array($rows) && count($rows)) ? $rows[0] : null;
+                if (!$model->car_id) {
+                    $car = $row && isset($row['car_id']) ? $extractId($row['car_id']) : null;
+                    if (!$car) $car = $extractId($request->input('car_id'));
+                    if ($car) $model->car_id = (int) $car;
+                }
+                if (!$model->employee_id) {
+                    $emp = $row && isset($row['employee_id']) ? $extractId($row['employee_id']) : null;
+                    if (!$emp) $emp = $extractId($request->input('employee_id'));
+                    if ($emp) $model->employee_id = (int) $emp;
+                }
+            }
+
             if (!$model->company_id) {
                 // 1. Пытаемся взять из сотрудника
                 if ($model->employee_id) {
