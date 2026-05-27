@@ -813,23 +813,25 @@ class Table
                     'is_another_title' => 0
                 );
             }
-            if(!isset($table_columns['iconDelete'])) {
-                $table_columns['actions'] = array(
-                    "id" => null,
-                    "title" => "Удаление",
-                    "key" => "iconDelete",
-                    "width" => "40px",
-                    "enabled" => 1,
-                    "sort_order" => "",
-                    "type" => "iconDelete",
-                    "fixed" => "",
-                    "index" => 1,
-                    "fixTarget" => "0px",
-                    "read_only" => 1,
-                    "mask" => "",
-                    'is_another_title' => 0
-                );
-            }
+            // Старая колонка iconDelete заменена на полноценную колонку «Действие» (actions)
+            // с двумя пунктами — Посмотреть и Удалить, как в остальных таблицах.
+            unset($table_columns['iconDelete']);
+            $table_columns['actions'] = array(
+                "id" => 2,
+                "title" => "Действие",
+                "key" => "actions",
+                "width" => "57px",
+                "enabled" => 1,
+                "hover" => false,
+                "sort_order" => null,
+                "type" => "actions",
+                "fixed" => true,
+                "index" => 1,
+                "fixTarget" => "40px",
+                "read_only" => 1,
+                "mask" => "",
+                'is_another_title' => 0
+            );
             $table_columns = array_values($table_columns);
 
             
