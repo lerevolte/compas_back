@@ -202,6 +202,17 @@ class ModuleController extends Controller
                     $data[$key]['key'] = 'main_city';
                     $data[$key]['type'] = 'address';
                     if(!isset($data[$key]['subtype'])) $data[$key]['subtype'] = 'city';
+                    // Legacy: value мог быть строкой "Москва" (старый text-конфиг).
+                    // Для address фронт ожидает {text, coords}, иначе валится option.label.text.
+                    $value = $data[$key]['value'] ?? null;
+                    if (is_string($value) && $value !== '') {
+                        $decoded = json_decode($value, true);
+                        if (is_array($decoded) && (isset($decoded['text']) || isset($decoded['coords']))) {
+                            $data[$key]['value'] = $decoded;
+                        } else {
+                            $data[$key]['value'] = ['text' => $value, 'coords' => null];
+                        }
+                    }
                 }
 
                 if($title === 'Используемая карта' || $paramKey === 'used_map') {
