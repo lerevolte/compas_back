@@ -73,6 +73,15 @@ class Route extends Model
                     }
                 }
             }
+
+            // Если пользователь не выбрал цвет маршрута — берём цвет машины.
+            // У route.color и car.color хранятся ID записей field_values
+            // (палитра у каждой сущности своя), поэтому ID напрямую переносить
+            // нельзя — создаём в field_values новую запись для палитры маршрутов
+            // с тем же hex-значением и подставляем её ID.
+            if (!$model->color && $model->car_id) {
+                $model->color = static::resolveColorFromCar((int) $model->car_id);
+            }
         });
 
         static::updating(function($model)
@@ -106,6 +115,57 @@ class Route extends Model
                 }
             }
         });
+    }
+
+    /**
+     * Получить цвет машины и завести соответствующую запись в палитре
+     * маршрутов (field_values для routes.color), вернуть её ID.
+     *
+     * Возвращает null, если у машины нет валидного цвета или у сущности
+     * routes не объявлено поле color — тогда оставляем route.color пустым.
+     */
+    protected static function resolveColorFromCar(int $carId): ?int
+    {
+        $car = Car::find($carId);
+        if (!$car || !$car->color) return null;
+
+        // car.color может быть либо ID записи field_values, либо сразу
+        // hex/линейным градиентом (старые/ручные значения).
+        $hex = null;
+        if (is_numeric($car->color)) {
+            $existing = \DB::table('field_values')->where('id', (int) $car->color)->first();
+            if ($existing && $existing->color) $hex = $existing->color;
+        } else {
+            $hex = (string) $car->color;
+        }
+        if (!$hex) return null;
+
+        // Поле color сущности routes
+        $routeColorField = \DB::table('data_rows')
+            ->where('field', 'color')
+            ->whereIn('data_type_id', function ($q) {
+                $q->select('id')->from('data_types')->where('slug', 'routes');
+            })
+            ->first();
+        if (!$routeColorField) return null;
+
+        $newId = \DB::table('field_values')->insertGetId([
+            'field_id'  => $routeColorField->id,
+            'color'     => $hex,
+            'file'      => null,
+            'value'     => '',
+            'sort'      => 0,
+            'is_hidden' => 1,
+        ]);
+
+        // Кэш статусов поля держится в memcached — сбрасываем, чтобы новая
+        // запись была видна в селекторе цветов на фронте без перезагрузки.
+        try {
+            $cacheName = tenant('id') . ':field-' . $routeColorField->id . '-statuses';
+            cache()->getMemcached()->delete($cacheName);
+        } catch (\Throwable $e) {}
+
+        return (int) $newId;
     }
 
     public function employee()
