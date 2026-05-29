@@ -466,10 +466,12 @@ class RouteController extends Controller
         // от Pilot GPS). Таблицы car_points в текущем тенанте нет и логика
         // не используется — убрана, чтобы перенос задачи в маршрут не падал
         // с 1146 (см. FetchGpsData команду, если потребуется вернуть).
+        // Дефолт #b6b6b6 — это первый «Не выбрано» из палитры маршрута,
+        // должен совпадать с фронтом (см. LogisticMap.vue / logisticClass.js).
         return response()->json([
             'actual_path' => [],
             'loading_time' => $route->loading_time ?? '07:00',
-            'color' => $color ? $color->color : '#8601ff',
+            'color' => $color ? $color->color : '#b6b6b6',
             'name' => $route->name,
         ]);
     }
