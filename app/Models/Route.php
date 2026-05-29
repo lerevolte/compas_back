@@ -121,23 +121,20 @@ class Route extends Model
      * Получить цвет машины и завести соответствующую запись в палитре
      * маршрутов (field_values для routes.color), вернуть её ID.
      *
+     * «Цвет машины», который видит пользователь, лежит в car.color_status
+     * (это ID записи field_values для статус-цвета машины). Поле car.color
+     * самостоятельно не заполняется и используется как запасной источник.
+     *
      * Возвращает null, если у машины нет валидного цвета или у сущности
      * routes не объявлено поле color — тогда оставляем route.color пустым.
      */
     protected static function resolveColorFromCar(int $carId): ?int
     {
         $car = Car::find($carId);
-        if (!$car || !$car->color) return null;
+        if (!$car) return null;
 
-        // car.color может быть либо ID записи field_values, либо сразу
-        // hex/линейным градиентом (старые/ручные значения).
-        $hex = null;
-        if (is_numeric($car->color)) {
-            $existing = \DB::table('field_values')->where('id', (int) $car->color)->first();
-            if ($existing && $existing->color) $hex = $existing->color;
-        } else {
-            $hex = (string) $car->color;
-        }
+        $hex = static::resolveHexFromCarColumn($car->color_status)
+            ?: static::resolveHexFromCarColumn($car->color);
         if (!$hex) return null;
 
         // Поле color сущности routes
@@ -148,6 +145,15 @@ class Route extends Model
             })
             ->first();
         if (!$routeColorField) return null;
+
+        // Если такая палитровая запись для маршрутов уже есть — переиспользуем,
+        // чтобы не плодить дубликаты в field_values при каждом создании маршрута.
+        $existingRouteValue = \DB::table('field_values')
+            ->where('field_id', $routeColorField->id)
+            ->where('color', $hex)
+            ->orderBy('id')
+            ->first();
+        if ($existingRouteValue) return (int) $existingRouteValue->id;
 
         $newId = \DB::table('field_values')->insertGetId([
             'field_id'  => $routeColorField->id,
@@ -166,6 +172,21 @@ class Route extends Model
         } catch (\Throwable $e) {}
 
         return (int) $newId;
+    }
+
+    /**
+     * Распаковать значение колонки car.color_status / car.color в hex.
+     * Может быть либо числовым ID записи field_values, либо уже строкой
+     * с hex/линейным градиентом.
+     */
+    protected static function resolveHexFromCarColumn($value): ?string
+    {
+        if ($value === null || $value === '') return null;
+        if (is_numeric($value)) {
+            $fv = \DB::table('field_values')->where('id', (int) $value)->first();
+            return $fv && $fv->color ? (string) $fv->color : null;
+        }
+        return (string) $value;
     }
 
     public function employee()
