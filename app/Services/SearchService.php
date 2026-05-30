@@ -219,22 +219,12 @@ class SearchService
                             ? \Carbon\Carbon::parse($item->delivery_date)->format('Y-m-d')
                             : null;
 
-                        // Заголовок поиска — НАЗВАНИЕ задачи (если есть),
-                        // иначе fallback на адрес/«Задача».
-                        if ($name) {
-                            $item_data['label']['text'] = $name;
-                        } else {
-                            $addressText = '';
-                            if ($item->address) {
-                                $addr = is_string($item->address) ? json_decode($item->address, true) : $item->address;
-                                if (is_array($addr) && isset($addr['text'])) {
-                                    $addressText = $addr['text'];
-                                } elseif (is_string($item->address)) {
-                                    $addressText = $item->address;
-                                }
-                            }
-                            $item_data['label']['text'] = $addressText ?: 'Задача';
-                        }
+                        // Заголовок поиска — ВСЕГДА название задачи (адрес
+                        // не показываем, пользователь хочет видеть имя).
+                        // Если имя пустое — показываем «Задача #ID».
+                        $item_data['label']['text'] = $name !== '' && $name !== null
+                            ? $name
+                            : ('Задача #' . $item->id);
                     }
 
                     $data[] = $item_data;
