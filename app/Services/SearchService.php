@@ -219,22 +219,21 @@ class SearchService
                             ? \Carbon\Carbon::parse($item->delivery_date)->format('Y-m-d')
                             : null;
 
-                        // У задачи часто пустой name — показываем адрес как
-                        // основной заголовок. ID отдельно рендерится фронтом
-                        // через label.id, дублировать его в text не нужно.
-                        $addressText = '';
-                        if ($item->address) {
-                            $addr = is_string($item->address) ? json_decode($item->address, true) : $item->address;
-                            if (is_array($addr) && isset($addr['text'])) {
-                                $addressText = $addr['text'];
-                            } elseif (is_string($item->address)) {
-                                $addressText = $item->address;
+                        // Заголовок поиска — НАЗВАНИЕ задачи (если есть),
+                        // иначе fallback на адрес/«Задача».
+                        if ($name) {
+                            $item_data['label']['text'] = $name;
+                        } else {
+                            $addressText = '';
+                            if ($item->address) {
+                                $addr = is_string($item->address) ? json_decode($item->address, true) : $item->address;
+                                if (is_array($addr) && isset($addr['text'])) {
+                                    $addressText = $addr['text'];
+                                } elseif (is_string($item->address)) {
+                                    $addressText = $item->address;
+                                }
                             }
-                        }
-                        if ($addressText) {
-                            $item_data['label']['text'] = $addressText;
-                        } elseif (!$name) {
-                            $item_data['label']['text'] = 'Задача';
+                            $item_data['label']['text'] = $addressText ?: 'Задача';
                         }
                     }
 

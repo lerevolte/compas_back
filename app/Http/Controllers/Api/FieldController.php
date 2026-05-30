@@ -182,7 +182,15 @@ class FieldController extends Controller
         $entity = DB::table('data_types')->where('id', $field->data_type_id)->first();
 
         DB::transaction(function () use ($request) {
-            DB::table('data_rows')->where('id', $request->id)->update(['section_id' => $request->section_id]);
+            // Параллельно сбрасываем group_id. changeSort вызывается при
+            // переносе поля в обычную секцию (НЕ внутрь группы — для этого
+            // отдельный update_field с subfields). Если поле раньше было
+            // частью group_id и его вытащили в outer-секцию, то без сброса
+            // group_id оно «двоится»: рендерится и в группе, и в outer.
+            DB::table('data_rows')->where('id', $request->id)->update([
+                'section_id' => $request->section_id,
+                'group_id'   => null,
+            ]);
             DB::table('data_rows')->upsert($request->fields, 'id', ['id', 'sort']);
         });
 
