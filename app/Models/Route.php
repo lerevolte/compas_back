@@ -87,8 +87,25 @@ class Route extends Model
         static::updating(function($model)
         {
             if ($model->isDirty('date')) {
-                // Используем update() для массового обновления (эффективнее по производительности)
-                $model->logistic_tasks()->update(['delivery_date' => $model->date]);
+                $newDate = $model->date;
+                // ВАЖНО: history пишем ДО mass-update — saveForObject читает
+                // текущее значение из БД и сравнивает с новым; если значения
+                // уже совпадают (после update), diff'а нет и история не
+                // запишется. Mass-update эффективнее, но в обход model events,
+                // поэтому стандартный механизм автозаписи history не сработает.
+                $tasks = $model->logistic_tasks()
+                    ->select('id', 'delivery_date')
+                    ->get();
+                $rows = [];
+                foreach ($tasks as $task) {
+                    if ((string)$task->delivery_date !== (string)$newDate) {
+                        $rows[] = ['id' => $task->id, 'delivery_date' => $newDate];
+                    }
+                }
+                if (count($rows)) {
+                    \App\Models\History::saveForObject('logistic_tasks', $rows, false);
+                }
+                $model->logistic_tasks()->update(['delivery_date' => $newDate]);
             }
 
             // 2. Привязка машины: копируем employee_requirements из Car в car_requirements Маршрута
