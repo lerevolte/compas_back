@@ -382,9 +382,11 @@ class RouteController extends Controller
         return response()->json(['success' => true]);
     }
 
-    public function tasks($id, Request $request) 
+    public function tasks($id, Request $request)
     {
-        $tasks = Route::find($id)->tasks;
+        // Подгружаем связь status (point_status → FieldValue), чтобы отдать цвет
+        // статуса точки на карту (квадратик статуса у маркера маршрута).
+        $tasks = Route::find($id)->tasks()->with('status')->get();
         $settings = get_settings();
         $tenant = tenant('id');
 
@@ -436,7 +438,10 @@ class RouteController extends Controller
                     };
                 }
             }
-            
+
+            // Цвет статуса точки (для квадратика статуса на карте).
+            $data['statusColor'] = $item->status->color ?? '#ccc';
+
             $objects[] = $data;
         }
         $res = array(
