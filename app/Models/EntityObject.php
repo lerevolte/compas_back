@@ -186,7 +186,7 @@ class EntityObject
                 $fields_data[$field->field]['can_read'] = $settings[$slug]['perms'][$field->field]['read'] || $isAdmin ? 1 : 0;
                 $fields_data[$field->field]['can_edit'] = isset($data['deleted_at']) || $field->only_read ||
                     !$settings[$slug]['perms'][$field->field]['write'] && !$isAdmin ? 0 : 1;
-                if ($slug == 'logistic_tasks' && $field->field == 'delivery_date' && $current->route_id) {
+                if ($slug == 'logistic_tasks' && $field->field == 'delivery_date' && $current->route_id && !$request->is_copy) {
                     $fields_data[$field->field]['can_edit'] = 0;
                 }
                 // Обработка значений полей
@@ -600,7 +600,7 @@ class EntityObject
                 if(!$id && $permissions['create_p'] == 'Y' && $field->field == 'user_id' && !\Auth::user()->is_admin) {
                     $fields_data[$field->field]['can_edit'] = 0;
                 }
-                if ($slug == 'logistic_tasks' && $field->field == 'delivery_date' && $current->route_id) {
+                if ($slug == 'logistic_tasks' && $field->field == 'delivery_date' && $current->route_id && !$request->is_copy) {
                     $fields_data[$field->field]['can_edit'] = 0;
                 }
                 if($id && $permissions['update_p'] == 'Y' && $current->user_id != \Auth::user()->id && !\Auth::user()->is_admin && $slug != 'users' && \Auth::user()->id != $id ||
