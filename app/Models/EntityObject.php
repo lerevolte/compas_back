@@ -197,6 +197,11 @@ class EntityObject
                         $field_value = null;
                     } elseif ($field->field == 'user_id' && $isAuthenticated) {
                         $field_value = $user->id;
+                    } elseif ($slug == 'logistic_tasks' && $field->field == 'route_id') {
+                        // При копировании задачи логистики не тащим привязанный маршрут:
+                        // иначе delivery_date пересчитается от маршрута и затрёт введённую
+                        // пользователем дату. Копия создаётся без маршрута.
+                        $field_value = null;
                     }
                 }
                 $fields_data[$field->field]['guide'] = null;
