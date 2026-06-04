@@ -21,5 +21,9 @@ Route::middleware([
         Route::get('/', 'Bitrix24Controller@index');
         Route::post('/update', 'Bitrix24Controller@update');
         Route::get('/sync', 'Bitrix24Controller@sync');
+        // Вебхук из Bitrix24 (создание задачи логистики из сделки). Без auth —
+        // Битрикс не авторизуется; тенант определяется по домену. GET ?id=
+        // или POST data[FIELDS][ID] (исходящий вебхук по событию).
+        Route::match(['get', 'post'], '/deal-hook', 'Bitrix24Controller@dealHook');
     });
 });

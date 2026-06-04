@@ -84,7 +84,9 @@ class Bitrix24Controller extends Controller
      */
     public function update(Request $request)
     {
-        $config = Config::first();
+        // firstOrNew: в новом тенанте строки конфига может ещё не быть —
+        // без этого сохранение вебхука падало с "null".
+        $config = Config::first() ?: new Config();
         $config->webhook = $request->webhook;
         $config->save();
 
@@ -202,7 +204,255 @@ class Bitrix24Controller extends Controller
         }
 
         return false;
-        
+
+    }
+
+    /**
+     * Вебхук Bitrix24: создаёт/обновляет задачу логистики (logistic_tasks)
+     * из сделки CRM. Адрес для подключения в Битрикс24 (исходящий вебхук/робот):
+     *   https://logistopt6.compas.pro/bitrix24/deal-hook?id=#{deal.ID}
+     * Тенант определяется по домену (InitializeTenancyByDomain в web.php).
+     * Данные сделки тянем через входящий вебхук, сохранённый в настройках модуля
+     * (Config::first()->webhook).
+     *
+     * Портировано со старого обработчика opt6/crm6.ru. Соответствия полей —
+     * см. ниже по коду; номер сделки пишется в name (по согласованию), дедуп
+     * задачи — по name.
+     */
+    // Стадия сделки, на которой создаём задачу логистики (старый код: STAGE_ID == 17).
+    const TARGET_STAGE_ID = 17;
+    // Статус точки для новой задачи (point_status). В тенанте logistopt6 статусы
+    // имеют свои id (1/4/5...) — при необходимости поменяйте здесь или в настройках.
+    const NEW_POINT_STATUS = 1;
+    // Товары-исключения (доставка и т.п.) — их цена идёт в delivery_price.
+    const SKIP_PRODUCT_IDS = [111, 113];
+
+    public function dealHook(Request $request)
+    {
+        $config = Config::first();
+        if (!$config || !$config->webhook) {
+            return response('Bitrix24 webhook is not configured', 200);
+        }
+        $base = $config->webhook;
+
+        // Bitrix24 шлёт либо ?id=, либо POST data[FIELDS][ID] (исходящий вебхук по событию)
+        $dealId = $request->input('id');
+        if (!$dealId) {
+            $dealId = data_get($request->input('data'), 'FIELDS.ID');
+        }
+        if (!$dealId) {
+            return response('no deal id', 200);
+        }
+
+        $resp = Http::post($base . 'crm.deal.get', ['id' => $dealId])->collect();
+        $deal = $resp['result'] ?? null;
+        if (!$deal) {
+            return response('deal not found', 200);
+        }
+
+        $params = is_object($config) ? ($config->getParams() ?: []) : [];
+        $targetStage = $params['stage_id'] ?? self::TARGET_STAGE_ID;
+
+        // Дедуп по номеру сделки в названии. Граница ([^0-9]|$) — чтобы №112 не
+        // совпадал с №1120.
+        $existing = \App\Models\Task::where('name', 'REGEXP', '^Сделка №' . $dealId . '([^0-9]|$)')
+            ->whereNull('deleted_at')
+            ->first();
+
+        // Создаём задачу только когда сделка дошла до нужной стадии (как в старом коде).
+        if ($deal['STAGE_ID'] != $targetStage) {
+            return response('stage skipped: ' . $deal['STAGE_ID'], 200);
+        }
+        // Если задача уже привязана к маршруту — не перезаписываем (старый код: die()).
+        if ($existing && $existing->route_id) {
+            return response('task already on a route', 200);
+        }
+
+        // --- Товары сделки ---
+        $delivery_price = 0;
+        $all_weight = 0;
+        $products = [];
+        $arItems = [];
+        $prodResp = Http::post($base . 'crm.deal.productrows.get', ['id' => $deal['ID']])->collect();
+        if (isset($prodResp['result']) && is_array($prodResp['result'])) {
+            foreach ($prodResp['result'] as $product) {
+                $pid = $product['PRODUCT_ID'] ?? null;
+                if ($pid && !in_array($pid, self::SKIP_PRODUCT_IDS)) {
+                    $prod = \Modules\Products\Entities\Product::where('id_b24', $pid)->first();
+                    if (!$prod) {
+                        // crm.product.list даёт свойства PROPERTY_* (вес и пр.)
+                        $plist = Http::post($base . 'crm.product.list', [
+                            'order'  => ['ID' => 'ASC'],
+                            'filter' => ['ID' => $pid],
+                            'select' => ['*', 'PROPERTY_*'],
+                        ])->collect();
+                        $prod = new \Modules\Products\Entities\Product();
+                        $prod->id_b24 = $pid;
+                        $prod->name = $product['PRODUCT_NAME'] ?? ('Товар #' . $pid);
+                        if (isset($plist['result'][0]['PROPERTY_134']['value'])) {
+                            // в тенанте у products есть только name/id_b24/weight
+                            $prod->weight = $plist['result'][0]['PROPERTY_134']['value'];
+                        }
+                        $prod->save();
+                    }
+
+                    $qty = $product['QUANTITY'] ?? 0;
+                    $all_weight += ((float) $prod->weight) * $qty;
+
+                    $itemKey = $prod->name;
+                    if (array_key_exists($itemKey, $arItems)) {
+                        $itemKey .= '.';
+                    }
+                    $arItems[$itemKey] = $qty;
+
+                    $products[] = [
+                        'name'   => $prod->name,
+                        'price'  => $product['PRICE'] ?? 0,
+                        'count'  => $qty,
+                        'weight' => $prod->weight,
+                        'sum'    => ($product['PRICE'] ?? 0) * $qty,
+                    ];
+                } else {
+                    $delivery_price += (float) ($product['PRICE'] ?? 0) * ($product['QUANTITY'] ?? 0);
+                }
+            }
+        }
+
+        // --- Контакт (телефон/имя) ---
+        $contact = null;
+        if (!empty($deal['CONTACT_ID'])) {
+            $cResp = Http::post($base . 'crm.contact.get', ['id' => $deal['CONTACT_ID']])->collect();
+            $contact = $cResp['result'] ?? null;
+        }
+
+        // --- Счета (оплата) ---
+        $invoices = [];
+        $invResp = Http::post($base . 'crm.invoice.list', [
+            'filter' => ['UF_DEAL_ID' => $deal['ID']],
+        ])->collect();
+        if (isset($invResp['result']) && is_array($invResp['result'])) {
+            foreach ($invResp['result'] as $invoice) {
+                if (($invoice['UF_DEAL_ID'] ?? null) == $deal['ID']) {
+                    $invoices[] = $invoice['ACCOUNT_NUMBER'] ?? $invoice['ID'];
+                }
+            }
+        }
+
+        // --- Сборка задачи ---
+        $task = $existing ?: new \App\Models\Task();
+        $isNew = !$existing;
+
+        // Имя: номер сделки + (по возможности) имя клиента
+        $clientName = $deal['UF_CRM_1642670804'] ?? ($contact['NAME'] ?? null);
+        $name = 'Сделка №' . $dealId;
+        if ($clientName) {
+            $name .= ' — ' . $clientName;
+        }
+        $task->name = $name;
+
+        // Адрес + координаты (lat,lng в UF_CRM_1741758491) -> JSON {text, coords}
+        $addrText = $deal['UF_CRM_1528885851543'] ?? '';
+        $coords = [];
+        if (!empty($deal['UF_CRM_1741758491'])) {
+            $parts = explode(',', $deal['UF_CRM_1741758491']);
+            if (count($parts) >= 2 && trim($parts[0]) !== '' && trim($parts[1]) !== '') {
+                $coords = [trim($parts[0]), trim($parts[1])];
+            }
+        }
+        $task->address = json_encode(['text' => $addrText, 'coords' => $coords], JSON_UNESCAPED_UNICODE);
+
+        if ($products) {
+            $task->products = json_encode($products, JSON_UNESCAPED_UNICODE);
+        }
+        $task->weight = $all_weight;
+        $task->time = $deal['UF_CRM_1632832553'] ?? null;
+        // Чтобы задача попала на доску логистики, нужна дата доставки. Готового
+        // поля даты в сделке нет — ставим сегодняшнюю (формат как у других задач).
+        if ($isNew && empty($task->delivery_date)) {
+            $task->delivery_date = date('Y-m-d');
+        }
+
+        // Телефон: спец-поле сделки, иначе из контакта
+        if (!empty($deal['UF_CRM_1623418181538'])) {
+            $task->phone = $deal['UF_CRM_1623418181538'];
+        } elseif ($contact && ($contact['HAS_PHONE'] ?? null) == 'Y') {
+            $task->phone = $contact['PHONE'][0]['VALUE'] ?? null;
+        }
+
+        // delivery_price: из товаров-доставки, иначе спец-поле, иначе 0
+        if ($delivery_price > 0) {
+            $task->delivery_price = $delivery_price;
+        } elseif (!empty($deal['UF_CRM_1633508830'])) {
+            $task->delivery_price = $deal['UF_CRM_1633508830'];
+        } else {
+            $task->delivery_price = 0;
+        }
+
+        // --- Доп. поля (новые колонки) ---
+        $task->comment = $deal['UF_CRM_5EAFC3D4C5F76'] ?? null;
+        $task->pallets_count = $deal['UF_CRM_1696596978695'] ?? null;
+        $task->crm_link = 'https://crm6.ru/crm/deal/details/' . $dealId . '/';
+
+        // Разгрузка (UF_CRM_1762411084 -> массив названий)
+        if (!empty($deal['UF_CRM_1762411084']) && is_array($deal['UF_CRM_1762411084'])) {
+            $unloadingMap = [
+                2867 => 'Гидролифт',
+                2868 => 'Манипулятор',
+                2869 => 'Ручная',
+                2870 => 'Открытая',
+                2871 => 'Водитель РФ',
+            ];
+            $unloading = [];
+            foreach ($deal['UF_CRM_1762411084'] as $val) {
+                if (isset($unloadingMap[$val])) {
+                    $unloading[] = $unloadingMap[$val];
+                }
+            }
+            $task->unloading = $unloading ? json_encode($unloading, JSON_UNESCAPED_UNICODE) : null;
+        } else {
+            $task->unloading = null;
+        }
+
+        // Тип машины/доставки (UF_CRM_1625083610453 -> код)
+        if (!empty($deal['UF_CRM_1625083610453'])) {
+            $typeMap = ['2712' => 3, '2713' => 4, '2714' => 5, '2715' => 6, '2716' => 7];
+            $task->type = $typeMap[$deal['UF_CRM_1625083610453']] ?? 0;
+        }
+
+        // Оплата: счёт (если есть номера) или наличные
+        if (count($invoices) > 0) {
+            $task->payment_type = 1;
+            $task->payment = 'Счет: ' . implode(',', $invoices);
+        } else {
+            $task->payment_type = 2;
+            $task->payment = 'Нал: ' . (int) ($deal['OPPORTUNITY'] ?? 0) . ' р.';
+        }
+
+        // Менеджер -> локальный пользователь по email (crm_id в тенанте нет)
+        if (!empty($deal['ASSIGNED_BY_ID'])) {
+            $uResp = Http::post($base . 'user.get', ['id' => $deal['ASSIGNED_BY_ID']])->collect();
+            $manager = $uResp['result'][0] ?? null;
+            if ($manager && !empty($manager['EMAIL'])) {
+                $user = \App\Models\User::where('email', $manager['EMAIL'])->first();
+                if ($user) {
+                    $task->user_id = $user->id;
+                }
+            }
+        }
+
+        // Статус точки для новой задачи
+        if ($isNew) {
+            $task->point_status = $params['point_status'] ?? self::NEW_POINT_STATUS;
+        }
+
+        $task->save();
+
+        return response()->json([
+            'status'     => 'ok',
+            'deal_id'    => $dealId,
+            'task_id'    => $task->id,
+            'created'    => $isNew,
+        ], 200);
     }
 
 
