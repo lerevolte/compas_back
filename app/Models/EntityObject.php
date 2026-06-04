@@ -1829,8 +1829,10 @@ class EntityObject
 
 
             if(!is_array($value) && is_array(json_decode($value, true))) {
-
-                $object->{$field} = json_encode($value, JSON_UNESCAPED_UNICODE);
+                // Уже валидная JSON-строка (например, detail_text у type=redactor) —
+                // сохраняем как есть, иначе повторный json_encode давал двойное
+                // кодирование и ломал вывод статьи.
+                $object->{$field} = $value;
             } else {
                 $object->{$field} = $value;
             }

@@ -413,15 +413,13 @@ class CrudService
 
 
                 if(!is_array($value) && is_array(json_decode($value, true))) {
-                    info('$field2');
-                    info($field);
-                    $ob->{$field} = json_encode($value, JSON_UNESCAPED_UNICODE);
-                    info($ob->{$field});
-                } else {
-                    info('$field3');
-                    info($field);
+                    // Значение уже пришло валидной JSON-строкой (например, detail_text
+                    // у поля type=redactor). Повторный json_encode давал двойное
+                    // кодирование ("[{\"type\"...]") и статья переставала выводиться.
+                    // Сохраняем как есть — в колонке остаётся одинарно закодированный JSON.
                     $ob->{$field} = $value;
-                    info($ob->{$field});
+                } else {
+                    $ob->{$field} = $value;
                 }
             }
             if(!$ob->name) {
