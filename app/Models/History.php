@@ -784,36 +784,22 @@ class History extends Model
 
                             }
                         } elseif($field->type == 'redactor') {
-                            $ov = is_array($old_value['res']) ? json_encode($value, JSON_UNESCAPED_UNICODE) : $old_value['res'];
-                            $nv = is_array($new_value['res']) ? json_encode($value, JSON_UNESCAPED_UNICODE) : $old_value['res'];
-                            $history_text = $field->title.': '.$ov.' -> '.$nv;
-                            $module = $field->module;
+                            // Контент redactor (detail_text) может весить десятки КБ и
+                            // переполняет text-колонки histories (max 65535). Полный JSON
+                            // в истории бесполезен — фиксируем только факт изменения.
+                            $history_text = $field->title.': контент обновлён';
                             $history_data = array(
                                 'entity' => $slug,
                                 'event' => 'FIELD_UPDATED',
-                                'entity_id' => $row['id'], 
-                                'user_id' => $user_id, 
+                                'entity_id' => $row['id'],
+                                'user_id' => $user_id,
                                 'text' => $history_text,
                                 'field' => $field->field,
-                                'old_value' => $ov,
-                                'new_value' => $nv
+                                'old_value' => null,
+                                'new_value' => null
                             );
-                            // if($module) {
-                            //     $modules = json_decode($field->module,true);
-                            //     foreach($modules as $m) {
-                            //         $history_data['module'] = $m;
-                            //         $history = new \App\Models\History($history_data);
-                            //     }
-                            // } else {
-                                $history = new \App\Models\History($history_data);
-                            //}
-
+                            $history = new \App\Models\History($history_data);
                             $history->saveQuietly();
-                            // if($module) {
-                            //     $history_replic = $history->replicate();
-                            //     $history_replic->module = null;
-                            //     $history_replic->save();
-                            // }
                             $history_items[] = $history;
                         } else {
                             $history_text = $field->title.': '.$old_value['res'].' -> '.$new_value['res'];
@@ -1062,7 +1048,10 @@ class History extends Model
                 continue;
             if(array_key_exists($field->field, $object) && array_key_exists($field->field, $object)) {
                 $history_text = '';
-                if($field->type == 'status' && isset($settings['list_values'][$field->id])) {
+                if($field->type == 'redactor') {
+                    // Не пишем в историю весь JSON detail_text (десятки КБ) — только факт.
+                    $history_text = $object[$field->field] ? $field->title.': контент добавлен' : '';
+                } elseif($field->type == 'status' && isset($settings['list_values'][$field->id])) {
                     $statuses = collect($settings['list_values'][$field->id]);
                     $visible_statuses = $statuses->filter(function ($status) {
                             return !$status['label']['is_hidden'];
