@@ -517,7 +517,12 @@ class Settings extends Model
 		                $field_values[$field->id] = array();
 		                if(isset($details['table'])) {
 		                    $type = isset($models_by_name[$details['table']]) ? $models_by_name[$details['table']] : null;
-	                        if($type) {
+	                        if(!\Schema::hasTable($details['table'])) {
+	                            // Центральный домен (admin_compas_main) не содержит
+	                            // тенантских таблиц вроде routes — пустой набор вместо
+	                            // ошибки "Base table or view not found".
+	                            $table_objects = collect();
+	                        } elseif($type) {
                                 info($field->id.' '.$field->field);
                                 info($type->model_name);
 	                        	if($details['table'] == 'cars' || $details['table'] == 'employees' || $details['table'] == 'clients')
