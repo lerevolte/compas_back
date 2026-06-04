@@ -484,7 +484,13 @@ class RouteController extends Controller
     public function update_tasks($id, Request $request) 
     {
         $old_tasks = Route::find($id)->tasks;
-        $new_tasks = Task::whereIntegerInRaw('id', $request->ids)->orderByRaw(\DB::raw("FIELD(id, ".implode(",",$request->ids).")"))->get();
+        // Пустой ids = из маршрута убрали последнюю задачу. В этом случае
+        // implode даёт "FIELD(id, )" — невалидный SQL, поэтому new_tasks
+        // оставляем пустой коллекцией: ниже все old_tasks отвяжутся (route_id=null).
+        $new_tasks = collect();
+        if (count($request->ids)) {
+            $new_tasks = Task::whereIntegerInRaw('id', $request->ids)->orderByRaw(\DB::raw("FIELD(id, ".implode(",",$request->ids).")"))->get();
+        }
 
         foreach($old_tasks as $task) {
             if(!in_array($task->id, $request->ids)) {
