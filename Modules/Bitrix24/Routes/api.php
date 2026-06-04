@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
 use Modules\Bitrix24\Http\Controllers\Api\Bitrix24Controller;
+use Modules\Bitrix24\Http\Controllers\Bitrix24Controller as Bitrix24WebController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -21,7 +22,17 @@ Route::middleware([
     PreventAccessFromCentralDomains::class
 ])->prefix('bitrix24')->group(function () {
     Route::get(
-            'sync', 
+            'sync',
             [Bitrix24Controller::class, 'sync']
         );
+});
+
+// Вебхук из Bitrix24 — БЕЗ auth (Битрикс не авторизуется). Под /api, т.к.
+// nginx отдаёт /bitrix24/* как статику SPA и до Laravel веб-роут не доходит.
+// Тенант определяется по домену. URL: /api/bitrix24/deal-hook?id=#{deal.ID}
+Route::middleware([
+    InitializeTenancyByDomain::class,
+    PreventAccessFromCentralDomains::class
+])->prefix('bitrix24')->group(function () {
+    Route::match(['get', 'post'], 'deal-hook', [Bitrix24WebController::class, 'dealHook']);
 });
