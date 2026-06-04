@@ -416,6 +416,12 @@ class SettingsServiceProvider extends ServiceProvider
             return $cache[$table];
         }
 
+        // Та же защита, что и в getItemsForTable: в центральном контексте нет
+        // тенантских таблиц — не валим запрос, отдаём пустой набор.
+        if (!\Schema::hasTable($table)) {
+            return $cache[$table] = collect();
+        }
+
         if (isset($models[$table])) {
             $model = app($models[$table]->model_name);
             $query = $model->newQuery()
@@ -628,6 +634,14 @@ class SettingsServiceProvider extends ServiceProvider
 
     protected function getItemsForTable(string $tableName, array $modelsByName)
     {
+        // В центральном контексте (admin.compas.pro, БД admin_compas_main) нет
+        // тенантских таблиц вроде `routes`. Если relation-поле ссылается на
+        // отсутствующую таблицу — отдаём пустой набор, а не валим весь запрос
+        // ошибкой "Base table or view not found".
+        if (!\Schema::hasTable($tableName)) {
+            return collect();
+        }
+
         if (isset($modelsByName[$tableName])) {
             $model = $modelsByName[$tableName]->model_name;
             return $model::orderBy('choosed_at', 'DESC')
@@ -635,7 +649,7 @@ class SettingsServiceProvider extends ServiceProvider
                 ->whereNull('deleted_at')
                 ->get();
         }
-        
+
         return DB::table($tableName)
             ->orderBy('choosed_at', 'DESC')
             ->orderBy('name', 'ASC')
