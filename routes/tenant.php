@@ -381,6 +381,9 @@ Route::middleware([
         Route::get('routes/{id}/map_data', [App\Http\Controllers\Api\RouteController::class, 'map_data'])->name('routes.map_data');
         Route::get('routes/{id}/tasks', [App\Http\Controllers\Api\RouteController::class, 'tasks'])->name('routes.tasks');
         Route::put('routes/{id}/tasks', [App\Http\Controllers\Api\RouteController::class, 'update_tasks'])->name('routes.update_tasks');
+        // Создать задачу логистики из адреса «Справочника адресов» (drag&drop),
+        // адрес-источник не меняется. Body: { address_id, route_id? }.
+        Route::post('routes/task-from-address', [App\Http\Controllers\Api\RouteController::class, 'task_from_address'])->name('routes.task_from_address');
         Route::get('routes/{id}/task_filter', [App\Http\Controllers\Api\RouteController::class, 'task_filter'])->name('routes.task_filter');
 
         Route::put(
