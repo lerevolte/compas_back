@@ -91,7 +91,10 @@ section_fields_sort, modules, …` (с сохранением id).
 php artisan entity:install-addresses seeds
 
 # 2) тестовый портал — проверить руками
-php artisan entity:install-addresses admin_test4
+# ВАЖНО: указывается id портала (имя без префикса), напр. test4, а НЕ имя БД
+# admin_test4. Имя БД = config('tenancy.database.prefix') + id ('admin_'+test4).
+# Команда умеет отрезать префикс сама, но канонично передавать именно id.
+php artisan entity:install-addresses test4
 
 # --- ПРОВЕРКА: сущность видна, таблица открывается, карточка работает ---
 

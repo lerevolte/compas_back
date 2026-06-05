@@ -72,10 +72,22 @@ class InstallAddressesEntity extends Command
             return self::SUCCESS;
         }
 
-        // конкретный тенант по id
+        // конкретный тенант по id. Тенант идентифицируется именем портала
+        // (например test4), а имя БД = prefix + id (admin_test4). Поэтому если
+        // передали имя БД — отрезаем префикс из конфига tenancy.
         $tenant = Tenant::find($target);
         if (!$tenant) {
-            $this->error("Портал '{$target}' не найден");
+            $prefix = (string) config('tenancy.database.prefix', '');
+            if ($prefix !== '' && str_starts_with($target, $prefix)) {
+                $stripped = substr($target, strlen($prefix));
+                $tenant = Tenant::find($stripped);
+                if ($tenant) {
+                    $target = $stripped;
+                }
+            }
+        }
+        if (!$tenant) {
+            $this->error("Портал '{$target}' не найден (id портала — это имя без префикса '".config('tenancy.database.prefix')."', например test4)");
             return self::FAILURE;
         }
         $this->info("Установка в портал {$target}…");
