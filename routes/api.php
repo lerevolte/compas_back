@@ -430,6 +430,9 @@ Route::middleware([
         Route::delete('routes', [App\Http\Controllers\Api\RouteController::class, 'delete']);
         Route::get('routes/{id}/tasks', [App\Http\Controllers\Api\RouteController::class, 'tasks']);
         Route::put('routes/{id}/tasks', [App\Http\Controllers\Api\RouteController::class, 'update_tasks']);
+        // Создать задачу логистики из адреса «Справочника адресов» (drag&drop),
+        // адрес-источник не меняется. Body: { address_id, route_id? }.
+        Route::post('routes/task-from-address', [App\Http\Controllers\Api\RouteController::class, 'task_from_address']);
 
         Route::put(
             'logistic_tasks/{id}/set_products', 

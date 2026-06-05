@@ -680,4 +680,68 @@ class RouteController extends Controller
 
         return response()->json($route->getTaskFilters());
     }
+
+    /**
+     * Создать задачу логистики из адреса «Справочника адресов» и (опционально)
+     * прикрепить её к маршруту.
+     *
+     * Адрес-источник НЕ изменяется и НЕ удаляется — у него нет привязки к
+     * маршруту. Создаётся новая запись logistic_tasks, поля которой
+     * заполняются из адреса. Используется при drag&drop адреса в «Задачи в
+     * машине» или на строку маршрута в таблице «Маршруты».
+     *
+     * Body: { address_id, route_id? }
+     */
+    public function task_from_address(Request $request)
+    {
+        $address = \App\Models\Address::find($request->address_id);
+        if (!$address) {
+            return response()->json(['code' => 404, 'error' => 'Адрес не найден'], 404);
+        }
+
+        $routeId = $request->route_id ? (int) $request->route_id : null;
+
+        // Скалярные/JSON-поля копируем через CrudService (история + field_values).
+        // client_id (плюральная связь) обрабатываем отдельно ниже, чтобы не
+        // зависеть от формата хранения у адреса.
+        $crud = app(\App\Services\CrudService::class);
+        $row = [
+            'id'                    => 0,
+            'name'                  => $address->name,
+            'address'               => $address->address,           // JSON-строка координат — пишется как есть
+            'phone'                 => $address->phone,
+            'time'                  => $address->time,
+            'car_requirements'      => $address->car_requirements,
+            'employee_requirements' => $address->employee_requirements,
+            'service_time'          => $address->service_time,
+            'photo'                 => $address->photo,
+            'user_id'               => \Auth::id() ?? $address->user_id,
+        ];
+
+        $result = $crud->batch('logistic_tasks', [$row]);
+        $newId = $result['id'] ?? null;
+
+        if (!$newId) {
+            return response()->json(['code' => 500, 'error' => 'Не удалось создать задачу'], 500);
+        }
+
+        // Клиент — копируем напрямую в колонку созданной задачи (зеркало адреса).
+        if ($address->client_id) {
+            $task = Task::find($newId);
+            if ($task) {
+                $task->client_id = $address->client_id;
+                $task->saveQuietly();
+            }
+        }
+
+        // Прикрепление к маршруту — переиспользуем update_tasks (sort + пересчёт
+        // километража/времени/веса маршрута). Добавляем задачу в конец списка.
+        if ($routeId) {
+            $ids = Task::where('route_id', $routeId)->orderBy('sort')->pluck('id')->toArray();
+            $ids[] = $newId;
+            return $this->update_tasks($routeId, new Request(['ids' => $ids]));
+        }
+
+        return response()->json(['success' => true, 'id' => $newId]);
+    }
 }
