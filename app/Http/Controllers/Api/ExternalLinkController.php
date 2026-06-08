@@ -3,7 +3,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ExternalLink;
+use App\Models\EntityObject;
+use App\Models\Field;
+use App\Models\Filter;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 
@@ -45,6 +49,111 @@ class ExternalLinkController extends Controller
         $link->incrementVisits();
 
         return $objectController->compose_show($link->model_slug, $link->model_id, new Request());
+    }
+
+    /**
+     * Таблица привязанной сущности для внешней ссылки (без авторизации).
+     * Безопасность: объём строк ограничивается СЕРВЕРОМ — берём id связанных
+     * с родителем строк (как в compose_show/detail), клиентский filter для
+     * ограничения не используем. $slug должен быть реальной привязанной
+     * вкладкой родителя.
+     */
+    public function table($token, $slug, Request $request)
+    {
+        $link = ExternalLink::where('token', $token)->firstOrFail();
+        if (!$link->isValid()) {
+            abort(404, 'Link is expired or no longer available');
+        }
+
+        $settings = app('settings');
+        $parentSlug = $link->model_slug;
+        $parentId   = $link->model_id;
+
+        // 1. $slug должен быть привязанной (plural relation) вкладкой родителя.
+        //    Особый случай: задачи маршрута (routes -> logistic_tasks по route_id).
+        $isRouteTasks = ($parentSlug === 'routes' && $slug === 'logistic_tasks');
+        $isValidTab = false;
+        foreach (($settings[$parentSlug]['fields'] ?? []) as $field) {
+            if ($field->type === 'relation' && $field->is_plural && $field->relation_table === $slug) {
+                $isValidTab = true;
+                break;
+            }
+        }
+        if (!$isValidTab && !$isRouteTasks) {
+            abort(404, 'Tab is not available for this link');
+        }
+
+        // 2. Серверный scoping: id связанных строк родителя.
+        $allowedIds = $this->relatedIds($settings, $parentSlug, $parentId, $slug);
+
+        $scoped = new Request();
+        if ($allowedIds !== null) {
+            // Пустой набор -> заведомо пустой результат, но в форме таблицы.
+            $scoped->merge(['ids' => $allowedIds ?: [-1]]);
+        } elseif ($isRouteTasks) {
+            $scoped->merge(['filter' => ['route_id' => $parentId]]);
+        } else {
+            abort(404, 'Relation cannot be resolved');
+        }
+
+        if ($request->page)     $scoped->merge(['page' => $request->page]);
+        if ($request->per_page) $scoped->merge(['per_page' => $request->per_page]);
+
+        // 3. Внутренние методы (Table::get/Field::list/EntityObject::list) требуют
+        //    \Auth::user(). Назначаем системного админа на время запроса — объём
+        //    данных уже ограничен whitelist'ом id, права админа на это не влияют.
+        $this->actAsSystemUser();
+
+        $list = EntityObject::list($slug, $scoped);
+        if (isset($list['error'])) {
+            return response()->json(['message' => $list['error']['message']], $list['error']['code']);
+        }
+
+        return response()->json([
+            'list'        => $list,
+            'table'       => \App\Models\Table::get($slug),
+            'fields'      => Field::list($slug),
+            'entities'    => DB::table('data_types')->select(['slug', 'title_singular', 'title_plural', 'color'])->get(),
+            'filters'     => Filter::list($slug),
+            'categories'  => [],
+            'permissions' => ['read_p' => 'A'],
+            'tabs'        => [],
+        ]);
+    }
+
+    /**
+     * id строк дочерней сущности, связанных с родителем через его plural relation
+     * (та же логика, что в EntityObject::detail). null — связь не разрешилась.
+     */
+    private function relatedIds($settings, $parentSlug, $parentId, $childSlug)
+    {
+        $entity = $settings['models'][$parentSlug] ?? null;
+        if (!$entity) {
+            return null;
+        }
+        $class = $entity->model_name;
+        $parent = $class::withTrashed()->where('id', $parentId)->first();
+        if (!$parent) {
+            return [];
+        }
+        try {
+            // childSlug == relation_table == имя relation на родителе.
+            $relation = $parent->{$childSlug};
+            if ($relation !== null) {
+                return collect($relation)->pluck('id')->map(fn ($i) => (int) $i)->values()->all();
+            }
+        } catch (\Throwable $e) {
+            // нет такой relation — разрешим другим веткам (route_id и т.п.)
+        }
+        return null;
+    }
+
+    private function actAsSystemUser(): void
+    {
+        $admin = \App\Models\User::where('is_admin', true)->first() ?: \App\Models\User::find(1);
+        if ($admin) {
+            Auth::setUser($admin);
+        }
     }
 
     public function revoke($token)

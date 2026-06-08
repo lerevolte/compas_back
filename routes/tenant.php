@@ -92,6 +92,14 @@ Route::get('/api/external/{token}', [App\Http\Controllers\Api\ExternalLinkContro
         PreventAccessFromCentralDomains::class,
         'tenantkeeper'
     ]);
+// Таблица привязанной сущности по внешней ссылке (без auth, scoping на сервере).
+Route::get('/api/external/{token}/table/{slug}', [App\Http\Controllers\Api\ExternalLinkController::class, 'table'])
+    ->name('external.table')
+    ->middleware([
+        InitializeTenancyByDomain::class,
+        PreventAccessFromCentralDomains::class,
+        'tenantkeeper'
+    ]);
 Route::middleware([
     'api',
     InitializeTenancyByDomain::class,
