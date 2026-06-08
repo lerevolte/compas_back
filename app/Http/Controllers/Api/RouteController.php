@@ -716,6 +716,8 @@ class RouteController extends Controller
             'service_time'          => $address->service_time,
             'photo'                 => $address->photo,
             'user_id'               => \Auth::id() ?? $address->user_id,
+            'comment'               => $address->comment,
+            'contact'               => $address->contact,
         ];
 
         $result = $crud->batch('logistic_tasks', [$row]);

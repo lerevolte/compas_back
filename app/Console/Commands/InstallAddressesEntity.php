@@ -41,7 +41,7 @@ class InstallAddressesEntity extends Command
     private array $fields = [
         'id', 'created_at', 'updated_at', 'name', 'photo', 'service_time',
         'address', 'phone', 'time', 'car_requirements', 'employee_requirements',
-        'client_id', 'user_id',
+        'client_id', 'user_id', 'comment', 'contact',
     ];
 
     public function handle(): int
@@ -266,6 +266,8 @@ class InstallAddressesEntity extends Command
             'employee_requirements' => $base(['field' => 'employee_requirements', 'type' => 'select_dropdown', 'title' => 'Требования к водителю', 'sort' => 10, 'is_plural' => 1, 'details' => '{"options":[{"label":"Гражданство РФ","value":0}]}']),
             'client_id'             => $base(['field' => 'client_id', 'type' => 'relation', 'title' => 'Клиент', 'sort' => 11, 'is_plural' => 1, 'details' => '{"table": "clients"}', 'is_link' => 1, 'relation_table' => 'clients', 'related_field' => 'task_id']),
             'user_id'               => $base(['field' => 'user_id', 'type' => 'relation', 'title' => 'Ответственный', 'sort' => 12, 'required' => 1, 'details' => '{"table":"users"}', 'is_link' => 1, 'relation_table' => 'users', 'related_field' => 'task_id', 'is_inactive' => 1]),
+            'comment'               => $base(['field' => 'comment', 'type' => 'text', 'title' => 'Примечание', 'sort' => 50]),
+            'contact'               => $base(['field' => 'contact', 'type' => 'text', 'title' => 'Контактное лицо', 'sort' => 51]),
         ];
     }
 
@@ -311,6 +313,8 @@ CREATE TABLE IF NOT EXISTS `addresses` (
   `service_time` int(11) DEFAULT 0,
   `phone` text DEFAULT NULL,
   `time` text DEFAULT NULL,
+  `comment` text DEFAULT NULL,
+  `contact` text DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL);

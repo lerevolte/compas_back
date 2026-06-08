@@ -36,3 +36,14 @@ Route::middleware([
 ])->prefix('bitrix24')->group(function () {
     Route::match(['get', 'post'], 'deal-hook', [Bitrix24WebController::class, 'dealHook']);
 });
+
+// Управление конфигурацией модуля через API (nginx блокирует /bitrix24/ как SPA).
+// Требует авторизации через Bearer-токен.
+Route::middleware([
+    'auth:api',
+    InitializeTenancyByDomain::class,
+    PreventAccessFromCentralDomains::class
+])->prefix('bitrix24')->group(function () {
+    Route::get('config',  [Bitrix24WebController::class, 'getConfig']);
+    Route::post('config', [Bitrix24WebController::class, 'setConfig']);
+});

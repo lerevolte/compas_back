@@ -106,6 +106,26 @@ class Bitrix24Controller extends Controller
         //
     }
 
+    public function getConfig()
+    {
+        $config = Config::first() ?: new Config();
+        return response()->json([
+            'webhook'    => $config->webhook ?? '',
+            'configured' => !empty($config->webhook),
+        ]);
+    }
+
+    public function setConfig(Request $request)
+    {
+        $config = Config::first() ?: new Config();
+        $config->webhook = $request->webhook ?? '';
+        $config->save();
+        return response()->json([
+            'webhook'    => $config->webhook,
+            'configured' => !empty($config->webhook),
+        ]);
+    }
+
     public function sync(Request $request)
     {
         $config = Config::first();
