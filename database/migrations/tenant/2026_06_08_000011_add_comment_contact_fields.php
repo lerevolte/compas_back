@@ -18,6 +18,13 @@ return new class extends Migration
 
     public function up(): void
     {
+        // 0. service_time в addresses — снимаем NOT NULL (было integer()->default(0)) ---
+        if (Schema::hasTable('addresses') && Schema::hasColumn('addresses', 'service_time')) {
+            Schema::table('addresses', function (Blueprint $table) {
+                $table->integer('service_time')->nullable()->default(0)->change();
+            });
+        }
+
         // 1. Колонки в таблицах --------------------------------------------
         foreach (['addresses', 'logistic_tasks'] as $tbl) {
             if (!Schema::hasTable($tbl)) continue;

@@ -39,7 +39,7 @@ return new class extends Migration
             $table->text('photo')->nullable();
             $table->text('car_requirements')->nullable();
             $table->text('employee_requirements')->nullable();
-            $table->integer('service_time')->default(0);
+            $table->integer('service_time')->nullable()->default(0);
             $table->text('phone')->nullable();
             $table->text('time')->nullable();
         });
