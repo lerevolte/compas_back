@@ -362,14 +362,8 @@ class Bitrix24Controller extends Controller
         $task = $existing ?: new \App\Models\Task();
         $isNew = !$existing;
 
-        // Имя: номер сделки + (по возможности) имя клиента
         $clientName = $deal['UF_CRM_1642670804'] ?? ($contact['NAME'] ?? null);
-        $name = 'Сделка №' . $dealId;
-        if ($clientName) {
-            $name .= ' — ' . $clientName;
-        }
-        $task->name = $name;
-        // Контактное лицо — отдельное поле (помимо вхождения в название задачи)
+        $task->name = 'Сделка №' . $dealId;
         $task->contact = $clientName;
 
         // Адрес + координаты (lat,lng в UF_CRM_1741758491) -> JSON {text, coords}
