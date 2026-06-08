@@ -369,6 +369,8 @@ class Bitrix24Controller extends Controller
             $name .= ' — ' . $clientName;
         }
         $task->name = $name;
+        // Контактное лицо — отдельное поле (помимо вхождения в название задачи)
+        $task->contact = $clientName;
 
         // Адрес + координаты (lat,lng в UF_CRM_1741758491) -> JSON {text, coords}
         $addrText = $deal['UF_CRM_1528885851543'] ?? '';
@@ -386,9 +388,21 @@ class Bitrix24Controller extends Controller
         }
         $task->weight = $all_weight;
         $task->time = $deal['UF_CRM_1632832553'] ?? null;
-        // Чтобы задача попала на доску логистики, нужна дата доставки. Готового
-        // поля даты в сделке нет — ставим сегодняшнюю (формат как у других задач).
-        if ($isNew && empty($task->delivery_date)) {
+
+        // Дата доставки — из UF_CRM_1738582841. Битрикс отдаёт DateTime в UTC
+        // (например «2026-06-08T21:00:00+00:00» = 09.06.2026 00:00 по МСК).
+        // Конвертируем в таймзону приложения перед сохранением.
+        if (!empty($deal['UF_CRM_1738582841'])) {
+            try {
+                $dt = new \DateTime($deal['UF_CRM_1738582841']);
+                $dt->setTimezone(new \DateTimeZone(config('app.timezone', 'Europe/Moscow')));
+                $task->delivery_date = $dt->format('Y-m-d');
+            } catch (\Exception $e) {
+                if ($isNew && empty($task->delivery_date)) {
+                    $task->delivery_date = date('Y-m-d');
+                }
+            }
+        } elseif ($isNew && empty($task->delivery_date)) {
             $task->delivery_date = date('Y-m-d');
         }
 
