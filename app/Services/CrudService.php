@@ -199,7 +199,8 @@ class CrudService
                         $old_relations[$row['id']] = array('field' => $field, 'entities' => array());
                     if(!isset($new_relations[$row['id']]))
                         $new_relations[$row['id']] = array('field' => $field, 'entities' => array());
-                    $old_relations[$row['id']]['entities'][$relation_table] = $ob->{$relation_table}->pluck('id')->toArray();
+                    $rel = $ob->{$relation_table};
+                    $old_relations[$row['id']]['entities'][$relation_table] = $rel ? $rel->pluck('id')->toArray() : [];
                     $new_relations[$row['id']]['entities'][$relation_table] = array_filter($value, 'is_int');
                 }
                 
