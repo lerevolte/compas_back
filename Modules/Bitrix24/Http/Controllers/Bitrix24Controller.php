@@ -6,6 +6,7 @@ use Illuminate\Contracts\Support\Renderable;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Modules\Bitrix24\Entities\Config;
 use \App\Models\Order;
 
@@ -261,17 +262,26 @@ class Bitrix24Controller extends Controller
             $dealId = data_get($request->input('data'), 'FIELDS.ID');
         }
         if (!$dealId) {
+            Log::channel('daily')->info('deal-hook: no deal id', ['input' => $request->all()]);
             return response('no deal id', 200);
         }
 
         $resp = Http::post($base . 'crm.deal.get', ['id' => $dealId])->collect();
         $deal = $resp['result'] ?? null;
         if (!$deal) {
+            Log::channel('daily')->info('deal-hook: deal not found', ['deal_id' => $dealId, 'resp' => $resp->toArray()]);
             return response('deal not found', 200);
         }
 
         $params = is_object($config) ? ($config->getParams() ?: []) : [];
         $targetStage = $params['stage_id'] ?? self::TARGET_STAGE_ID;
+
+        Log::channel('daily')->info('deal-hook: received', [
+            'deal_id'      => $dealId,
+            'stage_id'     => $deal['STAGE_ID'],
+            'target_stage' => $targetStage,
+            'method'       => $request->method(),
+        ]);
 
         // Дедуп по номеру сделки в названии. Граница ([^0-9]|$) — чтобы №112 не
         // совпадал с №1120.
@@ -281,6 +291,7 @@ class Bitrix24Controller extends Controller
 
         // Создаём задачу только когда сделка дошла до нужной стадии (как в старом коде).
         if ($deal['STAGE_ID'] != $targetStage) {
+            Log::channel('daily')->info('deal-hook: stage skipped', ['deal_id' => $dealId, 'stage' => $deal['STAGE_ID'], 'target' => $targetStage]);
             return response('stage skipped: ' . $deal['STAGE_ID'], 200);
         }
         // Если задача уже привязана к маршруту — не перезаписываем (старый код: die()).
