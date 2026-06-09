@@ -340,6 +340,9 @@ class CrudService
                 }
                 if($model_fields[$field]->type == 'relation' && $model_fields[$field]->is_plural && $model_fields[$field]->relation_table) {
                     $relation_table = $model_fields[$field]->relation_table;
+                    if (!method_exists($ob, $relation_table)) {
+                        continue;
+                    }
                     $new_values = array_filter($value, 'is_int');
 
                     foreach($new_values as $nv) {
