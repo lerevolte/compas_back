@@ -420,7 +420,8 @@ trait ModelActions
                     }
                     if($field->type == 'relation' && $field->is_plural && $field->relation_table) {
                         $relation_table = $field->relation_table;
-                        $field_value = $this->{$relation_table}->pluck('id')->toArray();
+                        $relation = method_exists($this, $relation_table) ? $this->{$relation_table} : null;
+                        $field_value = $relation ? $relation->pluck('id')->toArray() : [];
                     }
                     $fields_data['can_edit'] = $field->only_read ? 0 : 1;//isset($settings[$slug]['perms'][$field->field]['write']) && !$settings[$slug]['perms'][$field->field]['write'] ? 1 : 0;
                     $fields_data['value'] = $field_value;
