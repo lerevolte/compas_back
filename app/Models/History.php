@@ -672,7 +672,8 @@ class History extends Model
                     $old_value = array('res' => null, 'arr_res' => array(), 'values' => array());
                     if(!$new_object || $row['id'] != $new_object->id) {
                         if($field->type == 'relation' && $field->is_plural) {
-                            $old_value = \App\Models\Field::getHumanValue($field, $objects_collection[$row['id']]->{$field->relation_table}->pluck('id')->toArray());
+                            $relation = $objects_collection[$row['id']]->{$field->relation_table};
+                            $old_value = \App\Models\Field::getHumanValue($field, $relation ? $relation->pluck('id')->toArray() : []);
                         } else {
                             $old_value = \App\Models\Field::getHumanValue($field, $objects[$row['id']][$field->field]);
                         }
