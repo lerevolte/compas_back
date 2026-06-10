@@ -381,6 +381,8 @@ Route::middleware([
 
         Route::get('settings/account', [App\Http\Controllers\Api\SettingsController::class, 'account']);
         Route::put('settings/account', [App\Http\Controllers\Api\SettingsController::class, 'account_update']);
+        Route::get('settings/user', [App\Http\Controllers\Api\SettingsController::class, 'user']);
+        Route::put('settings/user', [App\Http\Controllers\Api\SettingsController::class, 'user_update']);
 
         Route::get('routes', [App\Http\Controllers\Api\RouteController::class, 'list'])->name('routes.list');
         Route::post('routes', [App\Http\Controllers\Api\RouteController::class, 'store'])->name('routes.store');

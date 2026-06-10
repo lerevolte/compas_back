@@ -177,6 +177,50 @@ class SettingsController extends Controller
         return response()->json($data);
     }
 
+    // Пользовательские настройки интерфейса (per-user). Хранятся одной
+    // строкой в settings: type='user_settings', user_id, value=JSON.
+    public function user()
+    {
+        $row = \DB::table('settings')->where([
+            'type' => 'user_settings',
+            'user_id' => Auth::id()
+        ])->first();
+
+        return response()->json($row && $row->value ? json_decode($row->value, true) : (object)[]);
+    }
+
+    public function user_update(Request $request)
+    {
+        $userId = Auth::id();
+        $incoming = $request->input('settings', []);
+        if (!is_array($incoming)) {
+            $incoming = [];
+        }
+
+        $row = \DB::table('settings')->where([
+            'type' => 'user_settings',
+            'user_id' => $userId
+        ])->first();
+
+        $current = $row && $row->value ? (json_decode($row->value, true) ?: []) : [];
+        $merged = array_merge($current, $incoming);
+        $value = json_encode($merged, JSON_UNESCAPED_UNICODE);
+
+        if ($row) {
+            \DB::table('settings')->where('id', $row->id)->update(['value' => $value]);
+        } else {
+            \DB::table('settings')->insert([
+                'key' => 'user_settings',
+                'display_name' => 'Настройки пользователя',
+                'type' => 'user_settings',
+                'user_id' => $userId,
+                'value' => $value
+            ]);
+        }
+
+        return response()->json($merged);
+    }
+
     public function compose(Request $request)
     {
         $table = \App\Models\Table::roles();

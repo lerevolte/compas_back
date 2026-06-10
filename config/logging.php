@@ -70,6 +70,14 @@ return [
             'days' => 14,
         ],
 
+        // Вебхук Bitrix24 (deal-hook): отдельный файл, чтобы логи синхронизации
+        // сделок не искать среди общих laravel-логов.
+        'bitrix24' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/bitrix24.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),

@@ -250,8 +250,17 @@ class Bitrix24Controller extends Controller
 
     public function dealHook(Request $request)
     {
+        // Лог на самом входе: любая попытка вызова видна в storage/logs/bitrix24.log,
+        // даже если конфиг не заполнен или id сделки не передан.
+        Log::channel('bitrix24')->info('deal-hook: hit', [
+            'method' => $request->method(),
+            'host'   => $request->getHost(),
+            'input'  => $request->all(),
+        ]);
+
         $config = Config::first();
         if (!$config || !$config->webhook) {
+            Log::channel('bitrix24')->warning('deal-hook: webhook is not configured (bitrix24_config пуст)');
             return response('Bitrix24 webhook is not configured', 200);
         }
         $base = $config->webhook;
@@ -262,21 +271,21 @@ class Bitrix24Controller extends Controller
             $dealId = data_get($request->input('data'), 'FIELDS.ID');
         }
         if (!$dealId) {
-            Log::channel('daily')->info('deal-hook: no deal id', ['input' => $request->all()]);
+            Log::channel('bitrix24')->info('deal-hook: no deal id', ['input' => $request->all()]);
             return response('no deal id', 200);
         }
 
         $resp = Http::post($base . 'crm.deal.get', ['id' => $dealId])->collect();
         $deal = $resp['result'] ?? null;
         if (!$deal) {
-            Log::channel('daily')->info('deal-hook: deal not found', ['deal_id' => $dealId, 'resp' => $resp->toArray()]);
+            Log::channel('bitrix24')->info('deal-hook: deal not found', ['deal_id' => $dealId, 'resp' => $resp->toArray()]);
             return response('deal not found', 200);
         }
 
         $params = is_object($config) ? ($config->getParams() ?: []) : [];
         $targetStage = $params['stage_id'] ?? self::TARGET_STAGE_ID;
 
-        Log::channel('daily')->info('deal-hook: received', [
+        Log::channel('bitrix24')->info('deal-hook: received', [
             'deal_id'      => $dealId,
             'stage_id'     => $deal['STAGE_ID'],
             'target_stage' => $targetStage,
@@ -291,7 +300,7 @@ class Bitrix24Controller extends Controller
 
         // Создаём задачу только когда сделка дошла до нужной стадии (как в старом коде).
         if ($deal['STAGE_ID'] != $targetStage) {
-            Log::channel('daily')->info('deal-hook: stage skipped', ['deal_id' => $dealId, 'stage' => $deal['STAGE_ID'], 'target' => $targetStage]);
+            Log::channel('bitrix24')->info('deal-hook: stage skipped', ['deal_id' => $dealId, 'stage' => $deal['STAGE_ID'], 'target' => $targetStage]);
             return response('stage skipped: ' . $deal['STAGE_ID'], 200);
         }
         // Если задача уже привязана к маршруту — не перезаписываем (старый код: die()).
