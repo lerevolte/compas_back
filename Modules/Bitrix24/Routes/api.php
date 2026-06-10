@@ -34,7 +34,10 @@ Route::middleware([
     InitializeTenancyByDomain::class,
     PreventAccessFromCentralDomains::class
 ])->prefix('bitrix24')->group(function () {
-    Route::match(['get', 'post'], 'deal-hook', [Bitrix24WebController::class, 'dealHook']);
+    // any: Bitrix24 шлёт POST (исходящий вебхук) или GET (роботы/тест из
+    // браузера); любой другой метод раньше получал 405 ещё до контроллера
+    // и в логи ничего не попадало.
+    Route::any('deal-hook', [Bitrix24WebController::class, 'dealHook']);
 });
 
 // Управление конфигурацией модуля через API (nginx блокирует /bitrix24/ как SPA).
