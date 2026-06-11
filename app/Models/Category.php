@@ -32,10 +32,9 @@ class Category extends Model
                 $model->user_id = $user->id;
 
        });
-        static::deleting(function($model){ 
-            $model->products()->sync([]);
-            return true; // let the delete go through
-        });
+        // sync([]) при удалении убран: записи удаляются мягко, связи сохраняются,
+        // чтобы восстановление из корзины возвращало запись вместе со связями.
+        // У неудалённых записей удалённые скрыты SoftDeletes-scope'ом отношений.
     }
 
     public function products()

@@ -54,10 +54,8 @@ class GuideCategory extends Model
                 $model->saveQuietly();
             }
         });
-        static::deleting(function($model){ 
-            $model->guides()->sync([]);
-            return true; // let the delete go through
-        });
+        // sync([]) при удалении убран: записи удаляются мягко, связи сохраняются,
+        // чтобы восстановление из корзины возвращало запись вместе со связями.
     }
 
     public function guides()

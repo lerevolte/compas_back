@@ -349,7 +349,20 @@ class CrudService
                         $new_values_keyby[$nv] = $nv;
                     }
                     if(method_exists($ob->{$relation_table}(), 'sync')) {
-                        $ob->{$relation_table}()->sync($new_values);
+                        // Связи с мягко удалёнными записями сохраняем: фронт их
+                        // не показывает (SoftDeletes-scope), поэтому их нет в
+                        // присланном списке, и обычный sync молча отвязал бы их —
+                        // после восстановления из корзины связь была бы потеряна.
+                        $sync_values = $new_values;
+                        $related_model = $ob->{$relation_table}()->getRelated();
+                        if(in_array(\Illuminate\Database\Eloquent\SoftDeletes::class, class_uses_recursive($related_model))) {
+                            $trashed_linked = $ob->{$relation_table}()
+                                ->onlyTrashed()
+                                ->pluck($related_model->getQualifiedKeyName())
+                                ->toArray();
+                            $sync_values = array_values(array_unique(array_merge($new_values, $trashed_linked)));
+                        }
+                        $ob->{$relation_table}()->sync($sync_values);
                     }
                     $old_values = $ob->{$relation_table}->pluck('id')->toArray();
                     $old = array_diff($old_values, $new_values);
@@ -522,21 +535,12 @@ class CrudService
         $entity = $settings['models'][$slug];
         $entity_class = $entity->model_name;
         $items = $entity_class::whereIntegerInRaw('id', $ids)->get();
-        $model_fields = $settings[$slug]['fields'];
-        $relations_reset = array();
-        foreach($model_fields as $field) {
-            if($field->type == 'relation' && $field->field != 'user_id' && $field->field != 'role_id') {
-                $relations_reset[$field->field] = array();
-            }
-        }
-
-        $rows = array();
-        if($slug != 'fines_gibdd'){
-            foreach($items as $current) {
-                $rows[] = array_merge(array('id' => $current->id), $relations_reset);
-            };
-            $result = $this->batch($slug, $rows);
-        }
+        // Связи при удалении НЕ отвязываем: записи удаляются мягко (SoftDeletes),
+        // и при восстановлении из корзины сущность должна вернуться со всеми
+        // своими связями. У неудалённых сущностей удалённые при этом нигде не
+        // отображаются: выборки связей идут через Eloquent-отношения (глобальный
+        // scope SoftDeletes отсекает удалённых) и через settings['list_values']
+        // (строится с whereNull('deleted_at'), см. Settings::field_values).
         foreach($items as $current) {
             $history_text = 'Удалена запись: '.$current->id;
             $history = new \App\Models\History(['entity' => $slug, 'entity_id' => $current->id, 'user_id' => $user_id, 'text' => $history_text, 'event' => 'OBJECT_DELETED']);

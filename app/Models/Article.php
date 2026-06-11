@@ -52,11 +52,8 @@ class Article extends Model
             }
             
        });
-        static::deleting(function($model){ 
-            $model->blog_categories()->sync([]);
-
-            return true; // let the delete go through
-        });
+        // sync([]) при удалении убран: записи удаляются мягко, связи сохраняются,
+        // чтобы восстановление из корзины возвращало запись вместе со связями.
     }
 
     public function blog_categories()

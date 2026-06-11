@@ -279,9 +279,10 @@ class EntityObject
                             }
                         } elseif($current->{$field->field} && isset($settings['list_values'][$field->id][$current->{$field->field}])) {
                             $field_values[$current->{$field->field}] = $settings['list_values'][$field->id][$current->{$field->field}];
-                        } elseif($current->{$field->field}) {
-                            $field_values[$current->{$field->field}] = null;
                         }
+                        // Значение есть, но его нет в list_values — связанная
+                        // запись удалена (list_values строится с whereNull
+                        // deleted_at). Удалённые в опциях не показываем.
                     } else {
                         if(isset($settings[$slug]['options'][$field->field]))
                             $field_values = $settings[$slug]['options'][$field->field];
@@ -320,9 +321,9 @@ class EntityObject
                                 }
                             } elseif($current->{$field->field} && isset($settings['list_values'][$field->id][$current->{$field->field}])) {
                                 $field_values[$current->{$field->field}] = $settings['list_values'][$field->id][$current->{$field->field}];
-                            } elseif($current->{$field->field}) {
-                                $field_values[$current->{$field->field}] = null;
                             }
+                            // Удалённую связанную запись в опции не добавляем
+                            // (см. комментарий выше).
                         } else {
                             $field_values = $settings['list_values'][$field->id];
                         }
@@ -707,9 +708,9 @@ class EntityObject
                             }
                         } elseif($current->{$field->field} && isset($settings['list_values'][$field->id][$current->{$field->field}])) {
                             $field_values[$current->{$field->field}] = $settings['list_values'][$field->id][$current->{$field->field}];
-                        } elseif($current->{$field->field}) {
-                            $field_values[$current->{$field->field}] = null;
                         }
+                        // Значение есть, но его нет в list_values — связанная
+                        // запись удалена. Удалённые в опциях не показываем.
                     } else {
                         if(isset($settings[$slug]['options'][$field->field]))
                             $field_values = $settings[$slug]['options'][$field->field];
@@ -748,9 +749,9 @@ class EntityObject
                                 }
                             } elseif($current->{$field->field} && isset($settings['list_values'][$field->id][$current->{$field->field}])) {
                                 $field_values[$current->{$field->field}] = $settings['list_values'][$field->id][$current->{$field->field}];
-                            } elseif($current->{$field->field}) {
-                                $field_values[$current->{$field->field}] = null;
                             }
+                            // Удалённую связанную запись в опции не добавляем
+                            // (см. комментарий выше).
                         } else {
                             $field_values = $settings['list_values'][$field->id];
                         }
