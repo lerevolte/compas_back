@@ -13,6 +13,61 @@ use Illuminate\Support\Facades\Hash;
 class EntityObject
 {
 
+    /**
+     * Построить опцию (как элемент list_values) для УДАЛЁННОЙ связанной
+     * записи. list_values строится только по живым записям, поэтому для
+     * удалённого объекта, у которого в связях должны отображаться удалённые
+     * записи, собираем подпись напрямую из таблицы (минуя SoftDeletes-scope).
+     */
+    protected static function trashedListValue($field, $id)
+    {
+        $details = json_decode($field->details ?? '', true);
+        $table = $details['table'] ?? $field->relation_table;
+        if (!$table || !$id || !\Schema::hasTable($table)) return null;
+
+        $object = \DB::table($table)->where('id', $id)->first();
+        if (!$object) return null;
+
+        $text = $object->title
+            ?? $object->display_name
+            ?? $object->name
+            ?? ('#' . $object->id);
+        if (ValueHelper::isJson($text)) {
+            $decoded = json_decode($text, true);
+            $text = $decoded['value'] ?? $text;
+        }
+        if (isset($object->first_name)) {
+            $text = trim($object->first_name . ' ' . ($object->last_name ?? ''));
+        }
+
+        $avatar = $object->avatar ?? ($object->photo ?? '');
+        $avatar = $object->icon ?? $avatar;
+        if ($avatar) {
+            $decoded = json_decode($avatar, true);
+            if (isset($decoded[0]['url'])) $avatar = $decoded[0]['url'];
+        }
+
+        $color = $object->color ?? '';
+        if ($color !== '' && is_numeric($color)) {
+            // Числовой color — ID записи field_values (палитра, см. routes)
+            $fv = \DB::table('field_values')->where('id', (int) $color)->first();
+            $color = $fv->color ?? '';
+        }
+
+        return [
+            'label' => [
+                'id' => $object->id,
+                'sort' => 0,
+                'file' => $avatar,
+                'is_hidden' => 0,
+                'field_id' => $field->id,
+                'color' => $color,
+                'text' => $text,
+                'deleted' => 1,
+            ],
+            'value' => $object->id,
+        ];
+    }
 
     public static function detail($slug, $id, Request $request, $settings = null)
     {
@@ -160,6 +215,11 @@ class EntityObject
             $data['deleted_at'] = $current->deleted_at;
         }
 
+        // Сам объект удалён — в его связях показываем и удалённые записи
+        // (например, у удалённой компании — удалённые машины). У живых
+        // объектов удалённые связи по-прежнему скрываются.
+        $isTrashedCurrent = isset($current->deleted_at) && (bool) $current->deleted_at;
+
         // Обработка полей модели
         foreach ($model_fields as $field) {
             if (!array_key_exists($field->field, $fields_data) &&
@@ -179,7 +239,13 @@ class EntityObject
                 if ($field->type == 'relation' && $field->is_plural && $field->relation_table) {
                     $relation_table = $field->relation_table;
                     info($relation_table);
-                    $field_value = $current->{$relation_table}->pluck('id')->toArray();
+                    $relation_query = $current->{$relation_table}();
+                    if ($isTrashedCurrent && in_array(SoftDeletes::class, class_uses_recursive($relation_query->getRelated()))) {
+                        $relation_query = $relation_query->withTrashed();
+                    }
+                    // get()->pluck: pluck('id') на уровне запроса для
+                    // belongsToMany даёт неоднозначный column id (join с pivot)
+                    $field_value = $relation_query->get()->pluck('id')->toArray();
                 }
 
                 $fields_data[$field->field] = $settings[$slug]['field_data'][$field->field];
@@ -235,6 +301,10 @@ class EntityObject
                             if(isset($list_values[$val])) {
                                 $fields_data[$field->field]['value']['value'][] = $list_values[$val]['value'];
                                 $fields_data[$field->field]['value']['localOptions'][] = $list_values[$val];
+                            } elseif($isTrashedCurrent && ($trashed_option = self::trashedListValue($field, $val))) {
+                                // Удалённая связанная запись у удалённого объекта
+                                $fields_data[$field->field]['value']['value'][] = $trashed_option['value'];
+                                $fields_data[$field->field]['value']['localOptions'][] = $trashed_option;
                             }
                         }
                     }
@@ -246,6 +316,14 @@ class EntityObject
                     $fields_data[$field->field]['value']['localOptions'] = array($list_values[$field_value]);
                     $fields_data[$field->field]['value']['value'] = array($list_values[$field_value]['value']);
 
+                } elseif($field->type == 'relation' && $isTrashedCurrent && $field_value && !is_array($field_value)
+                    && ($trashed_option = self::trashedListValue($field, $field_value))) {
+                    // Значение указывает на удалённую запись: у удалённого
+                    // объекта показываем её, у живого (ветка ниже) — скрываем.
+                    $fields_data[$field->field]['value'] = array(
+                        'value' => array($trashed_option['value']),
+                        'localOptions' => array($trashed_option)
+                    );
                 } elseif($field->type == 'relation') {
                     $fields_data[$field->field]['value'] = array(
                         'value' => array(),
@@ -275,7 +353,10 @@ class EntityObject
                         $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true);
                         if($field->is_plural && isset($fields_data[$field->field]['value']['value'])) {
                             foreach($fields_data[$field->field]['value']['value'] as $field_val) {
-                                $field_values[$field_val] = $settings['list_values'][$field->id][$field_val];
+                                // У удалённого объекта value может содержать ID
+                                // удалённых записей — их нет в list_values.
+                                if(isset($settings['list_values'][$field->id][$field_val]))
+                                    $field_values[$field_val] = $settings['list_values'][$field->id][$field_val];
                             }
                         } elseif($current->{$field->field} && isset($settings['list_values'][$field->id][$current->{$field->field}])) {
                             $field_values[$current->{$field->field}] = $settings['list_values'][$field->id][$current->{$field->field}];
@@ -317,7 +398,8 @@ class EntityObject
                         if($field->type == 'relation') {
                             if($field->is_plural && is_array($fields_data[$field->field]['value'])) {
                                 foreach($fields_data[$field->field]['value']['value'] as $field_val) {
-                                    $field_values[$field_val] = $settings['list_values'][$field->id][$field_val]['value'];
+                                    if(isset($settings['list_values'][$field->id][$field_val]))
+                                        $field_values[$field_val] = $settings['list_values'][$field->id][$field_val]['value'];
                                 }
                             } elseif($current->{$field->field} && isset($settings['list_values'][$field->id][$current->{$field->field}])) {
                                 $field_values[$current->{$field->field}] = $settings['list_values'][$field->id][$current->{$field->field}];
@@ -745,7 +827,8 @@ class EntityObject
                         if($field->type == 'relation') {
                             if($field->is_plural && is_array($fields_data[$field->field]['value'])) {
                                 foreach($fields_data[$field->field]['value']['value'] as $field_val) {
-                                    $field_values[$field_val] = $settings['list_values'][$field->id][$field_val]['value'];
+                                    if(isset($settings['list_values'][$field->id][$field_val]))
+                                        $field_values[$field_val] = $settings['list_values'][$field->id][$field_val]['value'];
                                 }
                             } elseif($current->{$field->field} && isset($settings['list_values'][$field->id][$current->{$field->field}])) {
                                 $field_values[$current->{$field->field}] = $settings['list_values'][$field->id][$current->{$field->field}];
@@ -1139,6 +1222,10 @@ class EntityObject
         $tabs = array();
         if($request->trashed) {
             $paginator = $paginator->onlyTrashed();
+        } elseif($request->with_trashed && in_array(SoftDeletes::class, class_uses_recursive($entity_class))) {
+            // Вкладки связанных сущностей на деталке удалённого объекта:
+            // показываем и удалённые связанные записи.
+            $paginator = $paginator->withTrashed();
         }
         if($request->ids) {
             $paginator = $paginator->whereIntegerInRaw('id', $request->ids);
@@ -1148,7 +1235,19 @@ class EntityObject
             if ($slug == 'logistic_tasks' && isset($request->filter['route_id'])) {
                 $routeId = $request->filter['route_id'];
                 if ($routeId == 'null' || $routeId === null) {
-                    $paginator = $paginator->whereNull('route_id');
+                    // «Задачи без актуального маршрута»: route_id пуст ЛИБО
+                    // маршрут удалён (в корзине). При удалении маршрута задачи
+                    // не отвязываются (restore должен вернуть состав), но в
+                    // таблице «Задачи логистики» они должны появиться снова.
+                    $paginator = $paginator->where(function ($q) {
+                        $q->whereNull('route_id')
+                          ->orWhereNotExists(function ($sub) {
+                              $sub->select(\DB::raw(1))
+                                  ->from('routes')
+                                  ->whereColumn('routes.id', 'logistic_tasks.route_id')
+                                  ->whereNull('routes.deleted_at');
+                          });
+                    });
                 } else {
                     $paginator = $paginator->where('route_id', $routeId);
                 }

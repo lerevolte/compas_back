@@ -374,10 +374,17 @@ class RouteController extends Controller
         $items = $entity_class::whereIntegerInRaw('id', $request->ids)->delete();
         foreach($request->ids as $id) {
             $history_text = 'Удалена запись: '.$id;
-            $history = new \App\Models\History(['entity' => 'routes', 'entity_id' => $id, 'user_id' => \Auth::user()->id, 'text' => $history_text]);
+            $history = new \App\Models\History(['entity' => 'routes', 'entity_id' => $id, 'user_id' => \Auth::user()->id, 'text' => $history_text, 'event' => 'OBJECT_DELETED']);
             $history->save();
             \App\Events\ObjectUpdated::dispatch('ObjectDeleted', $id);
         }
+
+        // Сброс кэша настроек обязателен: list_values (опции relation-полей)
+        // строятся по живым записям и кэшируются в memcached. Без сброса
+        // удалённый маршрут продолжал отображаться в связях задач логистики
+        // до естественного устаревания кэша (CrudService::delete кэш чистит,
+        // а этот эндпоинт — не чистил).
+        \App\Models\Settings::clear_cache();
 
         return response()->json(['success' => true]);
     }

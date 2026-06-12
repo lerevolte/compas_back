@@ -476,7 +476,19 @@ class Settings extends Model
 		        $all_fields_models = Field::get()->keyBy('id');
 		        $groups = $all_fields->groupBy('data_type_id')->toArray();
 		        
-		        $statuses = \DB::table('field_values')->orderBy('is_hidden', 'asc')->orderBy('sort')->get()->groupBy('field_id')->toArray();
+		        $status_rows = \DB::table('field_values')->orderBy('is_hidden', 'asc')->orderBy('sort')->get();
+		        $statuses = $status_rows->groupBy('field_id')->toArray();
+
+		        // У маршрутов (routes.color) в колонке color хранится ID записи
+		        // field_values (палитра цвета линии на карте), а не hex/градиент.
+		        // Для аватарок/чипов на фронте резолвим числовой color в hex.
+		        $fv_color_by_id = $status_rows->pluck('color', 'id');
+		        $resolveDisplayColor = function ($color) use ($fv_color_by_id) {
+		            if ($color !== null && $color !== '' && is_numeric($color)) {
+		                return $fv_color_by_id[(int) $color] ?? '';
+		            }
+		            return $color ?? '';
+		        };
 
 		        $fields = \DB::table('data_rows')->where('type', 'relation')->orWhere('type', 'select_dropdown')->get();
 		        $field_values = array();
@@ -551,7 +563,7 @@ class Settings extends Model
 												'file' => $avatar,
 												'is_hidden' => 0,
 												'field_id' => $field->id,
-												'color' => isset($object->color) ? $object->color : '',
+												'color' => $resolveDisplayColor(isset($object->color) ? $object->color : ''),
 												'text' => $object->title
 											],
 											'value' => $object->id
@@ -583,7 +595,7 @@ class Settings extends Model
 												'file' => $avatar,
 												'is_hidden' => 0,
 												'field_id' => $field->id,
-												'color' => array_key_exists('color', $obj_arr) && !$object->color ? $object->getColor() : ($object->color ?? ''),
+												'color' => $resolveDisplayColor(array_key_exists('color', $obj_arr) && !$object->color ? $object->getColor() : ($object->color ?? '')),
 												'text' => $name,
 											],
 											'value' => $object->id
@@ -609,7 +621,7 @@ class Settings extends Model
 												'file' => $avatar,
 												'is_hidden' => 0,
 												'field_id' => $field->id,
-												'color' => array_key_exists('color', $obj_arr) && !$object->color ? $object->getColor() : ($object->color ?? ''),
+												'color' => $resolveDisplayColor(array_key_exists('color', $obj_arr) && !$object->color ? $object->getColor() : ($object->color ?? '')),
 												'text' => $name//.($last_name ? ' '.$last_name:''),
 											];
 											// Для товаров подкидываем цену/вес/количество — фронт
@@ -632,7 +644,7 @@ class Settings extends Model
 												'file' => $avatar,
 												'is_hidden' => 0,
 												'field_id' => $field->id,
-												'color' => isset($object->color) && !$object->color ? $object->getColor() : ($object->color ?? ''),
+												'color' => $resolveDisplayColor(isset($object->color) && !$object->color ? $object->getColor() : ($object->color ?? '')),
 												'text' => $object->name,
 											],
 											'value' => $object->id

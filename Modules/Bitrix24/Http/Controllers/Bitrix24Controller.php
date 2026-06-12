@@ -493,7 +493,30 @@ class Bitrix24Controller extends Controller
             $task->point_status = $params['point_status'] ?? self::NEW_POINT_STATUS;
         }
 
-        $task->save();
+        // История изменений — как при обычной работе с объектом через UI
+        // (CrudService::batch). Вебхук не авторизован, поэтому записи уйдут
+        // от пользователя id=1 (системный) — так же ведут себя остальные
+        // не-авторизованные пути записи истории.
+        if ($isNew) {
+            $task->save();
+            try {
+                \App\Models\History::createObject('logistic_tasks', $task);
+            } catch (\Throwable $e) {
+                Log::channel('bitrix24')->warning('deal-hook: history create failed', ['task_id' => $task->id, 'error' => $e->getMessage()]);
+            }
+        } else {
+            $dirty = $task->getDirty();
+            if (count($dirty)) {
+                try {
+                    // saveForObject сравнивает row с текущими значениями в БД,
+                    // поэтому вызывается ДО save().
+                    \App\Models\History::saveForObject('logistic_tasks', [array_merge(['id' => $task->id], $dirty)]);
+                } catch (\Throwable $e) {
+                    Log::channel('bitrix24')->warning('deal-hook: history update failed', ['task_id' => $task->id, 'error' => $e->getMessage()]);
+                }
+            }
+            $task->save();
+        }
 
         return response()->json([
             'status'     => 'ok',
