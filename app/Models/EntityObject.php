@@ -13,17 +13,65 @@ use Illuminate\Support\Facades\Hash;
 class EntityObject
 {
 
+    // Кэш проверок схемы на время запроса (Schema::hasTable/hasColumn ходят
+    // в information_schema — не дёргаем их повторно для одной таблицы).
+    protected static $relation_tables_cache = [];
+    protected static $deleted_at_columns_cache = [];
+
     /**
-     * Построить опцию (как элемент list_values) для УДАЛЁННОЙ связанной
-     * записи. list_values строится только по живым записям, поэтому для
-     * удалённого объекта, у которого в связях должны отображаться удалённые
-     * записи, собираем подпись напрямую из таблицы (минуя SoftDeletes-scope).
+     * Таблица, на которую смотрит relation-поле (details.table либо
+     * relation_table), или null, если таблицы нет.
      */
-    protected static function trashedListValue($field, $id)
+    protected static function relationTableOf($field): ?string
     {
+        $key = $field->id ?? ($field->field . ':' . ($field->relation_table ?? ''));
+        if (array_key_exists($key, self::$relation_tables_cache)) {
+            return self::$relation_tables_cache[$key];
+        }
         $details = json_decode($field->details ?? '', true);
-        $table = $details['table'] ?? $field->relation_table;
-        if (!$table || !$id || !\Schema::hasTable($table)) return null;
+        $table = $details['table'] ?? ($field->relation_table ?: null);
+        if (!$table || !\Schema::hasTable($table)) {
+            $table = null;
+        }
+        return self::$relation_tables_cache[$key] = $table;
+    }
+
+    protected static function tableHasDeletedAt(string $table): bool
+    {
+        if (!array_key_exists($table, self::$deleted_at_columns_cache)) {
+            self::$deleted_at_columns_cache[$table] = \Schema::hasColumn($table, 'deleted_at');
+        }
+        return self::$deleted_at_columns_cache[$table];
+    }
+
+    /**
+     * Жива ли (не удалена) связанная запись одиночного relation-поля.
+     * Проверяем по БД, а не по settings['list_values']: кэш настроек может
+     * быть устаревшим (SettingsClearJob в очереди), и удалённая запись в нём
+     * ещё числится живой.
+     */
+    protected static function relatedIsAlive($field, $id): bool
+    {
+        if (!$id || is_array($id)) return true;
+        $table = self::relationTableOf($field);
+        if (!$table) return true;
+        $q = \DB::table($table)->where('id', $id);
+        if (self::tableHasDeletedAt($table)) {
+            $q->whereNull('deleted_at');
+        }
+        return $q->exists();
+    }
+
+    /**
+     * Построить опцию (как элемент list_values) для связанной записи прямо
+     * из таблицы (минуя SoftDeletes-scope и кэш настроек). Используется для
+     * удалённых связей удалённого объекта и для живых записей, которых ещё
+     * нет в (возможно устаревшем) кэше list_values.
+     */
+    protected static function listValueFromTable($field, $id)
+    {
+        $table = self::relationTableOf($field);
+        if (!$table || !$id || is_array($id)) return null;
 
         $object = \DB::table($table)->where('id', $id)->first();
         if (!$object) return null;
@@ -63,7 +111,7 @@ class EntityObject
                 'field_id' => $field->id,
                 'color' => $color,
                 'text' => $text,
-                'deleted' => 1,
+                'deleted' => (isset($object->deleted_at) && $object->deleted_at) ? 1 : 0,
             ],
             'value' => $object->id,
         ];
@@ -301,13 +349,24 @@ class EntityObject
                             if(isset($list_values[$val])) {
                                 $fields_data[$field->field]['value']['value'][] = $list_values[$val]['value'];
                                 $fields_data[$field->field]['value']['localOptions'][] = $list_values[$val];
-                            } elseif($isTrashedCurrent && ($trashed_option = self::trashedListValue($field, $val))) {
-                                // Удалённая связанная запись у удалённого объекта
-                                $fields_data[$field->field]['value']['value'][] = $trashed_option['value'];
-                                $fields_data[$field->field]['value']['localOptions'][] = $trashed_option;
+                            } elseif(($table_option = self::listValueFromTable($field, $val))) {
+                                // Записи нет в list_values: либо она удалена
+                                // (а сам объект в корзине — pluck шёл withTrashed),
+                                // либо кэш настроек устарел. Собираем подпись из БД.
+                                $fields_data[$field->field]['value']['value'][] = $table_option['value'];
+                                $fields_data[$field->field]['value']['localOptions'][] = $table_option;
                             }
                         }
                     }
+                } elseif($field->type == 'relation' && $field_value && !is_array($field_value)
+                    && !$isTrashedCurrent && !self::relatedIsAlive($field, $field_value)) {
+                    // Связанная запись удалена, а сам объект жив — связь не
+                    // показываем (даже если она ещё числится в устаревшем
+                    // кэше list_values).
+                    $fields_data[$field->field]['value'] = array(
+                        'value' => array(),
+                        'localOptions' => array()
+                    );
                 } elseif($field->type == 'relation' && isset($list_values[$field_value])) {
                     $fields_data[$field->field]['value'] = array(
                         'value' => array(),
@@ -316,13 +375,15 @@ class EntityObject
                     $fields_data[$field->field]['value']['localOptions'] = array($list_values[$field_value]);
                     $fields_data[$field->field]['value']['value'] = array($list_values[$field_value]['value']);
 
-                } elseif($field->type == 'relation' && $isTrashedCurrent && $field_value && !is_array($field_value)
-                    && ($trashed_option = self::trashedListValue($field, $field_value))) {
-                    // Значение указывает на удалённую запись: у удалённого
-                    // объекта показываем её, у живого (ветка ниже) — скрываем.
+                } elseif($field->type == 'relation' && $field_value && !is_array($field_value)
+                    && ($table_option = self::listValueFromTable($field, $field_value))) {
+                    // Значения нет в list_values: у удалённого объекта это
+                    // удалённая связь (показываем), у живого — живая запись,
+                    // не попавшая в устаревший кэш (тоже показываем; удалённые
+                    // у живого отсечены веткой выше).
                     $fields_data[$field->field]['value'] = array(
-                        'value' => array($trashed_option['value']),
-                        'localOptions' => array($trashed_option)
+                        'value' => array($table_option['value']),
+                        'localOptions' => array($table_option)
                     );
                 } elseif($field->type == 'relation') {
                     $fields_data[$field->field]['value'] = array(
@@ -1585,6 +1646,37 @@ class EntityObject
                 break;
             }
         };
+
+        // Авторитетная проверка «жива ли связанная запись» для одиночных
+        // relation-полей страницы: list_values может быть прочитан из
+        // устаревшего кэша настроек (SettingsClearJob ещё в очереди), поэтому
+        // удалённость проверяем по БД — один запрос на поле на страницу.
+        // У живых строк удалённые связи скрываются, у строк в корзине —
+        // показываются (см. маппинг ниже).
+        $relation_alive = array();
+        foreach($model_fields as $field) {
+            if($field->type != 'relation' || $field->is_plural)
+                continue;
+            $rel_table = self::relationTableOf($field);
+            if(!$rel_table)
+                continue;
+            $rel_ids = array();
+            foreach ($paginator->items() as $item) {
+                $v = $item->{$field->field};
+                if($v && !is_array($v) && is_numeric($v))
+                    $rel_ids[(int)$v] = true;
+            }
+            if(!count($rel_ids))
+                continue;
+            $rel_has_deleted_at = self::tableHasDeletedAt($rel_table);
+            $rel_rows = \DB::table($rel_table)
+                ->whereIntegerInRaw('id', array_keys($rel_ids))
+                ->get($rel_has_deleted_at ? ['id', 'deleted_at'] : ['id']);
+            foreach($rel_rows as $rel_row) {
+                $relation_alive[$field->id][$rel_row->id] = $rel_has_deleted_at ? is_null($rel_row->deleted_at) : true;
+            }
+        }
+
         foreach ($paginator->items() as $item) {
             $data = array(
                 'id' => $item->id
@@ -1600,7 +1692,13 @@ class EntityObject
                     }
                     if($field->type == 'relation' && $field->is_plural && $field->relation_table) {
                         $relation_table = $field->relation_table;
-                        $field_value = $item->{$relation_table}->pluck('id')->toArray();
+                        $relation_query = $item->{$relation_table}();
+                        if (isset($item->deleted_at) && $item->deleted_at
+                            && in_array(SoftDeletes::class, class_uses_recursive($relation_query->getRelated()))) {
+                            // Строка в корзине — показываем и удалённые связи
+                            $relation_query = $relation_query->withTrashed();
+                        }
+                        $field_value = $relation_query->get()->pluck('id')->toArray();
                     }
                     $data[$field->field] = $field_value;
                     $list_values = array();
@@ -1627,17 +1725,49 @@ class EntityObject
                                 if(isset($list_values[$val])) {
                                     $data[$field->field]['value'][] = $list_values[$val]['value'];
                                     $data[$field->field]['localOptions'][] = $list_values[$val];
+                                } elseif(($table_option = self::listValueFromTable($field, $val))) {
+                                    // Удалённая связь строки из корзины либо
+                                    // живая запись, не попавшая в устаревший кэш
+                                    $data[$field->field]['value'][] = $table_option['value'];
+                                    $data[$field->field]['localOptions'][] = $table_option;
                                 }
                             }
                         }
-                    } elseif($field->type == 'relation' && isset($list_values[$field_value])) {
-                        $data[$field->field] = array(
-                            'value' => array(),
-                            'localOptions' => array()
-                        );
-                        $data[$field->field]['localOptions'] = array($list_values[$field_value]);
-                        $data[$field->field]['value'] = array($list_values[$field_value]['value']);
-
+                    } elseif($field->type == 'relation' && $field_value && !is_array($field_value)) {
+                        $row_trashed = isset($item->deleted_at) && $item->deleted_at;
+                        $alive = is_numeric($field_value)
+                            ? ($relation_alive[$field->id][(int)$field_value] ?? null)
+                            : null;
+                        if($alive === false && !$row_trashed) {
+                            // Связанная запись удалена, строка живая — скрываем
+                            // (даже если запись ещё есть в устаревшем list_values)
+                            $data[$field->field] = array(
+                                'value' => null,
+                                'localOptions' => null
+                            );
+                        } elseif($alive === false && ($table_option = self::listValueFromTable($field, $field_value))) {
+                            // Строка в корзине — показываем удалённую связь
+                            $data[$field->field] = array(
+                                'value' => array($table_option['value']),
+                                'localOptions' => array($table_option)
+                            );
+                        } elseif($alive !== false && isset($list_values[$field_value])) {
+                            $data[$field->field] = array(
+                                'value' => array($list_values[$field_value]['value']),
+                                'localOptions' => array($list_values[$field_value])
+                            );
+                        } elseif($alive === true && ($table_option = self::listValueFromTable($field, $field_value))) {
+                            // Живая запись, которой нет в (устаревшем) кэше
+                            $data[$field->field] = array(
+                                'value' => array($table_option['value']),
+                                'localOptions' => array($table_option)
+                            );
+                        } else {
+                            $data[$field->field] = array(
+                                'value' => null,
+                                'localOptions' => null
+                            );
+                        }
                     } elseif($field->type == 'relation') {
                         $data[$field->field] = array(
                             'value' => null,
