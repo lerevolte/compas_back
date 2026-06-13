@@ -145,6 +145,23 @@ class SearchService
                 $items = $entity_class::whereNull('deleted_at')->limit(20)->get();
             }
         }
+        // Для задач логистики: какие из привязанных маршрутов ещё живы.
+        // route_id удалённого маршрута в результаты поиска отдавать нельзя —
+        // иначе фронт пытается открыть «Задачи в машине» для удалённого
+        // маршрута, а RouteController::tasks падает на Route::find()->tasks().
+        $alive_route_ids = array();
+        if(isset($params['entity']) && $params['entity'] == 'logistic_tasks' && count($items)) {
+            $route_ids = collect($items)->pluck('route_id')->filter()->unique()->values()->all();
+            if(count($route_ids) && \Schema::hasTable('routes')) {
+                $alive_route_ids = \DB::table('routes')
+                    ->whereIntegerInRaw('id', $route_ids)
+                    ->whereNull('deleted_at')
+                    ->pluck('id')
+                    ->all();
+                $alive_route_ids = array_flip($alive_route_ids);
+            }
+        }
+
         if(isset($params['entity'])) {
             foreach($items as $item) {
                 if($item->id == 290) {
@@ -214,7 +231,12 @@ class SearchService
                     // в /logistic на конкретную дату с авто-выбором маршрута,
                     // на /logistic без маршрута, или в общий список с фильтром.
                     if($params['entity'] == 'logistic_tasks') {
-                        $item_data['label']['route_id'] = $item->route_id;
+                        // route_id отдаём только если маршрут не удалён —
+                        // иначе задача удалённого маршрута откроет «Задачи в
+                        // машине» и уронит RouteController::tasks.
+                        $item_data['label']['route_id'] = ($item->route_id && isset($alive_route_ids[$item->route_id]))
+                            ? $item->route_id
+                            : null;
                         $item_data['label']['delivery_date'] = $item->delivery_date
                             ? \Carbon\Carbon::parse($item->delivery_date)->format('Y-m-d')
                             : null;

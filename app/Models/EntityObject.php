@@ -1316,6 +1316,13 @@ class EntityObject
             foreach($request->filter as $field => $val) {
                 if($val == 'null')
                     $val = null;
+                // route_id у logistic_tasks уже обработан спец-блоком выше
+                // (учитывает удалённые маршруты через orWhereNotExists).
+                // Повторная обработка в общем цикле навешивала бы AND
+                // route_id IS NULL и отменяла учёт удалённых маршрутов —
+                // задачи удалённого маршрута не попадали в «Задачи логистики».
+                if($slug == 'logistic_tasks' && $field == 'route_id')
+                    continue;
                 if(!isset($settings[$slug]['fields'][$field]))
                     continue;
                 /*if($field == 'created_at' || $field == 'updated_at') {

@@ -391,9 +391,20 @@ class RouteController extends Controller
 
     public function tasks($id, Request $request)
     {
+        // Маршрут мог быть удалён (soft delete) — Route::find вернёт null.
+        // Не падаем 500: отдаём пустой набор задач, фронт спокойно покажет
+        // пустые «Задачи в машине» и карту.
+        $route = Route::find($id);
+        if(!$route) {
+            return response()->json([
+                'count' => 0, 'current_page' => 1, 'last_page' => 1,
+                'per_page' => 0, 'total' => 0, 'from' => null, 'to' => null,
+                'data' => [],
+            ]);
+        }
         // Подгружаем связь status (point_status → FieldValue), чтобы отдать цвет
         // статуса точки на карту (квадратик статуса у маркера маршрута).
-        $tasks = Route::find($id)->tasks()->with('status')->get();
+        $tasks = $route->tasks()->with('status')->get();
         $settings = get_settings();
         $tenant = tenant('id');
 
@@ -488,9 +499,13 @@ class RouteController extends Controller
         ]);
     }
 
-    public function update_tasks($id, Request $request) 
+    public function update_tasks($id, Request $request)
     {
-        $old_tasks = Route::find($id)->tasks;
+        $route = Route::find($id);
+        if(!$route) {
+            return response()->json(['code' => 404, 'error' => 'Маршрут не найден или удалён'], 404);
+        }
+        $old_tasks = $route->tasks;
         // Пустой ids = из маршрута убрали последнюю задачу. В этом случае
         // implode даёт "FIELD(id, )" — невалидный SQL, поэтому new_tasks
         // оставляем пустой коллекцией: ниже все old_tasks отвяжутся (route_id=null).
