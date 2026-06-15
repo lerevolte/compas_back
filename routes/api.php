@@ -19,6 +19,8 @@ Route::post(
 // )->name('gibdd.check_by_sts');
 Route::get('map/suggest', [App\Http\Controllers\Api\MapController::class, 'suggest']);
 Route::get('map/geocode', [App\Http\Controllers\Api\MapController::class, 'geocode']);
+Route::post('map/yandex-log', [App\Http\Controllers\Api\MapController::class, 'logRoute'])
+    ->middleware('throttle:120,1');
 Route::post(
     'registration', 
     App\Http\Controllers\Api\RegistrationController::class

@@ -9,9 +9,51 @@ use Storage;
 use Auth;
 use App\Helpers\ValueHelper;
 use Illuminate\Support\Str;
+use App\Models\YandexRouteLog;
 
 class MapController extends Controller
 {
+    /**
+     * Принимает «маячок» от фронтенда о запросе к Яндекс-маршрутизатору
+     * и фиксирует, с какого IP и каким API-ключом он прошёл.
+     * Endpoint публичный (вызывается со статического лендинга), поэтому
+     * максимально защищён от мусора и никогда не роняет клиента.
+     */
+    public function logRoute(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'event'    => 'required|string|in:script_ok,script_fail,route_ok,route_fail',
+                'api_key'  => 'nullable|string|max:64',
+                'page'     => 'nullable|string|max:255',
+                'address'  => 'nullable|string|max:512',
+                'distance' => 'nullable|string|max:64',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json(['ok' => false], 422);
+            }
+
+            $data = $validator->validated();
+
+            YandexRouteLog::create([
+                'ip'         => $request->ip(),
+                'api_key'    => $data['api_key'] ?? null,
+                'event'      => $data['event'],
+                'page'       => $data['page'] ?? null,
+                'address'    => $data['address'] ?? null,
+                'distance'   => $data['distance'] ?? null,
+                'user_agent' => Str::limit((string) $request->userAgent(), 1000, ''),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            // Логирование не должно влиять на работу карты.
+            report($e);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
     public function suggest(Request $request)
     {
         $dadata = new \App\Services\Dadata('1aae835b4ef406e670f2fed34e0e1f44a7a2fc46', '12b85f4474f0fab219a2307f13a33c05f8418355');
