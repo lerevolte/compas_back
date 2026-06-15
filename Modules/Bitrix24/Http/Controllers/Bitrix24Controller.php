@@ -293,8 +293,9 @@ class Bitrix24Controller extends Controller
         ]);
 
         // Дедуп по номеру сделки в названии. Граница ([^0-9]|$) — чтобы №112 не
-        // совпадал с №1120.
-        $existing = \App\Models\Task::where('name', 'REGEXP', '^Сделка №' . $dealId . '([^0-9]|$)')
+        // совпадал с №1120. Якорь ^ убран: name теперь хранится JSON-ом
+        // (внешняя ссылка), т.е. строка начинается с {"value":"Сделка №...".
+        $existing = \App\Models\Task::where('name', 'REGEXP', 'Сделка №' . $dealId . '([^0-9]|$)')
             ->whereNull('deleted_at')
             ->first();
 
@@ -383,7 +384,13 @@ class Bitrix24Controller extends Controller
         $isNew = !$existing;
 
         $clientName = $deal['UF_CRM_1642670804'] ?? ($contact['NAME'] ?? null);
-        $task->name = 'Сделка №' . $dealId;
+        // Поле «Название» в задачах логистики — текстовое поле-внешняя-ссылка
+        // (хранится JSON-ом {value, external_link}). Текст — «Сделка №ID»,
+        // ссылка ведёт на карточку сделки в CRM.
+        $task->name = json_encode([
+            'value'         => 'Сделка №' . $dealId,
+            'external_link' => 'https://crm6.ru/crm/deal/details/' . $dealId . '/',
+        ], JSON_UNESCAPED_UNICODE);
         $task->contact = $clientName;
 
         // Адрес + координаты (lat,lng в UF_CRM_1741758491) -> JSON {text, coords}
@@ -441,8 +448,14 @@ class Bitrix24Controller extends Controller
         $task->pallets_count = $deal['UF_CRM_1696596978695'] ?? null;
         $task->crm_link = 'https://crm6.ru/crm/deal/details/' . $dealId . '/';
 
-        // Разгрузка (UF_CRM_1762411084 -> массив названий)
-        if (!empty($deal['UF_CRM_1762411084']) && is_array($deal['UF_CRM_1762411084'])) {
+        // Разгрузка / требования (UF_CRM_1762411084 -> массив названий).
+        // ВАЖНО: множественное enumeration-поле crm.deal.get отдаёт МАССИВОМ,
+        // когда выбрано несколько значений, но СКАЛЯРОМ (одна строка-id),
+        // когда выбрано ровно одно. Из-за прежней проверки is_array() сделки с
+        // одним требованием (напр. только «Гидролифт») не переносились вовсе —
+        // нормализуем к массиву.
+        $rawUnloading = $deal['UF_CRM_1762411084'] ?? null;
+        if (!empty($rawUnloading)) {
             $unloadingMap = [
                 2867 => 'Гидролифт',
                 2868 => 'Манипулятор',
@@ -451,8 +464,8 @@ class Bitrix24Controller extends Controller
                 2871 => 'Водитель РФ',
             ];
             $unloading = [];
-            foreach ($deal['UF_CRM_1762411084'] as $val) {
-                if (isset($unloadingMap[$val])) {
+            foreach ((is_array($rawUnloading) ? $rawUnloading : [$rawUnloading]) as $val) {
+                if ($val !== '' && $val !== null && isset($unloadingMap[$val])) {
                     $unloading[] = $unloadingMap[$val];
                 }
             }

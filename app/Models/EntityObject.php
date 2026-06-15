@@ -1123,7 +1123,17 @@ class EntityObject
 
         $limit = $request->has('per_page') ? $request->per_page : $per_page;
         $page = $request->page ? $request->page : 1;
-        $sort_field = $request->sort_field ? $request->sort_field : (isset($tables[$slug]['sort_field']) ? $tables[$slug]['sort_field'] : 'id');
+        // Строку "null" (а равно пустую строку) трактуем как «сортировка не задана»
+        // и откатываемся к сохранённым настройкам таблицы. Без этого фронт мог
+        // прислать sort_field=null, и orderBy получал несуществующую колонку "null".
+        $req_sort_field = $request->sort_field;
+        if ($req_sort_field === 'null' || $req_sort_field === '' || $req_sort_field === null) {
+            $req_sort_field = null;
+        }
+        $sort_field = $req_sort_field ?: (isset($tables[$slug]['sort_field']) ? $tables[$slug]['sort_field'] : 'id');
+        if ($sort_field === 'null' || $sort_field === '' || $sort_field === null) {
+            $sort_field = 'id';
+        }
         $sort_order = $request->sort_order ?? ($tables[$slug]['sort_order'] ?? 'desc');
         $sort_order = strtolower((string) $sort_order);
         if ($sort_order === 'null' || !in_array($sort_order, ['asc','desc'], true)) {
