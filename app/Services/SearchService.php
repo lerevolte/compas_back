@@ -27,10 +27,23 @@ class SearchService
             $q = mb_strtolower($params['q']);
             if(isset($params['field_id'])) {
                 $data = collect($settings['list_values'][$params['field_id']])->filter(function ($item) use ($q) {
-                    
+
                     $text = mb_strtolower($item['label']['text']);
                     return false !== stristr($text, $q) || $item['value'] == $q;
                 })->toArray();
+
+                if(count($data)) {
+                    $fieldRow = \DB::table('data_rows')->where('id', $params['field_id'])->first();
+                    if($fieldRow && $fieldRow->type == 'relation' && $fieldRow->relation_table && isset($settings['models'][$fieldRow->relation_table])) {
+                        $relClass = $settings['models'][$fieldRow->relation_table]->model_name;
+                        $aliveIds = $relClass::whereIntegerInRaw('id', array_keys($data))->pluck('id')->toArray();
+                        foreach($data as $key => $item) {
+                            if(!in_array($key, $aliveIds))
+                                unset($data[$key]);
+                        }
+                    }
+                }
+
                 if(isset($params['filter']) && count($data) && isset($slug)) {
                     $paginator = $entity_class::whereNull('deleted_at')->whereIntegerInRaw('id', array_keys($data));
                     foreach($params['filter'] as $field => $val) {

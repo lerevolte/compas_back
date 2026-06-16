@@ -40,7 +40,7 @@ class CrudService
                     'status' => 403
                 ];
             }
-            if ($slug == 'logistic_tasks' && array_key_exists('delivery_date', $row) && $row['id']) {
+            if ($slug == 'logistic_tasks' && array_key_exists('delivery_date', $row) && $row['id'] && !isset($row['copy'])) {
                 // Проверяем существование записи с заполненным route_id
                 // Используем exists() для оптимизации, чтобы не грузить всю модель
                 $is_routed = $entity_class::where('id', $row['id'])

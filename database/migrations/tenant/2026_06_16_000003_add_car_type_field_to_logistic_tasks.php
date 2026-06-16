@@ -1,12 +1,23 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
     public function up(): void
     {
+        if (!Schema::hasTable('logistic_tasks')) {
+            return;
+        }
+        if (!Schema::hasColumn('logistic_tasks', 'car_type')) {
+            Schema::table('logistic_tasks', function (Blueprint $table) {
+                $table->integer('car_type')->nullable();
+            });
+        }
+
         $ltType = DB::table('data_types')->where('slug', 'logistic_tasks')->first();
         if (!$ltType) {
             return;
@@ -29,38 +40,38 @@ return new class extends Migration
 
         $exists = DB::table('data_rows')
             ->where('data_type_id', $ltType->id)
-            ->where('field', 'unloading')
+            ->where('field', 'car_type')
             ->exists();
         if ($exists) {
             return;
         }
 
         $options = [
-            'Гидролифт'   => ['value' => 'Гидролифт', 'label' => 'Гидролифт'],
-            'Манипулятор' => ['value' => 'Манипулятор', 'label' => 'Манипулятор'],
-            'Ручная'      => ['value' => 'Ручная', 'label' => 'Ручная'],
-            'Открытая'    => ['value' => 'Открытая', 'label' => 'Открытая'],
-            'Водитель РФ' => ['value' => 'Водитель РФ', 'label' => 'Водитель РФ'],
+            2712 => ['value' => 2712, 'label' => 'ТК, СДЭК'],
+            2713 => ['value' => 2713, 'label' => 'ТК, Boxberry'],
+            2714 => ['value' => 2714, 'label' => 'ТК, Почта России'],
+            2715 => ['value' => 2715, 'label' => 'ТК, ПЭК'],
+            2716 => ['value' => 2716, 'label' => 'ТК, Другая'],
         ];
 
         DB::table('data_rows')->insert([
             'data_type_id'         => $ltType->id,
-            'field'                => 'unloading',
+            'field'                => 'car_type',
             'type'                 => 'select_dropdown',
-            'title'                => 'Разгрузка',
+            'title'                => 'Тип ТК',
             'required'             => 0,
             'details'              => json_encode(['options' => $options], JSON_UNESCAPED_UNICODE),
             'visible_always'       => 1,
             'label_color'          => '',
             'section_id'           => $ltSec,
             'group_id'             => null,
-            'sort'                 => 52,
+            'sort'                 => 53,
             'created_at'           => null,
             'updated_at'           => null,
             'button_name'          => 'Загрузить',
             'show_file_image'      => 0,
             'hide'                 => 0,
-            'is_plural'            => 1,
+            'is_plural'            => 0,
             'roles_read'           => '',
             'roles_write'          => '',
             'is_remove'            => 0,
@@ -99,8 +110,13 @@ return new class extends Migration
         if ($ltType) {
             DB::table('data_rows')
                 ->where('data_type_id', $ltType->id)
-                ->where('field', 'unloading')
+                ->where('field', 'car_type')
                 ->delete();
+        }
+        if (Schema::hasTable('logistic_tasks') && Schema::hasColumn('logistic_tasks', 'car_type')) {
+            Schema::table('logistic_tasks', function (Blueprint $table) {
+                $table->dropColumn('car_type');
+            });
         }
     }
 };

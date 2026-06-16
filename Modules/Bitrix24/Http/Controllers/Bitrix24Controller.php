@@ -292,10 +292,12 @@ class Bitrix24Controller extends Controller
             'method'       => $request->method(),
         ]);
 
-        // Дедуп по номеру сделки в названии. Граница ([^0-9]|$) — чтобы №112 не
-        // совпадал с №1120. Якорь ^ убран: name теперь хранится JSON-ом
-        // (внешняя ссылка), т.е. строка начинается с {"value":"Сделка №...".
-        $existing = \App\Models\Task::where('name', 'REGEXP', 'Сделка №' . $dealId . '([^0-9]|$)')
+        $crmLink = 'https://crm6.ru/crm/deal/details/' . $dealId . '/';
+        $existing = \App\Models\Task::where(function ($q) use ($crmLink, $dealId) {
+                $q->where('crm_link', $crmLink)
+                  ->orWhere('name->external_link', $crmLink)
+                  ->orWhere('name', 'REGEXP', 'Сделка №' . $dealId . '([^0-9]|$)');
+            })
             ->whereNull('deleted_at')
             ->first();
 
@@ -446,39 +448,18 @@ class Bitrix24Controller extends Controller
         // --- Доп. поля (новые колонки) ---
         $task->comment = $deal['UF_CRM_5EAFC3D4C5F76'] ?? null;
         $task->pallets_count = $deal['UF_CRM_1696596978695'] ?? null;
-        $task->crm_link = 'https://crm6.ru/crm/deal/details/' . $dealId . '/';
+        $task->crm_link = $crmLink;
 
-        // Разгрузка / требования (UF_CRM_1762411084 -> массив названий).
-        // ВАЖНО: множественное enumeration-поле crm.deal.get отдаёт МАССИВОМ,
-        // когда выбрано несколько значений, но СКАЛЯРОМ (одна строка-id),
-        // когда выбрано ровно одно. Из-за прежней проверки is_array() сделки с
-        // одним требованием (напр. только «Гидролифт») не переносились вовсе —
-        // нормализуем к массиву.
         $rawUnloading = $deal['UF_CRM_1762411084'] ?? null;
-        if (!empty($rawUnloading)) {
-            $unloadingMap = [
-                2867 => 'Гидролифт',
-                2868 => 'Манипулятор',
-                2869 => 'Ручная',
-                2870 => 'Открытая',
-                2871 => 'Водитель РФ',
-            ];
-            $unloading = [];
-            foreach ((is_array($rawUnloading) ? $rawUnloading : [$rawUnloading]) as $val) {
-                if ($val !== '' && $val !== null && isset($unloadingMap[$val])) {
-                    $unloading[] = $unloadingMap[$val];
-                }
+        $carReqs = [];
+        foreach ((is_array($rawUnloading) ? $rawUnloading : [$rawUnloading]) as $val) {
+            if ($val !== '' && $val !== null) {
+                $carReqs[] = (int) $val;
             }
-            $task->unloading = $unloading ? json_encode($unloading, JSON_UNESCAPED_UNICODE) : null;
-        } else {
-            $task->unloading = null;
         }
+        $task->car_requirements = $carReqs ? json_encode($carReqs) : null;
 
-        // Тип машины/доставки (UF_CRM_1625083610453 -> код)
-        if (!empty($deal['UF_CRM_1625083610453'])) {
-            $typeMap = ['2712' => 3, '2713' => 4, '2714' => 5, '2715' => 6, '2716' => 7];
-            $task->type = $typeMap[$deal['UF_CRM_1625083610453']] ?? 0;
-        }
+        $task->car_type = !empty($deal['UF_CRM_1625083610453']) ? (int) $deal['UF_CRM_1625083610453'] : null;
 
         // Оплата: счёт (если есть номера) или наличные
         if (count($invoices) > 0) {
