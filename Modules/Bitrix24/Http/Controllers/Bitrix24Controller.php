@@ -378,15 +378,19 @@ class Bitrix24Controller extends Controller
 
         // --- Счета (оплата) ---
         $invoices = [];
-        $invResp = Http::post($base . 'crm.invoice.list', [
-            'filter' => ['UF_DEAL_ID' => $deal['ID']],
-        ])->collect();
-        if (isset($invResp['result']) && is_array($invResp['result'])) {
-            foreach ($invResp['result'] as $invoice) {
-                if (($invoice['UF_DEAL_ID'] ?? null) == $deal['ID']) {
-                    $invoices[] = $invoice['ACCOUNT_NUMBER'] ?? $invoice['ID'];
+        try {
+            $invResp = Http::post($base . 'crm.invoice.list', [
+                'filter' => ['UF_DEAL_ID' => $deal['ID']],
+            ])->collect();
+            if (isset($invResp['result']) && is_array($invResp['result'])) {
+                foreach ($invResp['result'] as $invoice) {
+                    if (($invoice['UF_DEAL_ID'] ?? null) == $deal['ID']) {
+                        $invoices[] = $invoice['ACCOUNT_NUMBER'] ?? $invoice['ID'];
+                    }
                 }
             }
+        } catch (\Throwable $e) {
+            Log::channel('bitrix24')->warning('deal-hook: invoice fetch failed', ['deal_id' => $dealId, 'error' => $e->getMessage()]);
         }
 
         // --- Сборка задачи ---
@@ -480,13 +484,17 @@ class Bitrix24Controller extends Controller
 
         // Менеджер -> локальный пользователь по email (crm_id в тенанте нет)
         if (!empty($deal['ASSIGNED_BY_ID'])) {
-            $uResp = Http::post($base . 'user.get', ['id' => $deal['ASSIGNED_BY_ID']])->collect();
-            $manager = $uResp['result'][0] ?? null;
-            if ($manager && !empty($manager['EMAIL'])) {
-                $user = \App\Models\User::where('email', $manager['EMAIL'])->first();
-                if ($user) {
-                    $task->user_id = $user->id;
+            try {
+                $uResp = Http::post($base . 'user.get', ['id' => $deal['ASSIGNED_BY_ID']])->collect();
+                $manager = $uResp['result'][0] ?? null;
+                if ($manager && !empty($manager['EMAIL'])) {
+                    $user = \App\Models\User::where('email', $manager['EMAIL'])->first();
+                    if ($user) {
+                        $task->user_id = $user->id;
+                    }
                 }
+            } catch (\Throwable $e) {
+                Log::channel('bitrix24')->warning('deal-hook: manager fetch failed', ['deal_id' => $dealId, 'error' => $e->getMessage()]);
             }
         }
 
@@ -508,6 +516,7 @@ class Bitrix24Controller extends Controller
             }
         } else {
             $dirty = $task->getDirty();
+            Log::channel('bitrix24')->info('deal-hook: before save', ['task_id' => $task->id, 'dirty' => array_keys($dirty), 'delivery_new' => $task->delivery_date]);
             if (count($dirty)) {
                 try {
                     // saveForObject сравнивает row с текущими значениями в БД,
@@ -518,6 +527,7 @@ class Bitrix24Controller extends Controller
                 }
             }
             $task->save();
+            Log::channel('bitrix24')->info('deal-hook: saved', ['task_id' => $task->id, 'delivery_saved' => $task->fresh()->delivery_date]);
         }
 
         return response()->json([
