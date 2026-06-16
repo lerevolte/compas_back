@@ -184,6 +184,12 @@ class EntityObject
             if (!$id && $request->route_id && $slug == 'logistic_tasks') {
                 $current->route_id = $request->route_id;
             }
+            foreach ($model_fields as $mf) {
+                if (in_array($mf->type, ['relation', 'file', 'text_group'])) continue;
+                if (!isset($mf->default_value) || $mf->default_value === null || $mf->default_value === '') continue;
+                if ($current->{$mf->field} !== null && $current->{$mf->field} !== '') continue;
+                $current->{$mf->field} = $mf->default_value;
+            }
 
             // Специфичная логика для osago_polises
             if ($slug == 'osago_polises') {
@@ -1942,7 +1948,7 @@ class EntityObject
         else
             $val = $source->name;
 
-        $history = new \App\Models\History(['entity' => $slug, 'entity_id' => $object->id, 'user_id' => \Auth::user()->id, 'event' => 'OBJECT_COPIED', 'text' => "Создана копия на основании: <span data-slug='$slug' data-id='$source->id'>$val</span>", 'old_value' => $object->id, 'new_value' => $source->id]);
+        $history = new \App\Models\History(['entity' => $slug, 'entity_id' => $object->id, 'user_id' => \Auth::user()->id, 'event' => 'OBJECT_COPIED', 'text' => "Создан на основании: <span data-slug='$slug' data-id='$source->id'>$val</span>", 'old_value' => $object->id, 'new_value' => $source->id]);
         $history->saveQuietly();
         $history_events[] = $history;
 
@@ -1957,6 +1963,8 @@ class EntityObject
 
         $history_items = \App\Models\History::getDataList($history_events);
         $history_response_events = array_merge($history_response_events, $history_items['fields']);
+
+        unset($fields['route_id']);
 
         foreach($fields as $field => $value) {
             if($model_fields[$field]->type == 'relation' && $model_fields[$field]->is_plural && $model_fields[$field]->relation_table) {
@@ -2084,6 +2092,10 @@ class EntityObject
                 $object->{$field} = $value;
             }
         }
+        if(isset($model_fields['products']) && !array_key_exists('products', $fields) && $source->products) {
+            $object->products = $source->products;
+        }
+
         if(!$object->name) {
             $object->name = $entity->title_singular.' #'.$object->id;
         }
