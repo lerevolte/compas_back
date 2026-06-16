@@ -308,8 +308,16 @@ class Bitrix24Controller extends Controller
         }
         // Если задача уже привязана к маршруту — не перезаписываем (старый код: die()).
         if ($existing && $existing->route_id) {
+            Log::channel('bitrix24')->info('deal-hook: task already on a route', ['deal_id' => $dealId, 'task_id' => $existing->id, 'route_id' => $existing->route_id]);
             return response('task already on a route', 200);
         }
+
+        Log::channel('bitrix24')->info('deal-hook: matched task', [
+            'deal_id'          => $dealId,
+            'task_id'          => $existing->id ?? null,
+            'delivery_field'   => $deal['UF_CRM_1738582841'] ?? null,
+            'task_delivery_old' => $existing->delivery_date ?? null,
+        ]);
 
         // --- Товары сделки ---
         $delivery_price = 0;
