@@ -25,8 +25,9 @@ final class FieldCreateDto
         public readonly ?int $has_roles_write,
         public readonly array $roles_read,
         public readonly ?array $subfields,
-        public readonly array $roles_write
-    ) 
+        public readonly array $roles_write,
+        public readonly ?string $default_value = null,
+    )
     {
     }
     

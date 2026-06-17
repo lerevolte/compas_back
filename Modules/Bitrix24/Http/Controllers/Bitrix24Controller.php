@@ -462,17 +462,32 @@ class Bitrix24Controller extends Controller
         $task->pallets_count = $deal['UF_CRM_1696596978695'] ?? null;
         $task->crm_link = $crmLink;
 
+        $b24FieldsResp = Http::post($base . 'crm.deal.fields', [])->collect();
+        $b24Fields = $b24FieldsResp['result'] ?? [];
+
         $rawUnloading = $deal['UF_CRM_1762411084'] ?? null;
         $carReqs = [];
         foreach ((is_array($rawUnloading) ? $rawUnloading : [$rawUnloading]) as $val) {
-            if ($val !== '' && $val !== null) {
-                $carReqs[] = (int) $val;
+            if ($val === '' || $val === null) {
+                continue;
+            }
+            $label = $this->b24EnumLabel($b24Fields, 'UF_CRM_1762411084', $val);
+            $local = $this->localOptionValueByLabel('logistic_tasks', 'car_requirements', $label);
+            if ($local !== null) {
+                $carReqs[] = (int) $local;
             }
         }
         $task->car_requirements = $carReqs ? json_encode($carReqs) : null;
 
         if (\Illuminate\Support\Facades\Schema::hasColumn('logistic_tasks', 'car_type')) {
-            $task->car_type = !empty($deal['UF_CRM_1625083610453']) ? (int) $deal['UF_CRM_1625083610453'] : null;
+            $rawCarType = $deal['UF_CRM_1625083610453'] ?? null;
+            if ($rawCarType === '' || $rawCarType === null) {
+                $task->car_type = null;
+            } else {
+                $ctLabel = $this->b24EnumLabel($b24Fields, 'UF_CRM_1625083610453', $rawCarType);
+                $localCt = $this->localOptionValueByLabel('logistic_tasks', 'car_type', $ctLabel);
+                $task->car_type = $localCt !== null ? (int) $localCt : null;
+            }
         }
 
         // Оплата: счёт (если есть номера) или наличные
@@ -544,5 +559,61 @@ class Bitrix24Controller extends Controller
         ], 200);
     }
 
+    private function b24EnumLabel($b24Fields, $ufCode, $enumId)
+    {
+        if ($enumId === '' || $enumId === null) {
+            return null;
+        }
+        $items = $b24Fields[$ufCode]['items'] ?? null;
+        if (!is_array($items)) {
+            return null;
+        }
+        foreach ($items as $item) {
+            if ((string) ($item['ID'] ?? '') === (string) $enumId) {
+                return $item['VALUE'] ?? null;
+            }
+        }
+        return null;
+    }
 
+    private function localOptionValueByLabel($entitySlug, $fieldKey, $label)
+    {
+        if ($label === null || trim((string) $label) === '') {
+            return null;
+        }
+
+        $row = \DB::table('data_rows')
+            ->join('data_types', 'data_rows.data_type_id', '=', 'data_types.id')
+            ->where('data_types.slug', $entitySlug)
+            ->where('data_rows.field', $fieldKey)
+            ->select('data_rows.details')
+            ->first();
+
+        if (!$row || !$row->details) {
+            return null;
+        }
+
+        $details = json_decode($row->details, true);
+        if (!is_array($details) || empty($details['options'])) {
+            return null;
+        }
+
+        $needle = mb_strtolower(trim((string) $label));
+        foreach ($details['options'] as $key => $option) {
+            if (is_array($option)) {
+                $optLabel = $option['label'] ?? null;
+                if (is_array($optLabel)) {
+                    $optLabel = $optLabel['text'] ?? null;
+                }
+                $optValue = $option['value'] ?? $key;
+            } else {
+                $optLabel = $option;
+                $optValue = $key;
+            }
+            if ($optLabel !== null && mb_strtolower(trim((string) $optLabel)) === $needle) {
+                return $optValue;
+            }
+        }
+        return null;
+    }
 }

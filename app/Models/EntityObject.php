@@ -1078,6 +1078,22 @@ class EntityObject
 
     }
 
+    private static function requirementValuesNotIn($settings, $model_fields, $fieldKey, array $reqs)
+    {
+        $field = $model_fields->firstWhere('field', $fieldKey);
+        if (!$field || !isset($settings['list_values'][$field->id]) || !is_array($settings['list_values'][$field->id])) {
+            return [];
+        }
+
+        $all = [];
+        foreach ($settings['list_values'][$field->id] as $value => $option) {
+            $optValue = (is_array($option) && isset($option['value'])) ? $option['value'] : $value;
+            $all[] = (int) $optValue;
+        }
+
+        return array_values(array_diff(array_unique($all), $reqs));
+    }
+
     public static function list($slug, Request $request)
     {
         $settings = app('settings');//\App\Models\Settings::get();
@@ -1468,42 +1484,50 @@ class EntityObject
         if ($slug == 'logistic_tasks' && $request->filter) {
             $filter = $request->filter;
 
-            // car_requirements: task's requirements must ALL be met by route's car
             if (isset($filter['car_requirements']) && is_array($filter['car_requirements'])) {
-                $reqs = array_filter($filter['car_requirements']);
-                if (!empty($reqs)) {
-                    $paginator = $paginator->where(function($q) use ($reqs) {
-                        // Tasks with no requirements always show
-                        $q->where(function($q2) {
-                            $q2->whereNull('car_requirements')
-                               ->orWhere('car_requirements', '[]')
-                               ->orWhere('car_requirements', '');
-                        })->orWhere(function($q2) use ($reqs) {
-                            // Task's EVERY requirement must be in route's capabilities
-                            foreach ($reqs as $req) {
-                                $q2->whereJsonContains('car_requirements', (int)$req);
+                $reqs = array_map('intval', array_filter($filter['car_requirements'], function ($v) {
+                    return $v !== null && $v !== '';
+                }));
+                $disallowed = self::requirementValuesNotIn($settings, $model_fields, 'car_requirements', $reqs);
+                $paginator = $paginator->where(function ($q) use ($disallowed) {
+                    $q->where(function ($q2) {
+                        $q2->whereNull('car_requirements')
+                           ->orWhere('car_requirements', '[]')
+                           ->orWhere('car_requirements', '');
+                    });
+                    if (!empty($disallowed)) {
+                        $q->orWhere(function ($q2) use ($disallowed) {
+                            foreach ($disallowed as $v) {
+                                $q2->whereJsonDoesntContain('car_requirements', $v);
                             }
                         });
-                    });
-                }
+                    } else {
+                        $q->orWhereRaw('1 = 1');
+                    }
+                });
             }
 
-            // employee_requirements: same logic
             if (isset($filter['employee_requirements']) && is_array($filter['employee_requirements'])) {
-                $reqs = array_filter($filter['employee_requirements']);
-                if (!empty($reqs)) {
-                    $paginator = $paginator->where(function($q) use ($reqs) {
-                        $q->where(function($q2) {
-                            $q2->whereNull('employee_requirements')
-                               ->orWhere('employee_requirements', '[]')
-                               ->orWhere('employee_requirements', '');
-                        })->orWhere(function($q2) use ($reqs) {
-                            foreach ($reqs as $req) {
-                                $q2->whereJsonContains('employee_requirements', (int)$req);
+                $reqs = array_map('intval', array_filter($filter['employee_requirements'], function ($v) {
+                    return $v !== null && $v !== '';
+                }));
+                $disallowed = self::requirementValuesNotIn($settings, $model_fields, 'employee_requirements', $reqs);
+                $paginator = $paginator->where(function ($q) use ($disallowed) {
+                    $q->where(function ($q2) {
+                        $q2->whereNull('employee_requirements')
+                           ->orWhere('employee_requirements', '[]')
+                           ->orWhere('employee_requirements', '');
+                    });
+                    if (!empty($disallowed)) {
+                        $q->orWhere(function ($q2) use ($disallowed) {
+                            foreach ($disallowed as $v) {
+                                $q2->whereJsonDoesntContain('employee_requirements', $v);
                             }
                         });
-                    });
-                }
+                    } else {
+                        $q->orWhereRaw('1 = 1');
+                    }
+                });
             }
 
 
