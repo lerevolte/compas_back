@@ -471,7 +471,9 @@ class Bitrix24Controller extends Controller
         }
         $task->car_requirements = $carReqs ? json_encode($carReqs) : null;
 
-        $task->car_type = !empty($deal['UF_CRM_1625083610453']) ? (int) $deal['UF_CRM_1625083610453'] : null;
+        if (\Illuminate\Support\Facades\Schema::hasColumn('logistic_tasks', 'car_type')) {
+            $task->car_type = !empty($deal['UF_CRM_1625083610453']) ? (int) $deal['UF_CRM_1625083610453'] : null;
+        }
 
         // Оплата: счёт (если есть номера) или наличные
         if (count($invoices) > 0) {
@@ -526,8 +528,12 @@ class Bitrix24Controller extends Controller
                     Log::channel('bitrix24')->warning('deal-hook: history update failed', ['task_id' => $task->id, 'error' => $e->getMessage()]);
                 }
             }
-            $task->save();
-            Log::channel('bitrix24')->info('deal-hook: saved', ['task_id' => $task->id, 'delivery_saved' => $task->fresh()->delivery_date]);
+            try {
+                $task->save();
+                Log::channel('bitrix24')->info('deal-hook: saved', ['task_id' => $task->id, 'delivery_saved' => $task->fresh()->delivery_date]);
+            } catch (\Throwable $e) {
+                Log::channel('bitrix24')->error('deal-hook: save failed', ['task_id' => $task->id, 'error' => $e->getMessage()]);
+            }
         }
 
         return response()->json([
