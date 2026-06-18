@@ -296,13 +296,12 @@ class Route extends Model
         // Считаем суммы отдельными легкими запросами
         $totalWeight = $this->tasks()->sum('weight');
         $totalVolume = $this->tasks()->sum('volume');
-        // Добавьте другие поля, если нужно (например, count)
-        // $totalCount = $this->tasks()->count();
+        $totalDeliveryPrice = $this->tasks()->sum('delivery_price');
 
-        // Обновляем текущую модель Route
         $this->update([
-            'weight' => $totalWeight, // замените на ваши названия полей в таблице routes
+            'weight' => $totalWeight,
             'volume' => $totalVolume,
+            'delivery_price' => $totalDeliveryPrice,
         ]);
     }
     
@@ -361,7 +360,7 @@ class Route extends Model
                 'labels' => $carReqLabels
             ],
             [
-                'title' => 'Требования к водителю',
+                'title' => 'Требования к сотруднику',
                 'key'   => 'employee_requirements',
                 'value' => $empReqsVal,
                 'labels' => $empReqLabels

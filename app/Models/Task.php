@@ -62,7 +62,7 @@ class Task extends Model
                 }
             } else {
                 // Если маршрут тот же, но поменялись вес или объем, нужно обновить текущий маршрут
-                if ($model->route_id && ($model->isDirty('weight') || $model->isDirty('volume'))) {
+                if ($model->route_id && ($model->isDirty('weight') || $model->isDirty('volume') || $model->isDirty('delivery_price'))) {
                     if ($model->route) {
                         $model->route->recalculateTotals();
                     }

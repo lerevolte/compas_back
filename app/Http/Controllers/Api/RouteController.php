@@ -607,6 +607,13 @@ class RouteController extends Controller
         // Number of tasks
         $route->number_tasks = count($new_tasks);
 
+        if (empty($route->loading_time)) {
+            $start = $this->parseTimeWindowStart(optional($new_tasks->first())->time);
+            if ($start) {
+                $route->loading_time = $start;
+            }
+        }
+
         // Total weight from products
         $totalWeight = 0;
         foreach ($new_tasks as $task) {
@@ -767,5 +774,17 @@ class RouteController extends Controller
         }
 
         return response()->json(['success' => true, 'id' => $newId]);
+    }
+
+    private function parseTimeWindowStart($time)
+    {
+        if (!$time) {
+            return null;
+        }
+        $part = explode('-', (string) $time)[0];
+        if (preg_match('/(\d{1,2}):(\d{2})/', $part, $m)) {
+            return sprintf('%02d:%02d', (int) $m[1], (int) $m[2]);
+        }
+        return null;
     }
 }
