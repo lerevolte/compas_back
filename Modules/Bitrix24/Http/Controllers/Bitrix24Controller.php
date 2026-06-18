@@ -306,10 +306,14 @@ class Bitrix24Controller extends Controller
             Log::channel('bitrix24')->info('deal-hook: stage skipped', ['deal_id' => $dealId, 'stage' => $deal['STAGE_ID'], 'target' => $targetStage]);
             return response('stage skipped: ' . $deal['STAGE_ID'], 200);
         }
-        // Если задача уже привязана к маршруту — не перезаписываем (старый код: die()).
         if ($existing && $existing->route_id) {
-            Log::channel('bitrix24')->info('deal-hook: task already on a route', ['deal_id' => $dealId, 'task_id' => $existing->id, 'route_id' => $existing->route_id]);
-            return response('task already on a route', 200);
+            $activeRoute = \App\Models\Route::find($existing->route_id);
+            if ($activeRoute) {
+                Log::channel('bitrix24')->info('deal-hook: task already on a route', ['deal_id' => $dealId, 'task_id' => $existing->id, 'route_id' => $existing->route_id]);
+                return response('task already on a route', 200);
+            }
+            Log::channel('bitrix24')->info('deal-hook: route deleted, unassigning', ['deal_id' => $dealId, 'task_id' => $existing->id, 'route_id' => $existing->route_id]);
+            $existing->route_id = null;
         }
 
         Log::channel('bitrix24')->info('deal-hook: matched task', [
@@ -479,16 +483,19 @@ class Bitrix24Controller extends Controller
         }
         $task->car_requirements = $carReqs ? json_encode($carReqs) : null;
 
-        if (\Illuminate\Support\Facades\Schema::hasColumn('logistic_tasks', 'car_type')) {
-            $rawCarType = $deal['UF_CRM_1625083610453'] ?? null;
-            if ($rawCarType === '' || $rawCarType === null) {
-                $task->car_type = null;
-            } else {
-                $ctLabel = $this->b24EnumLabel($b24Fields, 'UF_CRM_1625083610453', $rawCarType);
-                $localCt = $this->localOptionValueByLabel('logistic_tasks', 'car_type', $ctLabel);
-                $task->car_type = $localCt !== null ? (int) $localCt : null;
-            }
+        $carTypeColumn = \Illuminate\Support\Facades\Schema::hasColumn('logistic_tasks', 'car_type');
+        $rawCarType = $deal['UF_CRM_1625083610453'] ?? null;
+        $ctLabel = ($rawCarType === '' || $rawCarType === null) ? null : $this->b24EnumLabel($b24Fields, 'UF_CRM_1625083610453', $rawCarType);
+        $localCt = $ctLabel === null ? null : $this->localOptionValueByLabel('logistic_tasks', 'car_type', $ctLabel);
+        if ($carTypeColumn) {
+            $task->car_type = $localCt !== null ? (int) $localCt : null;
         }
+        Log::channel('bitrix24')->info('deal-hook: car_type', [
+            'column_exists' => $carTypeColumn,
+            'raw'           => $rawCarType,
+            'b24_label'     => $ctLabel,
+            'local_value'   => $localCt,
+        ]);
 
         // Оплата: счёт (если есть номера) или наличные
         if (count($invoices) > 0) {
