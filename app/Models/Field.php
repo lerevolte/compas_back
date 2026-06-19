@@ -549,6 +549,7 @@ class Field extends Model
             'type' => $this->type,
             'visible_always' => $this->visible_always,
             'default_value' => $this->default_value,
+            'set_default' => $this->set_default,
             'is_hidden' => $this->hide,
             'is_plural' => $this->is_plural,
             'is_external_link' => $this->is_external_link,

@@ -109,16 +109,65 @@ class ExternalLinkController extends Controller
             return response()->json(['message' => $list['error']['message']], $list['error']['code']);
         }
 
+        // Поля с ограничением видимости по ролям (roles_read) во внешней ссылке
+        // показывать нельзя: внешний зритель анонимен (ролей нет), а запрос
+        // выполняется от имени админа (actAsSystemUser), который иначе видит всё.
+        // Поэтому вырезаем такие поля из колонок, схемы полей и значений строк.
+        $restricted = $this->restrictedFields($slug);
+
+        $table = array_values(array_filter(
+            \App\Models\Table::get($slug),
+            fn ($col) => !in_array($col['key'] ?? null, $restricted, true)
+        ));
+
+        $fields = Field::list($slug);
+        foreach ($restricted as $rf) {
+            unset($fields[$rf]);
+        }
+
+        if (!empty($restricted) && isset($list['data']) && is_array($list['data'])) {
+            $list['data'] = array_map(function ($row) use ($restricted) {
+                $row = (array) $row;
+                foreach ($restricted as $rf) {
+                    unset($row[$rf]);
+                }
+                return $row;
+            }, $list['data']);
+        }
+
         return response()->json([
             'list'        => $list,
-            'table'       => \App\Models\Table::get($slug),
-            'fields'      => Field::list($slug),
+            'table'       => $table,
+            'fields'      => $fields,
             'entities'    => DB::table('data_types')->select(['slug', 'title_singular', 'title_plural', 'color'])->get(),
             'filters'     => Filter::list($slug),
             'categories'  => [],
             'permissions' => ['read_p' => 'A'],
             'tabs'        => [],
         ]);
+    }
+
+    /**
+     * Имена полей сущности с непустым roles_read (ограничение видимости по
+     * ролям). Во внешней ссылке такие поля не отдаём.
+     */
+    private function restrictedFields(string $slug): array
+    {
+        $type = DB::table('data_types')
+            ->where('slug', $slug)->orWhere('name', $slug)
+            ->first();
+        if (!$type) {
+            return [];
+        }
+
+        return DB::table('data_rows')
+            ->where('data_type_id', $type->id)
+            ->whereNotNull('roles_read')
+            ->whereNotIn('roles_read', ['', '[]', '0'])
+            ->pluck('field')
+            ->filter()
+            ->values()
+            ->all();
     }
 
     /**

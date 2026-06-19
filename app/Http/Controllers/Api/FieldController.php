@@ -330,6 +330,7 @@ class FieldController extends Controller
             'title'            => $request->title ?? $field->title,
             'visible_always'   => $request->has('visible_always') ? $request->visible_always : $field->visible_always,
             'default_value'    => $request->has('default_value') ? $request->default_value : $field->default_value,
+            'set_default'      => $request->has('set_default') ? $request->set_default : $field->set_default,
             'set_color'        => $request->has('set_color') ? $request->set_color : $field->set_color,
             'label_color'      => $request->has('color') ? $request->color : $field->label_color,
             'mobile_pages'     => $request->has('show_in_mobile') ? $request->mobile_pages : $field->mobile_pages,

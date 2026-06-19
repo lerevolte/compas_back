@@ -41,7 +41,8 @@ final class FieldCreateRequest extends FormRequest
             $this->has('roles_read') ? $this->get('roles_read') : array(),
             $this->has('subfields') ? $this->get('subfields') : array(),
             $this->has('roles_write') ? $this->get('roles_write') : array(),
-            $this->has('default_value') ? $this->get('default_value') : null
+            $this->has('default_value') ? $this->get('default_value') : null,
+            $this->has('set_default') ? $this->get('set_default') : null
         );
     }
 

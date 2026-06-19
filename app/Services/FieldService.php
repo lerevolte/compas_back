@@ -97,6 +97,7 @@ class FieldService
                 'title' => $title,
                 'visible_always' => $dto->visible_always,
                 'default_value' => $dto->default_value,
+                'set_default' => $dto->set_default ? $dto->set_default : 0,
                 'details' => count($details) ? json_encode($details) : null,
                 'options' => count($options) ? json_encode($options) : null,
                 'set_color' => $dto->set_color ? $dto->set_color : 0,

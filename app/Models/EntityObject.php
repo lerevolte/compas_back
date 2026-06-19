@@ -186,6 +186,10 @@ class EntityObject
             }
             foreach ($model_fields as $mf) {
                 if (in_array($mf->type, ['relation', 'file', 'text_group'])) continue;
+                // Значение по умолчанию применяется только при активном чекбоксе
+                // set_default (по аналогии с set_color): значение может быть
+                // сохранено, но не участвовать в создании объектов (8461).
+                if (empty($mf->set_default)) continue;
                 if (!isset($mf->default_value) || $mf->default_value === null || $mf->default_value === '') continue;
                 if ($current->{$mf->field} !== null && $current->{$mf->field} !== '') continue;
                 $current->{$mf->field} = $mf->default_value;
@@ -276,6 +280,15 @@ class EntityObject
 
         // Обработка полей модели
         foreach ($model_fields as $field) {
+            // Внешняя ссылка (аноним, без авторизации) не обладает ролями,
+            // поэтому поля с ограничением видимости по ролям (roles_read)
+            // скрываем целиком — для аноним-доступа perms не вычисляются, и
+            // иначе такие поля протекали во внешнюю ссылку (8460).
+            if (!$isAuthenticated
+                && !empty($field->roles_read)
+                && !in_array(trim((string) $field->roles_read), ['', '[]', '0'], true)) {
+                continue;
+            }
             if (!array_key_exists($field->field, $fields_data) &&
                 (!isset($settings[$slug]['perms'][$field->field]['read']) ||
                  $settings[$slug]['perms'][$field->field]['read'] ||
