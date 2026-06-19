@@ -296,12 +296,18 @@ class Route extends Model
         // Считаем суммы отдельными легкими запросами
         $totalWeight = $this->tasks()->sum('weight');
         $totalVolume = $this->tasks()->sum('volume');
-        $totalDeliveryPrice = $this->tasks()->sum('delivery_price');
+        // «Заложено на доставку» (reserve_for_delivery) = сумма delivery_price
+        // задач маршрута. Раньше эта сумма ошибочно писалась в delivery_price
+        // («Цена доставки»), из-за чего reserve_for_delivery всегда оставался
+        // пуст, а «Цена доставки» показывала заложенную сумму (8456).
+        // delivery_price здесь больше не трогаем — это отдельная величина
+        // (фактическая цена доставки).
+        $totalReserve = $this->tasks()->sum('delivery_price');
 
         $this->update([
             'weight' => $totalWeight,
             'volume' => $totalVolume,
-            'delivery_price' => $totalDeliveryPrice,
+            'reserve_for_delivery' => $totalReserve,
         ]);
     }
     
@@ -309,10 +315,18 @@ class Route extends Model
     public function getTaskFilters()
     {
         $car = $this->car;
+        $employee = $this->employee;
         $settings = get_settings();
-        
-        // В getTaskFilters — car_requirements
-        $carReqsVal = $this->car_requirements;
+
+        // Требования берём с привязанной машины/сотрудника (как вес/объём —
+        // см. ниже weight_min/max у $car). Раньше тут читались собственные
+        // колонки маршрута car_requirements/employee_requirements, которые
+        // нигде не заполняются, поэтому фильтрация по требованиям не работала,
+        // хотя по весу/объёму работала (8457). Фолбэк на колонки маршрута —
+        // на случай, если их кто-то заполняет вручную.
+        $carReqsVal = ($car && $car->requirements !== null && $car->requirements !== '')
+            ? $car->requirements
+            : $this->car_requirements;
         if (is_string($carReqsVal)) {
             $decoded = json_decode($carReqsVal, true);
             $carReqsVal = (json_last_error() === JSON_ERROR_NONE) ? $decoded : [$carReqsVal];
@@ -332,8 +346,10 @@ class Route extends Model
             }
         }
 
-        // employee_requirements — аналогично
-        $empReqsVal = $this->employee_requirements;
+        // employee_requirements — аналогично, с привязанного сотрудника
+        $empReqsVal = ($employee && $employee->employee_requirements !== null && $employee->employee_requirements !== '')
+            ? $employee->employee_requirements
+            : $this->employee_requirements;
         if (is_string($empReqsVal)) {
             $decoded = json_decode($empReqsVal, true);
             $empReqsVal = (json_last_error() === JSON_ERROR_NONE) ? $decoded : [$empReqsVal];

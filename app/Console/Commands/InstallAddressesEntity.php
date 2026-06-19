@@ -258,7 +258,7 @@ class InstallAddressesEntity extends Command
             'updated_at'            => $base(['field' => 'updated_at', 'type' => 'date', 'title' => 'Дата изменения', 'sort' => 2, 'mobile_pages' => '0', 'only_read' => 1, 'is_default' => 1]),
             'name'                  => $base(['field' => 'name', 'type' => 'text', 'title' => 'Название', 'sort' => 3, 'label_color' => '#487304ff', 'details' => '{"options":{"":null}}', 'module' => '["logistic"]', 'module_section_id' => $mod, 'is_default' => 1, 'is_unique' => 1]),
             'photo'                 => $base(['field' => 'photo', 'type' => 'file', 'title' => 'Фото', 'sort' => 4, 'roles_read' => '[4,18]', 'roles_write' => '[4,18]', 'is_remove' => 1, 'is_default' => 1]),
-            'service_time'          => $base(['field' => 'service_time', 'type' => 'text', 'title' => 'Время обслуживания (мин)', 'sort' => 7]),
+            'service_time'          => $base(['field' => 'service_time', 'type' => 'number', 'title' => 'Время обслуживания (мин)', 'sort' => 7]),
             'address'               => $base(['field' => 'address', 'type' => 'address', 'title' => 'Адрес', 'sort' => 7, 'module' => '["logistic"]', 'module_section_id' => $mod]),
             'phone'                 => $base(['field' => 'phone', 'type' => 'text', 'title' => 'Телефон', 'sort' => 8, 'module' => '["logistic"]', 'module_section_id' => $mod]),
             'time'                  => $base(['field' => 'time', 'type' => 'text', 'title' => 'Окно', 'sort' => 8, 'module' => '["logistic"]', 'module_section_id' => $mod]),
