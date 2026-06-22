@@ -140,6 +140,12 @@ class FieldController extends Controller
             
             // Основное обновление записи
             DB::table('data_rows')->where('id', $id)->update($updateData);
+
+            // (8474) Поля-требования синхронизируются по настройкам опций между
+            // всеми сущностями: правка одного поля группы применяется к остальным.
+            if (array_key_exists('details', $updateData)) {
+                $this->syncRequirementFields($field, $id, $updateData['details']);
+            }
         });
 
         // Обновляем объект $field после записи в БД для корректного формирования ответа
@@ -322,6 +328,32 @@ class FieldController extends Controller
         ]);
 
         Settings::clear_cache();
+    }
+
+    /**
+     * (8474) Синхронизация опций полей-требований между всеми сущностями.
+     * Группы синонимов: car_requirements; employee_requirements/driver_requirements.
+     * При изменении опций одного поля группы те же опции (details) проставляются
+     * всем остальным data_rows с именами полей из этой группы.
+     */
+    private function syncRequirementFields($field, $id, $details): void
+    {
+        $groups = [
+            ['car_requirements'],
+            ['employee_requirements', 'driver_requirements'],
+        ];
+
+        foreach ($groups as $group) {
+            if (!in_array($field->field, $group, true)) {
+                continue;
+            }
+
+            DB::table('data_rows')
+                ->whereIn('field', $group)
+                ->where('id', '!=', $id)
+                ->update(['details' => $details]);
+            break;
+        }
     }
 
     private function prepareUpdateData($field, Request $request)
