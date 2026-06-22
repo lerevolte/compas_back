@@ -223,6 +223,48 @@ class FieldService
         return $res;
 	}
 
+    /**
+     * (8474) Синхронизация опций полей-требований между сущностями.
+     * Две смысловые группы (у каждой свой набор опций):
+     *  - «требования к машине»:     cars.requirements  ↔  *.car_requirements
+     *  - «требования к сотруднику»: employees.requirements ↔ *.employee_requirements ↔ *.driver_requirements
+     * Поле `requirements` есть и у машины, и у сотрудника — разные наборы, поэтому
+     * группа определяется с учётом data_type_id, а не только по имени.
+     */
+    private function syncRequirementFields($field, $details): void
+    {
+        $carTypeId = \DB::table('data_types')->where('slug', 'cars')->value('id');
+        $empTypeId = \DB::table('data_types')->where('slug', 'employees')->value('id');
+
+        $isCar = $field->field === 'car_requirements'
+            || ($field->field === 'requirements' && $carTypeId && (int) $field->data_type_id === (int) $carTypeId);
+
+        $isEmp = in_array($field->field, ['employee_requirements', 'driver_requirements'], true)
+            || ($field->field === 'requirements' && $empTypeId && (int) $field->data_type_id === (int) $empTypeId);
+
+        if ($isCar) {
+            \DB::table('data_rows')
+                ->where('id', '!=', $field->id)
+                ->where(function ($q) use ($carTypeId) {
+                    $q->where('field', 'car_requirements');
+                    if ($carTypeId) {
+                        $q->orWhere(fn ($q2) => $q2->where('field', 'requirements')->where('data_type_id', $carTypeId));
+                    }
+                })
+                ->update(['details' => $details]);
+        } elseif ($isEmp) {
+            \DB::table('data_rows')
+                ->where('id', '!=', $field->id)
+                ->where(function ($q) use ($empTypeId) {
+                    $q->whereIn('field', ['employee_requirements', 'driver_requirements']);
+                    if ($empTypeId) {
+                        $q->orWhere(fn ($q2) => $q2->where('field', 'requirements')->where('data_type_id', $empTypeId));
+                    }
+                })
+                ->update(['details' => $details]);
+        }
+    }
+
     public function update(int $id, FieldUpdateDto $dto)
     {
         $field = \DB::table('data_rows')->where(['id' => $id])->first();
@@ -328,6 +370,13 @@ class FieldService
         $data['unit'] = isset($dto->unit) ? $dto->unit : $field->unit;
         $data['section_id'] = isset($dto->section_id) ? $dto->section_id : $field->section_id;
         $data['hide'] = isset($dto->is_hidden) ? $dto->is_hidden : $field->hide;
+        // (8461) Значение по умолчанию и флаг его применения. isset() оставляет
+        // прежнее значение, если поле не пришло (частичные апдейты сортировки и т.п.),
+        // и НЕ затирает default_value при снятии галки (set_default = 0).
+        $data['default_value'] = isset($dto->default_value) ? $dto->default_value : $field->default_value;
+        $data['set_default'] = isset($dto->set_default) ? ($dto->set_default ? 1 : 0) : $field->set_default;
+        // (8476/8477) Маска ввода.
+        $data['mask'] = isset($dto->mask) ? $dto->mask : $field->mask;
 
         if($field->type == 'text_group') {
             $field_group = \DB::table('data_rows')->where('field', $field->field)->first();
@@ -392,7 +441,12 @@ class FieldService
         } else {
             \DB::table('data_rows')->where(['id' => $field->id])->update($data);
         }
-        
+
+        // (8474) Синхронизация опций полей-требований между сущностями.
+        if(array_key_exists('details', $data)) {
+            $this->syncRequirementFields($field, $data['details']);
+        }
+
         if($field->type == 'status') {
             $keys = cache()->getMemcached()->getAllKeys();
             $regex = tenant('id').':field-'.$field->id.'-statuses';

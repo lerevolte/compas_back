@@ -24,7 +24,10 @@ final class FieldUpdateDto
         public readonly ?int $change_section,
         public readonly ?int $sort,
         public readonly ?int $can_create = null,
-    ) 
+        public readonly mixed $default_value = null,
+        public readonly ?int $set_default = null,
+        public readonly ?string $mask = null,
+    )
     {
     }
 }

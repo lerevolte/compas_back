@@ -41,6 +41,11 @@ final class FieldUpdateRequest extends FormRequest
             $this->has('change_section') ? $this->get('change_section') : null,
             $this->has('sort') ? $this->get('sort') : null,
             $this->has('can_create') ? (int)$this->get('can_create') : null,
+            // (8461) значение по умолчанию и флаг его применения
+            $this->has('default_value') ? $this->get('default_value') : null,
+            $this->has('set_default') ? (int)$this->get('set_default') : null,
+            // (8476/8477) маска ввода
+            $this->has('mask') ? $this->get('mask') : null,
         );
     }
 

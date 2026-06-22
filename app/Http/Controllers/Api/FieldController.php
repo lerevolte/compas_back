@@ -143,14 +143,6 @@ class FieldController extends Controller
 
             // (8474) Поля-требования синхронизируются по настройкам опций между
             // всеми сущностями: правка одного поля группы применяется к остальным.
-            \Log::info('SYNC8474 trigger', [
-                'field' => $field->field,
-                'data_type_id' => $field->data_type_id,
-                'has_details_in_update' => array_key_exists('details', $updateData),
-                'has_request_options' => (bool) $request->options,
-                'default_value_in_data' => $updateData['default_value'] ?? '__absent__',
-                'set_default_in_data' => $updateData['set_default'] ?? '__absent__',
-            ]);
             if (array_key_exists('details', $updateData)) {
                 $this->syncRequirementFields($field, $id, $updateData['details']);
             }
@@ -363,9 +355,8 @@ class FieldController extends Controller
         $isEmp = in_array($field->field, ['employee_requirements', 'driver_requirements'], true)
             || ($field->field === 'requirements' && $empTypeId && (int) $field->data_type_id === (int) $empTypeId);
 
-        $updated = 0;
         if ($isCar) {
-            $updated = DB::table('data_rows')
+            DB::table('data_rows')
                 ->where('id', '!=', $id)
                 ->where(function ($q) use ($carTypeId) {
                     $q->where('field', 'car_requirements');
@@ -375,7 +366,7 @@ class FieldController extends Controller
                 })
                 ->update(['details' => $details]);
         } elseif ($isEmp) {
-            $updated = DB::table('data_rows')
+            DB::table('data_rows')
                 ->where('id', '!=', $id)
                 ->where(function ($q) use ($empTypeId) {
                     $q->whereIn('field', ['employee_requirements', 'driver_requirements']);
@@ -385,16 +376,6 @@ class FieldController extends Controller
                 })
                 ->update(['details' => $details]);
         }
-
-        \Log::info('SYNC8474 result', [
-            'field' => $field->field,
-            'data_type_id' => $field->data_type_id,
-            'carTypeId' => $carTypeId,
-            'empTypeId' => $empTypeId,
-            'isCar' => $isCar,
-            'isEmp' => $isEmp,
-            'rows_updated' => $updated,
-        ]);
     }
 
     private function prepareUpdateData($field, Request $request)
