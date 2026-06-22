@@ -331,28 +331,50 @@ class FieldController extends Controller
     }
 
     /**
-     * (8474) Синхронизация опций полей-требований между всеми сущностями.
-     * Группы синонимов: car_requirements; employee_requirements/driver_requirements.
-     * При изменении опций одного поля группы те же опции (details) проставляются
-     * всем остальным data_rows с именами полей из этой группы.
+     * (8474) Синхронизация опций полей-требований между сущностями.
+     *
+     * Две смысловые группы (у каждой свой набор опций):
+     *  - «требования к машине»:     cars.requirements  ↔  *.car_requirements
+     *  - «требования к сотруднику»: employees.requirements ↔ *.employee_requirements ↔ *.driver_requirements
+     *
+     * ВАЖНО: поле `requirements` есть и у машины («Требования к машине»), и у
+     * сотрудника («Требования к сотруднику») — это РАЗНЫЕ наборы опций, поэтому
+     * группа определяется с учётом сущности (data_type_id), а не только по имени.
+     *
+     * При изменении опций любого поля группы те же опции (details) проставляются
+     * всем остальным полям группы.
      */
     private function syncRequirementFields($field, $id, $details): void
     {
-        $groups = [
-            ['car_requirements'],
-            ['employee_requirements', 'driver_requirements'],
-        ];
+        $carTypeId = DB::table('data_types')->where('slug', 'cars')->value('id');
+        $empTypeId = DB::table('data_types')->where('slug', 'employees')->value('id');
 
-        foreach ($groups as $group) {
-            if (!in_array($field->field, $group, true)) {
-                continue;
-            }
+        $isCar = $field->field === 'car_requirements'
+            || ($field->field === 'requirements' && $carTypeId && (int) $field->data_type_id === (int) $carTypeId);
 
+        $isEmp = in_array($field->field, ['employee_requirements', 'driver_requirements'], true)
+            || ($field->field === 'requirements' && $empTypeId && (int) $field->data_type_id === (int) $empTypeId);
+
+        if ($isCar) {
             DB::table('data_rows')
-                ->whereIn('field', $group)
                 ->where('id', '!=', $id)
+                ->where(function ($q) use ($carTypeId) {
+                    $q->where('field', 'car_requirements');
+                    if ($carTypeId) {
+                        $q->orWhere(fn ($q2) => $q2->where('field', 'requirements')->where('data_type_id', $carTypeId));
+                    }
+                })
                 ->update(['details' => $details]);
-            break;
+        } elseif ($isEmp) {
+            DB::table('data_rows')
+                ->where('id', '!=', $id)
+                ->where(function ($q) use ($empTypeId) {
+                    $q->whereIn('field', ['employee_requirements', 'driver_requirements']);
+                    if ($empTypeId) {
+                        $q->orWhere(fn ($q2) => $q2->where('field', 'requirements')->where('data_type_id', $empTypeId));
+                    }
+                })
+                ->update(['details' => $details]);
         }
     }
 
