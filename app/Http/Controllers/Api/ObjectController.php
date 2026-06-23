@@ -134,6 +134,33 @@ class ObjectController extends Controller
             return response()->json(['message' => $detail['error']['message']], $detail['error']['code']);
         }
 
+        if ($user && !$user->is_admin && $slug != 'logistic_tasks') {
+            $up = $permissions['update_p'] ?? null;
+            $canUpdate = true;
+            if ($up === 'N') {
+                $canUpdate = false;
+            } elseif ($up === 'Y') {
+                $ownerId = \Schema::hasColumn($slug, 'user_id')
+                    ? DB::table($slug)->where('id', $id)->value('user_id')
+                    : null;
+                $canUpdate = $ownerId !== null && (int) $ownerId === (int) $user->id;
+            }
+            if (!$canUpdate) {
+                $detail['readonly'] = true;
+                if (isset($detail['columns']) && is_array($detail['columns'])) {
+                    foreach ($detail['columns'] as $ck => $col) {
+                        foreach ($col as $si => $section) {
+                            if (!empty($section['fields'])) {
+                                foreach ($section['fields'] as $fi => $f) {
+                                    $detail['columns'][$ck][$si]['fields'][$fi]['can_edit'] = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // 4. Дополнительные данные (продукты, история)
         $products = [];
         $tableKeys = [];
@@ -221,7 +248,7 @@ class ObjectController extends Controller
             $hasCreate = false;
             $hasUpdate = false;
             foreach (($request->rows ?? []) as $row) {
-                if (empty($row['id'])) {
+                if (empty($row['id']) || !empty($row['copy'])) {
                     $hasCreate = true;
                 } else {
                     $hasUpdate = true;
@@ -232,6 +259,18 @@ class ObjectController extends Controller
             }
             if ($hasUpdate && isset($perms['update_p']) && $perms['update_p'] === 'N') {
                 return response()->json(['message' => 'Нет прав на редактирование'], 403);
+            }
+            if ($hasUpdate && isset($perms['update_p']) && $perms['update_p'] === 'Y'
+                && $slug != 'logistic_tasks' && \Schema::hasColumn($slug, 'user_id')) {
+                foreach (($request->rows ?? []) as $row) {
+                    if (empty($row['id']) || !empty($row['copy'])) {
+                        continue;
+                    }
+                    $owner = DB::table($slug)->where('id', $row['id'])->value('user_id');
+                    if ($owner !== null && (int) $owner !== (int) $user->id) {
+                        return response()->json(['message' => 'Можно редактировать только свои записи'], 403);
+                    }
+                }
             }
         }
 
@@ -246,6 +285,17 @@ class ObjectController extends Controller
             $perms = $this->getPermissions($user, $slug);
             if (isset($perms['delete_p']) && $perms['delete_p'] === 'N') {
                 return response()->json(['message' => 'Нет прав на удаление'], 403);
+            }
+            if (isset($perms['delete_p']) && $perms['delete_p'] === 'Y'
+                && $slug != 'logistic_tasks' && \Schema::hasColumn($slug, 'user_id')) {
+                $foreign = DB::table($slug)->whereIn('id', (array) $request->ids)
+                    ->where(function ($q) use ($user) {
+                        $q->whereNull('user_id')->orWhere('user_id', '!=', $user->id);
+                    })
+                    ->exists();
+                if ($foreign) {
+                    return response()->json(['message' => 'Можно удалять только свои записи'], 403);
+                }
             }
         }
 

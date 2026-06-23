@@ -32,10 +32,6 @@ class RoleController extends Controller
 
     public function list(Request $request)
     {
-        if(!\Auth::user()->is_admin)
-            return response()->json([
-                'message' => 'Доступ ограничен'
-            ], 403);
         $data = array();
 
         $data = Role::list();
