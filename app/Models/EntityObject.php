@@ -1368,6 +1368,8 @@ class EntityObject
                 // задачи удалённого маршрута не попадали в «Задачи логистики».
                 if($slug == 'logistic_tasks' && $field == 'route_id')
                     continue;
+                if($slug == 'logistic_tasks' && in_array($field, ['car_requirements', 'employee_requirements'], true))
+                    continue;
                 if(!isset($settings[$slug]['fields'][$field]))
                     continue;
                 /*if($field == 'created_at' || $field == 'updated_at') {

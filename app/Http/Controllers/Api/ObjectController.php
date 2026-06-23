@@ -59,7 +59,7 @@ class ObjectController extends Controller
         }
 
         // 3. Подготовка параметров запроса
-        if (isset($permissions['read_p']) && $permissions['read_p'] === 'Y' && !$user->is_admin) {
+        if (isset($permissions['read_p']) && $permissions['read_p'] === 'Y' && !$user->is_admin && $slug != 'logistic_tasks') {
             $request->merge(['filter' => array_merge($request->input('filter', []), ['user_id' => $user->id])]);
         }
 
@@ -121,7 +121,7 @@ class ObjectController extends Controller
         }
 
         // 2. Параметры запроса
-        if ($user && isset($permissions['read_p']) && $permissions['read_p'] === 'Y') {
+        if ($user && isset($permissions['read_p']) && $permissions['read_p'] === 'Y' && !$user->is_admin && $slug != 'logistic_tasks') {
             $request->merge(['user_id' => $user->id]);
         }
         if ($request->is_copy) {
@@ -215,12 +215,40 @@ class ObjectController extends Controller
 
     public function batch($slug, Request $request): JsonResponse
     {
+        $user = Auth::user();
+        if ($user && !$user->is_admin) {
+            $perms = $this->getPermissions($user, $slug);
+            $hasCreate = false;
+            $hasUpdate = false;
+            foreach (($request->rows ?? []) as $row) {
+                if (empty($row['id'])) {
+                    $hasCreate = true;
+                } else {
+                    $hasUpdate = true;
+                }
+            }
+            if ($hasCreate && isset($perms['create_p']) && $perms['create_p'] === 'N') {
+                return response()->json(['message' => 'Нет прав на создание'], 403);
+            }
+            if ($hasUpdate && isset($perms['update_p']) && $perms['update_p'] === 'N') {
+                return response()->json(['message' => 'Нет прав на редактирование'], 403);
+            }
+        }
+
         $result = $this->crudService->batch($slug, $request->rows);
         return response()->json($result, $result['status']);
     }
 
     public function delete($slug, Request $request): JsonResponse
     {
+        $user = Auth::user();
+        if ($user && !$user->is_admin) {
+            $perms = $this->getPermissions($user, $slug);
+            if (isset($perms['delete_p']) && $perms['delete_p'] === 'N') {
+                return response()->json(['message' => 'Нет прав на удаление'], 403);
+            }
+        }
+
         $result = $this->crudService->delete($slug, $request->ids);
         return response()->json($result, $result['status']);
     }
