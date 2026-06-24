@@ -1999,7 +1999,14 @@ class EntityObject
                 };
                 $rel_rows = array();
                 foreach(array_unique(array_column($rel_cols, 'slug')) as $rslug) {
-                    $rel_model = isset($settings['models'][$rslug]) ? $settings['models'][$rslug]->model_name : null;
+                    // Имя таблицы связанной сущности. Загружаем raw-запросом (а не
+                    // через Eloquent-модель), чтобы не терять записи из-за
+                    // soft-delete/глобальных scope — иначе значение в таблице пусто.
+                    $rel_table = null;
+                    if(isset($settings['models'][$rslug]) && $settings['models'][$rslug]->model_name) {
+                        try { $rel_table = (new ($settings['models'][$rslug]->model_name))->getTable(); } catch (\Throwable $e) { $rel_table = null; }
+                    }
+                    if(!$rel_table) $rel_table = $rslug;
                     $fk = $rel_fk_map[$rslug];
                     $ids = array();
                     foreach($paginator->items() as $it) {
@@ -2008,8 +2015,8 @@ class EntityObject
                     }
                     $ids = array_values(array_unique($ids));
                     $rel_rows[$rslug] = array();
-                    if($rel_model && count($ids)) {
-                        foreach($rel_model::whereIntegerInRaw('id', $ids)->get() as $m) {
+                    if(count($ids) && \Illuminate\Support\Facades\Schema::hasTable($rel_table)) {
+                        foreach(\DB::table($rel_table)->whereIntegerInRaw('id', $ids)->get() as $m) {
                             $rel_rows[$rslug][$m->id] = $m;
                         }
                     }
