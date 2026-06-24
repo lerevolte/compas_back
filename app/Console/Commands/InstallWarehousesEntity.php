@@ -7,37 +7,33 @@ use Illuminate\Database\ConnectionInterface;
 use App\Models\Tenant;
 
 /**
- * Устанавливает сущность «Справочник адресов» (addresses) в портал.
+ * Устанавливает сущность «Быстрые задачи» (warehouses) в портал — полный
+ * аналог «Библиотеки задач» (addresses), но с собственной таблицей warehouses.
  *
- * Что ставит (метаданные сущности, живут в каждой тенант-БД и копируются в
- * новые порталы из admin_seeds функцией TenantService::create):
- *   - data_types        — сама сущность addresses (модель App\Models\Address);
+ * Что ставит (живёт в каждой тенант-БД, копируется в новые порталы из
+ * admin_seeds функцией TenantService::create):
+ *   - data_types        — сама сущность warehouses (модель App\Models\Warehouse);
  *   - field_sections    — два раздела: «Информация» и «Используемые поля в модуле»;
- *   - data_rows         — поля сущности (клонируются 1-в-1 из logistic_tasks);
- *   - sidebar_items     — пункт сайдбара «Справочник адресов»;
- *   - settings(menu)    — меню вкладок карточки (как у logistic_tasks, без «Товары и услуги»).
- * Плюс гарантирует наличие таблицы addresses (схему задаёт миграция
- * database/migrations/tenant/..._create_addresses_table.php).
+ *   - data_rows         — поля сущности (клонируются из logistic_tasks);
+ *   - sidebar_items     — пункт сайдбара «Быстрые задачи»;
+ *   - settings(menu)    — меню вкладок карточки.
+ * Плюс гарантирует наличие таблицы warehouses.
  *
- * Команда ИДЕМПОТЕНТНА: повторный запуск сначала удаляет ранее поставленные
- * метаданные addresses и ставит заново («перезаписать»).
+ * Команда ИДЕМПОТЕНТНА.
  *
- * Порядок выкатки (как в задаче):
- *   1) php artisan entity:install-addresses seeds            # база-шаблон admin_seeds
- *   2) php artisan entity:install-addresses admin_test4      # тестовый портал — проверка
- *   3) php artisan entity:install-addresses all-tenants      # все существующие порталы
- *
- * Таблицу для существующих порталов добавляет `php artisan tenants:migrate`.
+ * Порядок выкатки:
+ *   1) php artisan entity:install-warehouses seeds
+ *   2) php artisan entity:install-warehouses admin_test4
+ *   3) php artisan entity:install-warehouses all-tenants
  */
-class InstallAddressesEntity extends Command
+class InstallWarehousesEntity extends Command
 {
-    protected $signature = 'entity:install-addresses
+    protected $signature = 'entity:install-warehouses
         {target=seeds : seeds | all-tenants | <tenant_id> (например admin_test4)}
-        {--recreate-table : пересоздать таблицу addresses (DROP + CREATE), иначе только создать если нет}';
+        {--recreate-table : пересоздать таблицу warehouses (DROP + CREATE), иначе только создать если нет}';
 
-    protected $description = 'Установить сущность «Справочник адресов» (addresses) в admin_seeds / тенант / все тенанты';
+    protected $description = 'Установить сущность «Быстрые задачи» (warehouses) в admin_seeds / тенант / все тенанты';
 
-    /** Поля сущности — берём из logistic_tasks (и/или из fallback ниже). */
     private array $fields = [
         'id', 'created_at', 'updated_at', 'name', 'photo', 'service_time',
         'address', 'phone', 'time', 'car_requirements', 'employee_requirements',
@@ -72,9 +68,6 @@ class InstallAddressesEntity extends Command
             return self::SUCCESS;
         }
 
-        // конкретный тенант по id. Тенант идентифицируется именем портала
-        // (например test4), а имя БД = prefix + id (admin_test4). Поэтому если
-        // передали имя БД — отрезаем префикс из конфига tenancy.
         $tenant = Tenant::find($target);
         if (!$tenant) {
             $prefix = (string) config('tenancy.database.prefix', '');
@@ -102,28 +95,26 @@ class InstallAddressesEntity extends Command
     {
         $this->ensureTable($db);
 
-        // --- идемпотентность: чистим прошлую установку addresses ---
         $oldTypeIds = $db->table('data_types')
-            ->where('name', 'addresses')->orWhere('slug', 'addresses')
+            ->where('name', 'warehouses')->orWhere('slug', 'warehouses')
             ->pluck('id');
         if ($oldTypeIds->isNotEmpty()) {
             $db->table('data_rows')->whereIn('data_type_id', $oldTypeIds)->delete();
             $db->table('data_types')->whereIn('id', $oldTypeIds)->delete();
         }
-        $db->table('field_sections')->where('page', 'addresses')->delete();
-        $db->table('sidebar_items')->where('slug', 'addresses')->delete();
-        $db->table('settings')->where('entity', 'addresses')->where('type', 'menu')->delete();
+        $db->table('field_sections')->where('page', 'warehouses')->delete();
+        $db->table('sidebar_items')->where('slug', 'warehouses')->delete();
+        $db->table('settings')->where('entity', 'warehouses')->where('type', 'menu')->delete();
 
         $now = now();
 
-        // --- 1. data_types: сама сущность ---
         $typeId = $db->table('data_types')->insertGetId([
-            'name'                 => 'addresses',
-            'slug'                 => 'addresses',
-            'title_singular'       => 'Задача',
-            'title_plural'         => 'Библиотека задач',
+            'name'                 => 'warehouses',
+            'slug'                 => 'warehouses',
+            'title_singular'       => 'Быстрая задача',
+            'title_plural'         => 'Быстрые задачи',
             'icon'                 => null,
-            'model_name'           => 'App\\Models\\Address',
+            'model_name'           => 'App\\Models\\Warehouse',
             'policy_name'          => null,
             'controller'           => null,
             'description'          => null,
@@ -132,53 +123,44 @@ class InstallAddressesEntity extends Command
             'details'              => null,
             'created_at'           => $now,
             'updated_at'           => $now,
-            'color'                => '#989BFF',
+            'color'                => '#7FD1B9',
             'menu'                 => null,
             'enable'               => 1,
-            'slug_singular'        => 'address',
+            'slug_singular'        => 'warehouse',
             'hidden'               => 0,
             'empty_text'           => null,
         ]);
 
-        // --- 2. field_sections: два раздела ---
         $infoSecId = $db->table('field_sections')->insertGetId([
-            'sort' => 0, 'name' => 'Информация', 'domain_key' => null, 'page' => 'addresses',
+            'sort' => 0, 'name' => 'Информация', 'domain_key' => null, 'page' => 'warehouses',
             'created_at' => $now, 'updated_at' => $now, 'account_id' => 1, 'hide' => 0,
             'column_id' => 1, 'module' => null, 'parent_id' => null, '_lft' => 0, '_rgt' => 0, 'is_short' => null,
         ]);
         $moduleSecId = $db->table('field_sections')->insertGetId([
-            'sort' => 0, 'name' => 'Используемые поля в модуле', 'domain_key' => null, 'page' => 'addresses',
+            'sort' => 0, 'name' => 'Используемые поля в модуле', 'domain_key' => null, 'page' => 'warehouses',
             'created_at' => $now, 'updated_at' => $now, 'account_id' => null, 'hide' => 0,
             'column_id' => 1, 'module' => 'logistic', 'parent_id' => null, '_lft' => 0, '_rgt' => 0, 'is_short' => null,
         ]);
 
-        // --- 3. data_rows: поля (клон из logistic_tasks + fallback) ---
         $this->installDataRows($db, $typeId, $infoSecId, $moduleSecId);
 
-        // --- 4. sidebar_items: пункт сайдбара ---
         $maxRgt = (int) $db->table('sidebar_items')->max('_rgt');
         $db->table('sidebar_items')->insert([
             'created_at' => $now, 'updated_at' => $now,
-            'name' => 'Библиотека задач', 'slug' => 'addresses',
-            'sort' => 0, 'link' => '/objects/addresses',
+            'name' => 'Быстрые задачи', 'slug' => 'warehouses',
+            'sort' => 0, 'link' => '/objects/warehouses',
             '_lft' => $maxRgt + 1, '_rgt' => $maxRgt + 2, 'parent_id' => null,
             'is_hidden' => 0, 'enabled' => 1,
         ]);
 
-        // --- 5. settings(menu): меню карточки ---
         $db->table('settings')->insert([
             'key' => 'menu', 'display_name' => null, 'value' => $this->menuJson(),
-            'type' => 'menu', 'entity' => 'addresses', 'user_id' => null,
+            'type' => 'menu', 'entity' => 'warehouses', 'user_id' => null,
         ]);
 
         $this->line("    [{$label}] data_type={$typeId}, sections=[{$infoSecId},{$moduleSecId}]");
     }
 
-    /**
-     * Клонирует data_rows нужных полей из logistic_tasks, перенаправляя
-     * data_type_id / section_id / module_section_id на новую сущность.
-     * Для полей, которых вдруг нет в logistic_tasks, использует fallback.
-     */
     private function installDataRows(ConnectionInterface $db, int $typeId, int $infoSecId, int $moduleSecId): void
     {
         $cloned = [];
@@ -197,7 +179,6 @@ class InstallAddressesEntity extends Command
                 unset($arr['id']);
                 $arr['data_type_id'] = $typeId;
                 $arr['section_id']   = $infoSecId;
-                // если поле было «используется в модуле» — указываем модульный раздел адресов
                 $arr['module_section_id'] = $this->isNonEmptyJsonArray($arr['module_section_id'] ?? null)
                     ? '['.$moduleSecId.']'
                     : ($arr['module_section_id'] ?? null);
@@ -206,7 +187,6 @@ class InstallAddressesEntity extends Command
             }
         }
 
-        // fallback для отсутствующих полей
         foreach ($this->fallbackRows($typeId, $infoSecId, $moduleSecId) as $field => $def) {
             if (!isset($cloned[$field])) {
                 $db->table('data_rows')->insert($def);
@@ -227,7 +207,6 @@ class InstallAddressesEntity extends Command
         return is_array($decoded) && count($decoded) > 0;
     }
 
-    /** Базовая строка data_rows со значениями по умолчанию. */
     private function baseRow(int $typeId, int $sectionId): array
     {
         return [
@@ -246,7 +225,6 @@ class InstallAddressesEntity extends Command
         ];
     }
 
-    /** Резервные определения полей (если logistic_tasks недоступен). */
     private function fallbackRows(int $typeId, int $infoSecId, int $moduleSecId): array
     {
         $mod = '['.$moduleSecId.']';
@@ -271,7 +249,6 @@ class InstallAddressesEntity extends Command
         ];
     }
 
-    /** Меню карточки сущности (как у logistic_tasks, без вкладки «Товары и услуги»). */
     private function menuJson(): string
     {
         return json_encode([
@@ -289,14 +266,13 @@ class InstallAddressesEntity extends Command
         ], JSON_UNESCAPED_SLASHES);
     }
 
-    /** Гарантирует наличие таблицы addresses на данном соединении. */
     private function ensureTable(ConnectionInterface $db): void
     {
         if ($this->option('recreate-table')) {
-            $db->statement('DROP TABLE IF EXISTS `addresses`');
+            $db->statement('DROP TABLE IF EXISTS `warehouses`');
         }
         $db->statement(<<<'SQL'
-CREATE TABLE IF NOT EXISTS `addresses` (
+CREATE TABLE IF NOT EXISTS `warehouses` (
   `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
   `created_at` timestamp NULL DEFAULT NULL,
   `updated_at` timestamp NULL DEFAULT NULL,

@@ -776,6 +776,61 @@ class RouteController extends Controller
         return response()->json(['success' => true, 'id' => $newId]);
     }
 
+    /**
+     * Создаёт задачу логистики из записи «Быстрые задачи» (warehouses) и при
+     * наличии route_id прикрепляет к маршруту. Полный аналог task_from_address.
+     *
+     * Body: { warehouse_id, route_id? }
+     */
+    public function task_from_warehouse(Request $request)
+    {
+        $warehouse = \App\Models\Warehouse::find($request->warehouse_id);
+        if (!$warehouse) {
+            return response()->json(['code' => 404, 'error' => 'Быстрая задача не найдена'], 404);
+        }
+
+        $routeId = $request->route_id ? (int) $request->route_id : null;
+
+        $crud = app(\App\Services\CrudService::class);
+        $row = [
+            'id'                    => 0,
+            'name'                  => $warehouse->name,
+            'address'               => $warehouse->address,
+            'phone'                 => $warehouse->phone,
+            'time'                  => $warehouse->time,
+            'car_requirements'      => $warehouse->car_requirements,
+            'employee_requirements' => $warehouse->employee_requirements,
+            'service_time'          => $warehouse->service_time,
+            'photo'                 => $warehouse->photo,
+            'user_id'               => \Auth::id() ?? $warehouse->user_id,
+            'comment'               => $warehouse->comment,
+            'contact'               => $warehouse->contact,
+        ];
+
+        $result = $crud->batch('logistic_tasks', [$row]);
+        $newId = $result['id'] ?? null;
+
+        if (!$newId) {
+            return response()->json(['code' => 500, 'error' => 'Не удалось создать задачу'], 500);
+        }
+
+        if ($warehouse->client_id) {
+            $task = Task::find($newId);
+            if ($task) {
+                $task->client_id = $warehouse->client_id;
+                $task->saveQuietly();
+            }
+        }
+
+        if ($routeId) {
+            $ids = Task::where('route_id', $routeId)->orderBy('sort')->pluck('id')->toArray();
+            $ids[] = $newId;
+            return $this->update_tasks($routeId, new Request(['ids' => $ids]));
+        }
+
+        return response()->json(['success' => true, 'id' => $newId]);
+    }
+
     private function parseTimeWindowStart($time)
     {
         if (!$time) {

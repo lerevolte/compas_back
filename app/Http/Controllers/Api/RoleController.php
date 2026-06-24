@@ -75,6 +75,7 @@ class RoleController extends Controller
                 $permissions[] = array(
                     'id' => $entity_permission['id'],
                     'entity_id' => $entity_permission['entity_id'],
+                    'slug' => $data_types[$entity_permission['entity_id']]->slug,
                     'name' => $data_types[$entity_permission['entity_id']]->title_plural,
                     'read_p' => $entity_permission['read_p'],
                     'create_p' => $entity_permission['create_p'],
@@ -177,7 +178,14 @@ class RoleController extends Controller
         $role->update(['is_admin' => $is_admin, 'display_name' => ($request->title ? $request->title : $role->display_name), 'name' => $name]);
 
         if($request->rows && is_array($request->rows)) {
-            Permission::upsert($request->rows, ['id'], ['read_p', 'create_p', 'update_p', 'delete_p', 'export_p', 'import_p']);
+            $allowed = ['read_p', 'create_p', 'update_p', 'delete_p', 'export_p', 'import_p'];
+            foreach($request->rows as $row) {
+                if(empty($row['id']))
+                    continue;
+                $update = array_intersect_key($row, array_flip($allowed));
+                if(!empty($update))
+                    Permission::where('id', $row['id'])->update($update);
+            }
         }
         \App\Models\Settings::clear_cache();
 

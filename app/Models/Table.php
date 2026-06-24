@@ -241,6 +241,10 @@ class Table
             $table_columns = collect($tables[$slug]['fields']);
             $table_columns = $table_columns->keyBy('key')->toArray();
             foreach($table_columns as $key => $column) {
+                // Столбцы связанных сущностей (rel__{slug}__{field}, задача 14) не
+                // принадлежат модели маршрута — сохраняем их как есть.
+                if(strpos((string)$key, 'rel__') === 0)
+                    continue;
                 if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'iconDrag' && $key != 'iconDelete' || isset($settings[$slug]['perms'][$key]['read']) && !$settings[$slug]['perms'][$key]['read'])
                     unset($table_columns[$key]);
                 elseif(isset($model_fields[$key]) && $column['type'] == 'relation' && $model_fields[$key]->relation_table && !$settings['models'][$model_fields[$key]->relation_table]->enable)

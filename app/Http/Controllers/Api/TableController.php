@@ -391,7 +391,10 @@ class TableController extends Controller
         // Удаляем поля, которых больше нет в модели
         foreach ($columns as $key => $col) {
             $isSystem = in_array($key, ['isChoose', 'actions', 'iconDrag', 'iconDelete']);
-            if (!$modelFields->contains('field', $key) && !$isSystem) {
+            // Столбцы связанных сущностей (rel__{slug}__{field}, задача 14) не
+            // принадлежат модели маршрута — сохраняем их как есть.
+            $isRelated = strpos((string) $key, 'rel__') === 0;
+            if (!$modelFields->contains('field', $key) && !$isSystem && !$isRelated) {
                 unset($columns[$key]);
             }
         }

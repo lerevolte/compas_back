@@ -406,7 +406,7 @@ class Bitrix24Controller extends Controller
         // (хранится JSON-ом {value, external_link}). Текст — «Сделка №ID»,
         // ссылка ведёт на карточку сделки в CRM.
         $task->name = json_encode([
-            'value'         => 'Сделка №' . $dealId,
+            'value'         => (string) $dealId,
             'external_link' => 'https://crm6.ru/crm/deal/details/' . $dealId . '/',
         ], JSON_UNESCAPED_UNICODE);
         $task->contact = $clientName;

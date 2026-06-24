@@ -1947,6 +1947,58 @@ class EntityObject
         if(is_array($guides) && isset($guides['fields'][$slug][$field->field]) && $show_hints)
                     $fields_data[$field->field]['guide'] = $guides['fields'][$slug][$field->field];
 
+        // Задача 14: столбцы связанных сущностей (Компания/Автопарк/Сотрудники),
+        // выведенные пользователем в таблицу Маршрутов. Ключ: rel__{slug}__{field}.
+        if($slug == 'routes') {
+            $rel_fk_map = ['companies' => 'company_id', 'cars' => 'car_id', 'employees' => 'employee_id'];
+            $saved_fields = (isset($tables['routes']['fields']) && is_array($tables['routes']['fields'])) ? $tables['routes']['fields'] : [];
+            $rel_cols = array();
+            foreach($saved_fields as $col) {
+                $key = is_array($col) ? ($col['key'] ?? null) : null;
+                $enabled = is_array($col) ? ($col['enabled'] ?? false) : false;
+                if(!$key || strpos($key, 'rel__') !== 0 || !$enabled)
+                    continue;
+                $parts = explode('__', $key);
+                if(count($parts) < 3)
+                    continue;
+                $rslug = $parts[1];
+                if(!isset($rel_fk_map[$rslug]))
+                    continue;
+                $rel_cols[] = ['key' => $key, 'slug' => $rslug, 'fk' => $rel_fk_map[$rslug], 'field' => implode('__', array_slice($parts, 2))];
+            }
+            if(count($rel_cols)) {
+                $rel_rows = array();
+                foreach(array_unique(array_column($rel_cols, 'slug')) as $rslug) {
+                    $rel_model = isset($settings['models'][$rslug]) ? $settings['models'][$rslug]->model_name : null;
+                    $fk = $rel_fk_map[$rslug];
+                    $ids = array();
+                    foreach($paginator->items() as $it) {
+                        if(!empty($it->{$fk})) $ids[] = $it->{$fk};
+                    }
+                    $ids = array_values(array_unique($ids));
+                    $rel_rows[$rslug] = array();
+                    if($rel_model && count($ids)) {
+                        foreach($rel_model::whereIntegerInRaw('id', $ids)->get() as $m) {
+                            $rel_rows[$rslug][$m->id] = $m;
+                        }
+                    }
+                }
+                foreach($paginator->items() as $it) {
+                    if(!isset($objects[$it->id]))
+                        continue;
+                    foreach($rel_cols as $rc) {
+                        $val = null;
+                        $fkVal = $it->{$rc['fk']} ?? null;
+                        if($fkVal && isset($rel_rows[$rc['slug']][$fkVal])) {
+                            $raw = $rel_rows[$rc['slug']][$fkVal]->{$rc['field']} ?? null;
+                            $val = (ValueHelper::isJson($raw) && is_array(json_decode($raw, true))) ? json_decode($raw, true) : $raw;
+                        }
+                        $objects[$it->id][$rc['key']] = $val;
+                    }
+                }
+            }
+        }
+
         $res = array(
             'count' => $paginator->count(),
             'current_page' => $paginator->currentPage(),
