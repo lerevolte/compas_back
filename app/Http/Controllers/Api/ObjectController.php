@@ -177,7 +177,7 @@ class ObjectController extends Controller
         }
 
         $canDelete = true;
-        if ($user && !$user->is_admin) {
+        if ($user) {
             $dp = is_array($permissions) ? ($permissions['delete_p'] ?? null) : null;
             if ($dp === 'N') {
                 $canDelete = false;

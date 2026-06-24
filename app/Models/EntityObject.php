@@ -2002,6 +2002,8 @@ class EntityObject
                 // (связи → метки, файлы → url, статусы → метки, и т.д.).
                 $rel_formatted = array();
                 foreach(array_unique(array_column($rel_cols, 'slug')) as $rslug) {
+                    // self::list ожидает ключ настроек = name сущности (а не slug).
+                    $rel_name = \DB::table('data_types')->where('slug', $rslug)->value('name') ?: $rslug;
                     $fk = $rel_fk_map[$rslug];
                     $ids = array();
                     foreach($paginator->items() as $it) {
@@ -2012,7 +2014,7 @@ class EntityObject
                     $rel_formatted[$rslug] = array();
                     if(count($ids)) {
                         try {
-                            $relList = self::list($rslug, new \Illuminate\Http\Request(['ids' => $ids, 'per_page' => count($ids)]));
+                            $relList = self::list($rel_name, new \Illuminate\Http\Request(['ids' => $ids, 'per_page' => count($ids)]));
                             foreach(($relList['data'] ?? []) as $r) {
                                 if(isset($r['id'])) $rel_formatted[$rslug][$r['id']] = $r;
                             }
