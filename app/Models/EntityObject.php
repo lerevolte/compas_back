@@ -2023,6 +2023,43 @@ class EntityObject
                         }
                     }
                 }
+                // Приводим форматированное значение связанной сущности к тексту,
+                // чтобы единичные и множественные связи (а также файлы/статусы)
+                // выводились одинаково надёжно в текстовом столбце.
+                $toText = function($v) use (&$toText) {
+                    if($v === null) return null;
+                    if(is_scalar($v)) return $v;
+                    if(is_array($v)) {
+                        // Связь: {value, localOptions:[{label:{text}}]}
+                        if(array_key_exists('localOptions', $v)) {
+                            $opts = is_array($v['localOptions']) ? $v['localOptions'] : array();
+                            $texts = array();
+                            foreach($opts as $o) {
+                                if(!is_array($o)) continue;
+                                $lbl = $o['label'] ?? null;
+                                $t = is_array($lbl) ? ($lbl['text'] ?? '') : (is_scalar($lbl) ? $lbl : '');
+                                if($t !== '' && $t !== null) $texts[] = $t;
+                            }
+                            return count($texts) ? implode(', ', $texts) : null;
+                        }
+                        // Текст-внешняя-ссылка: {value, external_link}
+                        if(array_key_exists('value', $v) && array_key_exists('external_link', $v)) {
+                            return is_scalar($v['value']) ? $v['value'] : null;
+                        }
+                        // Файлы / прочие массивы
+                        $parts = array();
+                        foreach($v as $item) {
+                            if(is_array($item)) {
+                                $p = $item['name'] ?? $item['url'] ?? null;
+                                if($p) $parts[] = $p;
+                            } elseif(is_scalar($item) && $item !== '') {
+                                $parts[] = $item;
+                            }
+                        }
+                        return count($parts) ? implode(', ', $parts) : null;
+                    }
+                    return null;
+                };
                 foreach($paginator->items() as $it) {
                     if(!isset($objects[$it->id]))
                         continue;
@@ -2030,7 +2067,7 @@ class EntityObject
                         $val = null;
                         $fkVal = $extractFk($it->{$rc['fk']} ?? null);
                         if($fkVal && isset($rel_formatted[$rc['slug']][$fkVal]) && array_key_exists($rc['field'], $rel_formatted[$rc['slug']][$fkVal])) {
-                            $val = $rel_formatted[$rc['slug']][$fkVal][$rc['field']];
+                            $val = $toText($rel_formatted[$rc['slug']][$fkVal][$rc['field']]);
                         }
                         $objects[$it->id][$rc['key']] = $val;
                     }
