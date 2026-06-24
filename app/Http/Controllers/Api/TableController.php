@@ -115,7 +115,7 @@ class TableController extends Controller
             $roleTables = $role->tables ? json_decode($role->tables, true) : [];
             if (!is_array($roleTables)) $roleTables = [];
             
-            $roleTables[$slug] = $request->fields;
+            $roleTables[$slug] = $fieldsConfig;
             $role->tables = json_encode($roleTables);
             $role->saveQuietly();
         }
@@ -156,7 +156,7 @@ class TableController extends Controller
              $globalTables = json_decode($settings->value, true) ?: [];
         }
 
-        $globalTables[$slug] = $request->fields;
+        $globalTables[$slug] = $fieldsConfig;
 
         DB::table('settings')->updateOrInsert(
             ['key' => 'tables'],

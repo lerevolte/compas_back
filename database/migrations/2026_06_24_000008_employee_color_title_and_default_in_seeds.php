@@ -41,7 +41,7 @@ return new class extends Migration
                 'field_id'  => $field->id,
                 'color'     => '#8F8F8F',
                 'file'      => null,
-                'value'     => 'Серый',
+                'value'     => 'Не выбрано',
                 'sort'      => 0,
                 'is_hidden' => 0,
             ]);

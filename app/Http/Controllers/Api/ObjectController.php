@@ -177,8 +177,8 @@ class ObjectController extends Controller
         }
 
         $canDelete = true;
-        if ($user && !$user->is_admin && $slug != 'logistic_tasks') {
-            $dp = $permissions['delete_p'] ?? null;
+        if ($user && !$user->is_admin) {
+            $dp = is_array($permissions) ? ($permissions['delete_p'] ?? null) : null;
             if ($dp === 'N') {
                 $canDelete = false;
             } elseif ($dp === 'Y') {
@@ -190,6 +190,8 @@ class ObjectController extends Controller
         }
         if (is_array($permissions)) {
             $permissions['can_delete'] = $canDelete;
+        } elseif (is_object($permissions)) {
+            $permissions->can_delete = $canDelete;
         }
 
         // 4. Дополнительные данные (продукты, история)

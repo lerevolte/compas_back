@@ -474,9 +474,21 @@ class User extends \TCG\Voyager\Models\User
         }
 
         foreach($menu as $k => $item) {
-            
+
+            if(isset($sidebar_items[$item['id']])) {
+                $menu[$k]['name'] = $sidebar_items[$item['id']]['name'];
+                if(array_key_exists('link', $sidebar_items[$item['id']]))
+                    $menu[$k]['link'] = $sidebar_items[$item['id']]['link'];
+                $item['name'] = $menu[$k]['name'];
+            }
+
             if(isset($item['children'])) {
                 foreach($item['children'] as $i => $child) {
+                    if(isset($sidebar_items[$child['id']])) {
+                        $menu[$k]['children'][$i]['name'] = $sidebar_items[$child['id']]['name'];
+                        if(array_key_exists('link', $sidebar_items[$child['id']]))
+                            $menu[$k]['children'][$i]['link'] = $sidebar_items[$child['id']]['link'];
+                    }
                     if(!in_array($child['id'], $sidebar_ids) || in_array($child['slug'], $blocked_pages)) {
                         unset($menu[$k]['children'][$i]);
                     }
