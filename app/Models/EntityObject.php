@@ -1999,12 +1999,14 @@ class EntityObject
                 };
                 $rel_rows = array();
                 foreach(array_unique(array_column($rel_cols, 'slug')) as $rslug) {
-                    // Имя таблицы связанной сущности. Загружаем raw-запросом (а не
-                    // через Eloquent-модель), чтобы не терять записи из-за
-                    // soft-delete/глобальных scope — иначе значение в таблице пусто.
+                    // Имя таблицы связанной сущности берём из data_types по slug
+                    // ($settings['models'] ключится по name, а не slug — задача 14).
+                    // Загружаем raw-запросом (а не Eloquent-моделью), чтобы не терять
+                    // записи из-за soft-delete/глобальных scope.
+                    $rel_dt = \DB::table('data_types')->where('slug', $rslug)->first();
                     $rel_table = null;
-                    if(isset($settings['models'][$rslug]) && $settings['models'][$rslug]->model_name) {
-                        try { $rel_table = (new ($settings['models'][$rslug]->model_name))->getTable(); } catch (\Throwable $e) { $rel_table = null; }
+                    if($rel_dt && $rel_dt->model_name) {
+                        try { $rel_table = (new ($rel_dt->model_name))->getTable(); } catch (\Throwable $e) { $rel_table = null; }
                     }
                     if(!$rel_table) $rel_table = $rslug;
                     $fk = $rel_fk_map[$rslug];

@@ -158,6 +158,10 @@ class InstallWarehousesEntity extends Command
             'type' => 'menu', 'entity' => 'warehouses', 'user_id' => null,
         ]);
 
+        if (class_exists(\App\Models\Settings::class)) {
+            try { \App\Models\Settings::clear_cache(); } catch (\Throwable $e) {}
+        }
+
         $this->line("    [{$label}] data_type={$typeId}, sections=[{$infoSecId},{$moduleSecId}]");
     }
 
