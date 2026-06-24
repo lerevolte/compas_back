@@ -1997,29 +1997,27 @@ class EntityObject
                     }
                     return $v;
                 };
-                $rel_rows = array();
+                // Форматированные строки связанных сущностей — через self::list,
+                // чтобы значения выводились так же, как на странице объектов
+                // (связи → метки, файлы → url, статусы → метки, и т.д.).
+                $rel_formatted = array();
                 foreach(array_unique(array_column($rel_cols, 'slug')) as $rslug) {
-                    // Имя таблицы связанной сущности берём из data_types по slug
-                    // ($settings['models'] ключится по name, а не slug — задача 14).
-                    // Загружаем raw-запросом (а не Eloquent-моделью), чтобы не терять
-                    // записи из-за soft-delete/глобальных scope.
-                    $rel_dt = \DB::table('data_types')->where('slug', $rslug)->first();
-                    $rel_table = null;
-                    if($rel_dt && $rel_dt->model_name) {
-                        try { $rel_table = (new ($rel_dt->model_name))->getTable(); } catch (\Throwable $e) { $rel_table = null; }
-                    }
-                    if(!$rel_table) $rel_table = $rslug;
                     $fk = $rel_fk_map[$rslug];
                     $ids = array();
                     foreach($paginator->items() as $it) {
                         $id = $extractFk($it->{$fk} ?? null);
-                        if(!empty($id)) $ids[] = $id;
+                        if(!empty($id)) $ids[] = (int) $id;
                     }
                     $ids = array_values(array_unique($ids));
-                    $rel_rows[$rslug] = array();
-                    if(count($ids) && \Illuminate\Support\Facades\Schema::hasTable($rel_table)) {
-                        foreach(\DB::table($rel_table)->whereIntegerInRaw('id', $ids)->get() as $m) {
-                            $rel_rows[$rslug][$m->id] = $m;
+                    $rel_formatted[$rslug] = array();
+                    if(count($ids)) {
+                        try {
+                            $relList = self::list($rslug, new \Illuminate\Http\Request(['ids' => $ids, 'per_page' => count($ids)]));
+                            foreach(($relList['data'] ?? []) as $r) {
+                                if(isset($r['id'])) $rel_formatted[$rslug][$r['id']] = $r;
+                            }
+                        } catch (\Throwable $e) {
+                            $rel_formatted[$rslug] = array();
                         }
                     }
                 }
@@ -2029,9 +2027,8 @@ class EntityObject
                     foreach($rel_cols as $rc) {
                         $val = null;
                         $fkVal = $extractFk($it->{$rc['fk']} ?? null);
-                        if($fkVal && isset($rel_rows[$rc['slug']][$fkVal])) {
-                            $raw = $rel_rows[$rc['slug']][$fkVal]->{$rc['field']} ?? null;
-                            $val = (ValueHelper::isJson($raw) && is_array(json_decode($raw, true))) ? json_decode($raw, true) : $raw;
+                        if($fkVal && isset($rel_formatted[$rc['slug']][$fkVal]) && array_key_exists($rc['field'], $rel_formatted[$rc['slug']][$fkVal])) {
+                            $val = $rel_formatted[$rc['slug']][$fkVal][$rc['field']];
                         }
                         $objects[$it->id][$rc['key']] = $val;
                     }
