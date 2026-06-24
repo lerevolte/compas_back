@@ -49,10 +49,16 @@ return new class extends Migration
             $greyId = $grey->id;
         }
 
-        $db->table('data_rows')->where('id', $field->id)->update([
-            'default_value' => $greyId,
-            'set_default'   => 1,
-        ]);
+        $defaults = [];
+        if (Schema::connection('seeds')->hasColumn('data_rows', 'default_value')) {
+            $defaults['default_value'] = $greyId;
+        }
+        if (Schema::connection('seeds')->hasColumn('data_rows', 'set_default')) {
+            $defaults['set_default'] = 1;
+        }
+        if (!empty($defaults)) {
+            $db->table('data_rows')->where('id', $field->id)->update($defaults);
+        }
     }
 
     public function down(): void
@@ -66,9 +72,18 @@ return new class extends Migration
             return;
         }
 
-        DB::connection('seeds')->table('data_rows')
-            ->where('data_type_id', $empTypeId)
-            ->where('field', 'color_status')
-            ->update(['set_default' => 0, 'default_value' => null]);
+        $defaults = [];
+        if (Schema::connection('seeds')->hasColumn('data_rows', 'set_default')) {
+            $defaults['set_default'] = 0;
+        }
+        if (Schema::connection('seeds')->hasColumn('data_rows', 'default_value')) {
+            $defaults['default_value'] = null;
+        }
+        if (!empty($defaults)) {
+            DB::connection('seeds')->table('data_rows')
+                ->where('data_type_id', $empTypeId)
+                ->where('field', 'color_status')
+                ->update($defaults);
+        }
     }
 };

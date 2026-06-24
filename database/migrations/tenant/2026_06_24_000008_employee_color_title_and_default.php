@@ -45,10 +45,16 @@ return new class extends Migration
             $greyId = $grey->id;
         }
 
-        DB::table('data_rows')->where('id', $field->id)->update([
-            'default_value' => $greyId,
-            'set_default'   => 1,
-        ]);
+        $defaults = [];
+        if (Schema::hasColumn('data_rows', 'default_value')) {
+            $defaults['default_value'] = $greyId;
+        }
+        if (Schema::hasColumn('data_rows', 'set_default')) {
+            $defaults['set_default'] = 1;
+        }
+        if (!empty($defaults)) {
+            DB::table('data_rows')->where('id', $field->id)->update($defaults);
+        }
 
         if (class_exists(\App\Models\Settings::class)) {
             try { \App\Models\Settings::clear_cache(); } catch (\Throwable $e) {}
@@ -66,9 +72,18 @@ return new class extends Migration
             return;
         }
 
-        DB::table('data_rows')
-            ->where('data_type_id', $empTypeId)
-            ->where('field', 'color_status')
-            ->update(['set_default' => 0, 'default_value' => null]);
+        $defaults = [];
+        if (Schema::hasColumn('data_rows', 'set_default')) {
+            $defaults['set_default'] = 0;
+        }
+        if (Schema::hasColumn('data_rows', 'default_value')) {
+            $defaults['default_value'] = null;
+        }
+        if (!empty($defaults)) {
+            DB::table('data_rows')
+                ->where('data_type_id', $empTypeId)
+                ->where('field', 'color_status')
+                ->update($defaults);
+        }
     }
 };
