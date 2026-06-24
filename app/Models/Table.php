@@ -1107,16 +1107,19 @@ class Table
                     [
                         'value' => 'N',
                         'label' => 'Нет доступа',
+                        'color' => '#8F8F8F',
                         'sort' => 0
                     ],
                     [
                         'value' => 'Y',
                         'label' => 'Только свои',
+                        'color' => '#898F37',
                         'sort' => 1
                     ],
                     [
                         'value' => 'A',
                         'label' => 'Есть доступ',
+                        'color' => '#3C7C2B',
                         'sort' => 2
                     ]
                 ]
@@ -1148,16 +1151,19 @@ class Table
                     [
                         'value' => 'N',
                         'label' => 'Нет доступа',
+                        'color' => '#8F8F8F',
                         'sort' => 0
                     ],
                     // [
                     //     'value' => 'Y',
                     //     'label' => 'Только свои',
+                        'color' => '#898F37',
                     //     'sort' => 1
                     // ],
                     [
                         'value' => 'A',
                         'label' => 'Есть доступ',
+                        'color' => '#3C7C2B',
                         'sort' => 2
                     ]
                 ]
@@ -1189,16 +1195,19 @@ class Table
                     [
                         'value' => 'N',
                         'label' => 'Нет доступа',
+                        'color' => '#8F8F8F',
                         'sort' => 0
                     ],
                     [
                         'value' => 'Y',
                         'label' => 'Только свои',
+                        'color' => '#898F37',
                         'sort' => 1
                     ],
                     [
                         'value' => 'A',
                         'label' => 'Есть доступ',
+                        'color' => '#3C7C2B',
                         'sort' => 2
                     ]
                 ]
@@ -1230,16 +1239,19 @@ class Table
                     [
                         'value' => 'N',
                         'label' => 'Нет доступа',
+                        'color' => '#8F8F8F',
                         'sort' => 0
                     ],
                     [
                         'value' => 'Y',
                         'label' => 'Только свои',
+                        'color' => '#898F37',
                         'sort' => 1
                     ],
                     [
                         'value' => 'A',
                         'label' => 'Есть доступ',
+                        'color' => '#3C7C2B',
                         'sort' => 2
                     ]
                 ]
@@ -1271,16 +1283,19 @@ class Table
                     [
                         'value' => 'N',
                         'label' => 'Нет доступа',
+                        'color' => '#8F8F8F',
                         'sort' => 0
                     ],
                     // [
                     //     'value' => 'Y',
                     //     'label' => 'Только свои',
+                        'color' => '#898F37',
                     //     'sort' => 1
                     // ],
                     [
                         'value' => 'A',
                         'label' => 'Есть доступ',
+                        'color' => '#3C7C2B',
                         'sort' => 2
                     ]
                 ]
@@ -1312,16 +1327,19 @@ class Table
                     [
                         'value' => 'N',
                         'label' => 'Нет доступа',
+                        'color' => '#8F8F8F',
                         'sort' => 0
                     ],
                     [
                         'value' => 'Y',
                         'label' => 'Только свои',
+                        'color' => '#898F37',
                         'sort' => 1
                     ],
                     [
                         'value' => 'A',
                         'label' => 'Есть доступ',
+                        'color' => '#3C7C2B',
                         'sort' => 2
                     ]
                 ]

@@ -525,6 +525,21 @@ class Bitrix24Controller extends Controller
         // Статус точки для новой задачи
         if ($isNew) {
             $task->point_status = $params['point_status'] ?? self::NEW_POINT_STATUS;
+
+            $defaultRows = \DB::table('data_rows')
+                ->whereIn('data_type_id', function ($q) {
+                    $q->select('id')->from('data_types')->where('slug', 'logistic_tasks');
+                })
+                ->where('set_default', 1)
+                ->whereNotNull('default_value')
+                ->where('default_value', '!=', '')
+                ->whereNotIn('type', ['relation', 'file', 'text_group'])
+                ->get(['field', 'default_value']);
+            foreach ($defaultRows as $dr) {
+                if ($task->{$dr->field} === null || $task->{$dr->field} === '') {
+                    $task->{$dr->field} = $dr->default_value;
+                }
+            }
         }
 
         // История изменений — как при обычной работе с объектом через UI

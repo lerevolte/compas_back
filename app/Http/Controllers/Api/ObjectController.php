@@ -161,6 +161,37 @@ class ObjectController extends Controller
             }
         }
 
+        if ($isExternalAccess) {
+            $detail['readonly'] = true;
+            if (isset($detail['columns']) && is_array($detail['columns'])) {
+                foreach ($detail['columns'] as $ck => $col) {
+                    foreach ($col as $si => $section) {
+                        if (!empty($section['fields'])) {
+                            foreach ($section['fields'] as $fi => $f) {
+                                $detail['columns'][$ck][$si]['fields'][$fi]['can_edit'] = 0;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        $canDelete = true;
+        if ($user && !$user->is_admin && $slug != 'logistic_tasks') {
+            $dp = $permissions['delete_p'] ?? null;
+            if ($dp === 'N') {
+                $canDelete = false;
+            } elseif ($dp === 'Y') {
+                $ownerId = \Schema::hasColumn($slug, 'user_id')
+                    ? DB::table($slug)->where('id', $id)->value('user_id')
+                    : null;
+                $canDelete = $ownerId !== null && (int) $ownerId === (int) $user->id;
+            }
+        }
+        if (is_array($permissions)) {
+            $permissions['can_delete'] = $canDelete;
+        }
+
         // 4. Дополнительные данные (продукты, история)
         $products = [];
         $tableKeys = [];

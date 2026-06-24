@@ -1951,12 +1951,34 @@ class EntityObject
         // выведенные пользователем в таблицу Маршрутов. Ключ: rel__{slug}__{field}.
         if($slug == 'routes') {
             $rel_fk_map = ['companies' => 'company_id', 'cars' => 'car_id', 'employees' => 'employee_id'];
-            $saved_fields = (isset($tables['routes']['fields']) && is_array($tables['routes']['fields'])) ? $tables['routes']['fields'] : [];
+
+            // Настройки таблицы Маршрутов: сначала пользователь, затем роль, затем
+            // глобальные — как в Table::get (rel-столбцы могут жить на любом уровне).
+            $saved_fields = (isset($tables['routes']['fields']) && is_array($tables['routes']['fields'])) ? $tables['routes']['fields'] : null;
+            if(empty($saved_fields)) {
+                $u = \Auth::user();
+                if($u && $u->role_id) {
+                    $role = \App\Models\Role::find($u->role_id);
+                    if($role && $role->tables) {
+                        $rt = json_decode($role->tables, true);
+                        if(isset($rt['routes']['fields']) && is_array($rt['routes']['fields'])) $saved_fields = $rt['routes']['fields'];
+                    }
+                }
+            }
+            if(empty($saved_fields)) {
+                $gset = \DB::table('settings')->where('key', 'tables')->first();
+                if($gset && $gset->value) {
+                    $gt = json_decode($gset->value, true);
+                    if(isset($gt['routes']['fields']) && is_array($gt['routes']['fields'])) $saved_fields = $gt['routes']['fields'];
+                }
+            }
+            $saved_fields = is_array($saved_fields) ? $saved_fields : [];
+
             $rel_cols = array();
             foreach($saved_fields as $col) {
-                $key = is_array($col) ? ($col['key'] ?? null) : null;
-                $enabled = is_array($col) ? ($col['enabled'] ?? false) : false;
-                if(!$key || strpos($key, 'rel__') !== 0 || !$enabled)
+                $key = is_array($col) ? ($col['key'] ?? null) : (is_object($col) ? ($col->key ?? null) : null);
+                $enabled = is_array($col) ? ($col['enabled'] ?? false) : (is_object($col) ? ($col->enabled ?? false) : false);
+                if(!$key || strpos((string)$key, 'rel__') !== 0 || !$enabled)
                     continue;
                 $parts = explode('__', $key);
                 if(count($parts) < 3)
@@ -1967,13 +1989,22 @@ class EntityObject
                 $rel_cols[] = ['key' => $key, 'slug' => $rslug, 'fk' => $rel_fk_map[$rslug], 'field' => implode('__', array_slice($parts, 2))];
             }
             if(count($rel_cols)) {
+                $extractFk = function($v) {
+                    if(is_array($v)) return $v[0] ?? null;
+                    if(is_string($v) && ValueHelper::isJson($v)) {
+                        $d = json_decode($v, true);
+                        if(is_array($d)) return $d[0] ?? null;
+                    }
+                    return $v;
+                };
                 $rel_rows = array();
                 foreach(array_unique(array_column($rel_cols, 'slug')) as $rslug) {
                     $rel_model = isset($settings['models'][$rslug]) ? $settings['models'][$rslug]->model_name : null;
                     $fk = $rel_fk_map[$rslug];
                     $ids = array();
                     foreach($paginator->items() as $it) {
-                        if(!empty($it->{$fk})) $ids[] = $it->{$fk};
+                        $id = $extractFk($it->{$fk} ?? null);
+                        if(!empty($id)) $ids[] = $id;
                     }
                     $ids = array_values(array_unique($ids));
                     $rel_rows[$rslug] = array();
@@ -1988,7 +2019,7 @@ class EntityObject
                         continue;
                     foreach($rel_cols as $rc) {
                         $val = null;
-                        $fkVal = $it->{$rc['fk']} ?? null;
+                        $fkVal = $extractFk($it->{$rc['fk']} ?? null);
                         if($fkVal && isset($rel_rows[$rc['slug']][$fkVal])) {
                             $raw = $rel_rows[$rc['slug']][$fkVal]->{$rc['field']} ?? null;
                             $val = (ValueHelper::isJson($raw) && is_array(json_decode($raw, true))) ? json_decode($raw, true) : $raw;

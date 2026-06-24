@@ -83,6 +83,10 @@ class Route extends Model
                 $model->color = static::resolveColorFromCar((int) $model->car_id);
             }
 
+            if (!$model->color && $model->employee_id) {
+                $model->color = static::resolveColorFromEmployee((int) $model->employee_id);
+            }
+
             // У остальных сущностей цвет по умолчанию генерирует ColorGenerator
             // прямо в колонку color. У маршрутов color хранит ID записи
             // field_values (палитра, цвет линии на карте), поэтому дефолт
@@ -243,6 +247,52 @@ class Route extends Model
 
         // Кэш статусов поля держится в memcached — сбрасываем, чтобы новая
         // запись была видна в селекторе цветов на фронте без перезагрузки.
+        try {
+            $cacheName = tenant('id') . ':field-' . $routeColorField->id . '-statuses';
+            cache()->getMemcached()->delete($cacheName);
+        } catch (\Throwable $e) {}
+
+        return (int) $newId;
+    }
+
+    /**
+     * Цвет маршрута из привязанного сотрудника (employee.color_status / color),
+     * оформленный записью в палитре routes.color. Используется, когда у маршрута
+     * не выбран цвет и не привязана машина.
+     */
+    protected static function resolveColorFromEmployee(int $employeeId): ?int
+    {
+        $employee = Employee::find($employeeId);
+        if (!$employee) return null;
+
+        $hex = static::resolveHexFromCarColumn($employee->color_status)
+            ?: static::resolveHexFromCarColumn($employee->color);
+        if (!$hex) return null;
+
+        $routeColorField = \DB::table('data_rows')
+            ->where('field', 'color')
+            ->whereIn('data_type_id', function ($q) {
+                $q->select('id')->from('data_types')->where('slug', 'routes');
+            })
+            ->first();
+        if (!$routeColorField) return null;
+
+        $existingRouteValue = \DB::table('field_values')
+            ->where('field_id', $routeColorField->id)
+            ->where('color', $hex)
+            ->orderBy('id')
+            ->first();
+        if ($existingRouteValue) return (int) $existingRouteValue->id;
+
+        $newId = \DB::table('field_values')->insertGetId([
+            'field_id'  => $routeColorField->id,
+            'color'     => $hex,
+            'file'      => null,
+            'value'     => '',
+            'sort'      => 0,
+            'is_hidden' => 1,
+        ]);
+
         try {
             $cacheName = tenant('id') . ':field-' . $routeColorField->id . '-statuses';
             cache()->getMemcached()->delete($cacheName);
