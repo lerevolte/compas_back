@@ -418,26 +418,42 @@ class Route extends Model
             }
         }
 
+        // Заголовки фильтра берём из полей машины/сотрудника, по которым реально
+        // идёт фильтрация (а не хардкод) — задача 8538.
+        $carsTypeId = \DB::table('data_types')->where('slug', 'cars')->value('id');
+        $empTypeId  = \DB::table('data_types')->where('slug', 'employees')->value('id');
+        $fieldTitle = function ($typeId, $field) {
+            if (!$typeId) return null;
+            $t = \DB::table('data_rows')->where('data_type_id', $typeId)->where('field', $field)->value('title');
+            return ($t !== null && $t !== '') ? $t : null;
+        };
+        // Для диапазонных полей (от/до) убираем хвост «от/до/min/max» — фронт
+        // сам дописывает «(от)»/«(до)».
+        $baseTitle = function ($title) {
+            if (!$title) return null;
+            return trim(preg_replace('/\s*\(?(от|до|min|max)\)?\s*$/iu', '', $title));
+        };
+
         return [
             [
-                'title' => 'Требования к машине',
+                'title' => $fieldTitle($carsTypeId, 'requirements') ?: 'Требования к машине',
                 'key'   => 'car_requirements',
                 'value' => $carReqsVal,
                 'labels' => $carReqLabels
             ],
             [
-                'title' => 'Требования к сотруднику',
+                'title' => $fieldTitle($empTypeId, 'employee_requirements') ?: 'Требования к сотруднику',
                 'key'   => 'employee_requirements',
                 'value' => $empReqsVal,
                 'labels' => $empReqLabels
             ],
             [
-                'title' => 'Вес от/до',
+                'title' => $baseTitle($fieldTitle($carsTypeId, 'weight_min')) ?: 'Вес от/до',
                 'key'   => 'weight',
                 'value' => [$car ? $car->weight_min : null, $car ? $car->weight_max : null]
             ],
             [
-                'title' => 'Объем от/до',
+                'title' => $baseTitle($fieldTitle($carsTypeId, 'volume_min')) ?: 'Объем от/до',
                 'key'   => 'volume',
                 'value' => [$car ? $car->volume_min : null, $car ? $car->volume_max : null]
             ]
