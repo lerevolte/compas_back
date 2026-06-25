@@ -397,6 +397,9 @@ Route::middleware([
         Route::post('routes/task-from-warehouse', [App\Http\Controllers\Api\RouteController::class, 'task_from_warehouse'])->name('routes.task_from_warehouse');
         Route::get('routes/{id}/task_filter', [App\Http\Controllers\Api\RouteController::class, 'task_filter'])->name('routes.task_filter');
 
+        Route::get('product-stats/products', [App\Http\Controllers\Api\ProductStatsController::class, 'products'])->name('product_stats.products');
+        Route::get('product-stats/tasks', [App\Http\Controllers\Api\ProductStatsController::class, 'tasks'])->name('product_stats.tasks');
+
         Route::put(
             'logistic_tasks/{id}/set_products', 
             [App\Http\Controllers\Api\TaskController::class, 'set_products']
