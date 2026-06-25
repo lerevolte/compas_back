@@ -427,12 +427,12 @@ class Route extends Model
             $t = \DB::table('data_rows')->where('data_type_id', $typeId)->where('field', $field)->value('title');
             return ($t !== null && $t !== '') ? $t : null;
         };
-        // Для диапазонных полей (от/до) убираем хвост «от/до/min/max» — фронт
-        // сам дописывает «(от)»/«(до)».
-        $baseTitle = function ($title) {
-            if (!$title) return null;
-            return trim(preg_replace('/\s*\(?(от|до|min|max)\)?\s*$/iu', '', $title));
-        };
+        // Для диапазонных полей отдаём точные заголовки полей «от»/«до» по
+        // отдельности (фронт использует их как есть, без дописывания «(от)»).
+        $weightFrom = $fieldTitle($carsTypeId, 'weight_min');
+        $weightTo   = $fieldTitle($carsTypeId, 'weight_max');
+        $volumeFrom = $fieldTitle($carsTypeId, 'volume_min');
+        $volumeTo   = $fieldTitle($carsTypeId, 'volume_max');
 
         return [
             [
@@ -448,14 +448,16 @@ class Route extends Model
                 'labels' => $empReqLabels
             ],
             [
-                'title' => $baseTitle($fieldTitle($carsTypeId, 'weight_min')) ?: 'Вес от/до',
-                'key'   => 'weight',
-                'value' => [$car ? $car->weight_min : null, $car ? $car->weight_max : null]
+                'title'  => $weightFrom ?: 'Вес от/до',
+                'titles' => [$weightFrom ?: 'Вес (от)', $weightTo ?: 'Вес (до)'],
+                'key'    => 'weight',
+                'value'  => [$car ? $car->weight_min : null, $car ? $car->weight_max : null]
             ],
             [
-                'title' => $baseTitle($fieldTitle($carsTypeId, 'volume_min')) ?: 'Объем от/до',
-                'key'   => 'volume',
-                'value' => [$car ? $car->volume_min : null, $car ? $car->volume_max : null]
+                'title'  => $volumeFrom ?: 'Объем от/до',
+                'titles' => [$volumeFrom ?: 'Объем (от)', $volumeTo ?: 'Объем (до)'],
+                'key'    => 'volume',
+                'value'  => [$car ? $car->volume_min : null, $car ? $car->volume_max : null]
             ]
         ];
     }
