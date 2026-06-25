@@ -89,20 +89,9 @@ class ProductStatsController extends Controller
             ->whereNull('deleted_at')
             ->whereNotNull('products')
             ->orderBy('id')
-            ->get();
+            ->get(['id', 'products']);
 
-        // Карта статусов (field_values) и пользователей (для отображения).
-        $statusIds = $tasks->pluck('point_status')->filter()->unique()->values()->all();
-        $statuses = $statusIds
-            ? DB::table('field_values')->whereIn('id', $statusIds)->get()->keyBy('id')
-            : collect();
-
-        $userIds = $tasks->pluck('user_id')->filter()->unique()->values()->all();
-        $users = $userIds
-            ? DB::table('users')->whereIn('id', $userIds)->get(['id', 'name'])->keyBy('id')
-            : collect();
-
-        $result = [];
+        $qtyById = [];
         foreach ($tasks as $task) {
             $products = json_decode($task->products, true);
             if (!is_array($products)) {
@@ -116,25 +105,101 @@ class ProductStatsController extends Controller
                     $qty += (float) ($p['count'] ?? 0);
                 }
             }
-            if (!$has) {
-                continue;
+            if ($has) {
+                $qtyById[$task->id] = $qty;
             }
-
-            $status = $statuses[$task->point_status] ?? null;
-            $user = $users[$task->user_id] ?? null;
-
-            $result[] = [
-                'id'            => $task->id,
-                'status'        => $status ? ($status->value ?? '') : '',
-                'status_color'  => $status ? ($status->color ?? '#ccc') : '#ccc',
-                'name'          => $this->taskName($task),
-                'products_html' => $task->getHtmlProducts(),
-                'product_qty'   => $qty,
-                'responsible'   => $user ? ($user->name ?? '') : '',
-                'comment'       => is_string($task->comment) ? $task->comment : '',
-            ];
         }
 
-        return response()->json($result);
+        $ids = array_keys($qtyById);
+        if (empty($ids)) {
+            return response()->json(['list' => ['data' => []], 'table' => $this->buildColumns()]);
+        }
+
+        // Форматированные строки задач логистики — как на странице объектов.
+        $listed = \App\Models\EntityObject::list('logistic_tasks', new Request(['ids' => $ids, 'per_page' => count($ids)]));
+        $rows = $listed['data'] ?? [];
+        foreach ($rows as &$row) {
+            $row['product_qty'] = $qtyById[$row['id']] ?? 0;
+        }
+        unset($row);
+
+        return response()->json([
+            'list'  => ['data' => array_values($rows)],
+            'table' => $this->buildColumns(),
+        ]);
+    }
+
+    /**
+     * Заголовок нижней таблицы: нужные поля задачи логистики (взятые из
+     * Table::get, чтобы тип/опции совпадали со страницей объектов) + столбец
+     * «Кол-во, шт» выбранного товара.
+     */
+    private function buildColumns(): array
+    {
+        $all = collect(\App\Models\Table::get('logistic_tasks'))->keyBy('key');
+
+        $pick = function ($key, $title) use ($all) {
+            $col = $all->get($key);
+            if (!$col) {
+                return null;
+            }
+            $col = (array) $col;
+            $col['title'] = $title;
+            $col['enabled'] = true;
+            $col['read_only'] = 1;
+            $col['fixed'] = '';
+            return $col;
+        };
+
+        $productsColumn = [
+            'id'         => 'products',
+            'title'      => 'Состав заказа',
+            'key'        => 'products',
+            'width'      => '260px',
+            'enabled'    => true,
+            'sort_order' => '',
+            'type'       => 'json',
+            'is_plural'  => 0,
+            'is_link'    => 0,
+            'required'   => 0,
+            'fixed'      => '',
+            'fixTarget'  => '0px',
+            'read_only'  => 1,
+            'unit'       => '',
+            'mask'       => null,
+            'is_hidden'  => 0,
+            'options'    => [],
+        ];
+
+        $qtyColumn = [
+            'id'         => 'product_qty',
+            'title'      => 'Кол-во, шт',
+            'key'        => 'product_qty',
+            'width'      => '120px',
+            'enabled'    => true,
+            'sort_order' => '',
+            'type'       => 'number',
+            'is_plural'  => 0,
+            'is_link'    => 0,
+            'required'   => 0,
+            'fixed'      => '',
+            'fixTarget'  => '0px',
+            'read_only'  => 1,
+            'unit'       => '',
+            'mask'       => null,
+            'is_hidden'  => 0,
+            'options'    => [],
+        ];
+
+        $columns = array_filter([
+            $pick('point_status', 'Статус задачи'),
+            $pick('name', 'Название задачи'),
+            $productsColumn,
+            $qtyColumn,
+            $pick('user_id', 'Ответственный'),
+            $pick('comment', 'Примечание'),
+        ]);
+
+        return array_values($columns);
     }
 }

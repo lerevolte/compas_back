@@ -204,7 +204,13 @@ class AnalyticsService
     protected function finalizeAnalytics($type, $request, $params, $resultMetadata, $legendData, $tableRows = null)
     {
         $active_rows = $params['active_rows'];
-        $permissions = $this->checkPermissions();
+        // Логистическая статистика (страница логистики) не требует прав на
+        // сущность «Аналитика» — доступ к ней регулируется доступом к логистике.
+        if (is_string($type) && strpos($type, 'logistics') === 0) {
+            $permissions = ['read_p' => 'A', 'create_p' => 'A', 'update_p' => 'A', 'delete_p' => 'A', 'export_p' => 'A', 'import_p' => 'A'];
+        } else {
+            $permissions = $this->checkPermissions();
+        }
 
         // 1. Сортировка Легенды (для графика)
         $collection = collect($legendData);
