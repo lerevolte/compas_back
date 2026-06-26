@@ -416,10 +416,12 @@ class EntityObject
 
                     $fields_data[$field->field]['can_create'] = 1;
 
-                    if(isset($permissions_all[$settings['models'][$field->relation_table]->id]['create_p']) && !$isAdmin)
-
-                        $fields_data[$field->field]['can_create'] = $permissions_all[$settings['models'][$field->relation_table]->id]['create_p'] == 'N' ? 0 : 1;
-
+                    if(!$isAdmin && $field->relation_table) {
+                        $relModel = $settings['models'][$field->relation_table] ?? null;
+                        $relTypeId = $relModel ? $relModel->id : \DB::table('data_types')->where('slug', $field->relation_table)->value('id');
+                        if($relTypeId && isset($permissions_all[$relTypeId]['create_p']))
+                            $fields_data[$field->field]['can_create'] = $permissions_all[$relTypeId]['create_p'] == 'N' ? 0 : 1;
+                    }
                 }
 
                 if($field->type == 'relation' && $field->relation_table && isset($restrictions_tariff['objects'][$field->relation_table]['count'])) {
