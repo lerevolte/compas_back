@@ -59,7 +59,7 @@ class ObjectController extends Controller
         }
 
         // 3. Подготовка параметров запроса
-        if (isset($permissions['read_p']) && $permissions['read_p'] === 'Y' && !$user->is_admin && $slug != 'logistic_tasks') {
+        if (isset($permissions['read_p']) && $permissions['read_p'] === 'Y' && !$user->is_admin) {
             $request->merge(['filter' => array_merge($request->input('filter', []), ['user_id' => $user->id])]);
         }
 
@@ -121,7 +121,7 @@ class ObjectController extends Controller
         }
 
         // 2. Параметры запроса
-        if ($user && isset($permissions['read_p']) && $permissions['read_p'] === 'Y' && !$user->is_admin && $slug != 'logistic_tasks') {
+        if ($user && isset($permissions['read_p']) && $permissions['read_p'] === 'Y' && !$user->is_admin) {
             $request->merge(['user_id' => $user->id]);
         }
         if ($request->is_copy) {
@@ -134,7 +134,7 @@ class ObjectController extends Controller
             return response()->json(['message' => $detail['error']['message']], $detail['error']['code']);
         }
 
-        if ($user && !$user->is_admin && $slug != 'logistic_tasks') {
+        if ($user && !$user->is_admin) {
             $up = $permissions['update_p'] ?? null;
             $canUpdate = true;
             if ($up === 'N') {
@@ -294,7 +294,7 @@ class ObjectController extends Controller
                 return response()->json(['message' => 'Нет прав на редактирование'], 403);
             }
             if ($hasUpdate && isset($perms['update_p']) && $perms['update_p'] === 'Y'
-                && $slug != 'logistic_tasks' && \Schema::hasColumn($slug, 'user_id')) {
+                && \Schema::hasColumn($slug, 'user_id')) {
                 foreach (($request->rows ?? []) as $row) {
                     if (empty($row['id']) || !empty($row['copy'])) {
                         continue;
@@ -320,7 +320,7 @@ class ObjectController extends Controller
                 return response()->json(['message' => 'Нет прав на удаление'], 403);
             }
             if (isset($perms['delete_p']) && $perms['delete_p'] === 'Y'
-                && $slug != 'logistic_tasks' && \Schema::hasColumn($slug, 'user_id')) {
+                && \Schema::hasColumn($slug, 'user_id')) {
                 $foreign = DB::table($slug)->whereIn('id', (array) $request->ids)
                     ->where(function ($q) use ($user) {
                         $q->whereNull('user_id')->orWhere('user_id', '!=', $user->id);

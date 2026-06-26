@@ -318,7 +318,7 @@ class EntityObject
                 $fields_data[$field->field] = $settings[$slug]['field_data'][$field->field];
                 $fields_data[$field->field]['can_read'] = $settings[$slug]['perms'][$field->field]['read'] || $isAdmin ? 1 : 0;
                 $fields_data[$field->field]['can_edit'] = isset($data['deleted_at']) || $field->only_read ||
-                    !$settings[$slug]['perms'][$field->field]['write'] && !$isAdmin ? 0 : 1;
+                    !($settings[$slug]['perms'][$field->field]['write'] ?? 1) && !$isAdmin ? 0 : 1;
                 if ($slug == 'logistic_tasks' && $field->field == 'delivery_date' && $current->route_id && !$request->is_copy) {
                     $fields_data[$field->field]['can_edit'] = 0;
                 }

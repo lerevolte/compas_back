@@ -506,19 +506,34 @@ class Bitrix24Controller extends Controller
             $task->payment = 'Нал: ' . (int) ($deal['OPPORTUNITY'] ?? 0) . ' р.';
         }
 
-        // Менеджер -> локальный пользователь по email (crm_id в тенанте нет)
+        // Ответственный: сопоставляем ответственного сделки (ASSIGNED_BY_ID) с
+        // пользователем сервиса по полю «Сотрудник Bitrix24» (b24_responsible).
+        // Опции этого поля актуализируем из сотрудников Bitrix24.
         if (!empty($deal['ASSIGNED_BY_ID'])) {
             try {
-                $uResp = Http::post($base . 'user.get', ['id' => $deal['ASSIGNED_BY_ID']])->collect();
-                $manager = $uResp['result'][0] ?? null;
-                if ($manager && !empty($manager['EMAIL'])) {
-                    $user = \App\Models\User::where('email', $manager['EMAIL'])->first();
-                    if ($user) {
-                        $task->user_id = $user->id;
+                $usersTypeId = \DB::table('data_types')->where('slug', 'users')->value('id');
+                $this->actualizeBitrix24Employees($base, $usersTypeId);
+
+                $matched = null;
+                if (\Illuminate\Support\Facades\Schema::hasColumn('users', 'b24_responsible')) {
+                    $matched = \App\Models\User::where('b24_responsible', (string) $deal['ASSIGNED_BY_ID'])->first();
+                }
+
+                if ($matched) {
+                    $task->user_id = $matched->id;
+                } else {
+                    // Фолбэк: по email менеджера (как раньше).
+                    $uResp = Http::post($base . 'user.get', ['id' => $deal['ASSIGNED_BY_ID']])->collect();
+                    $manager = $uResp['result'][0] ?? null;
+                    if ($manager && !empty($manager['EMAIL'])) {
+                        $user = \App\Models\User::where('email', $manager['EMAIL'])->first();
+                        if ($user) {
+                            $task->user_id = $user->id;
+                        }
                     }
                 }
             } catch (\Throwable $e) {
-                Log::channel('bitrix24')->warning('deal-hook: manager fetch failed', ['deal_id' => $dealId, 'error' => $e->getMessage()]);
+                Log::channel('bitrix24')->warning('deal-hook: manager match failed', ['deal_id' => $dealId, 'error' => $e->getMessage()]);
             }
         }
 
@@ -579,6 +594,69 @@ class Bitrix24Controller extends Controller
             'task_id'    => $task->id,
             'created'    => $isNew,
         ], 200);
+    }
+
+    /**
+     * Актуализирует опции поля «Сотрудник Bitrix24» (users.b24_responsible)
+     * списком активных сотрудников Bitrix24 (значение = ID, метка = Имя Фамилия).
+     * Троттлинг — не чаще раза в 10 минут (через settings).
+     */
+    private function actualizeBitrix24Employees($base, $usersTypeId)
+    {
+        if (!$usersTypeId || !$base) {
+            return;
+        }
+
+        $throttle = \DB::table('settings')->where('type', 'b24_employees_synced')->first();
+        if ($throttle && ($last = (int) $throttle->value) && (time() - $last) < 600) {
+            return;
+        }
+
+        try {
+            $options = [];
+            $start = 0;
+            $guard = 0;
+            do {
+                $resp = Http::post($base . 'user.get', ['start' => $start, 'ACTIVE' => true])->collect();
+                $batch = $resp['result'] ?? [];
+                if (!is_array($batch)) {
+                    break;
+                }
+                foreach ($batch as $u) {
+                    $id = $u['ID'] ?? null;
+                    if ($id === null || $id === '') {
+                        continue;
+                    }
+                    $name = trim(($u['NAME'] ?? '') . ' ' . ($u['LAST_NAME'] ?? ''));
+                    if ($name === '') {
+                        $name = 'ID ' . $id;
+                    }
+                    $options[] = ['value' => (string) $id, 'label' => $name];
+                }
+                $start = $resp['next'] ?? null;
+                $guard++;
+            } while ($start !== null && count($batch) > 0 && $guard < 100);
+
+            if (count($options)) {
+                $field = \DB::table('data_rows')
+                    ->where('data_type_id', $usersTypeId)
+                    ->where('field', 'b24_responsible')
+                    ->first();
+                if ($field) {
+                    \DB::table('data_rows')->where('id', $field->id)->update([
+                        'details' => json_encode(['options' => $options], JSON_UNESCAPED_UNICODE),
+                    ]);
+                    try { \App\Models\Settings::clear_cache(); } catch (\Throwable $e) {}
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::channel('bitrix24')->warning('deal-hook: b24 employees sync failed', ['error' => $e->getMessage()]);
+        }
+
+        \DB::table('settings')->updateOrInsert(
+            ['type' => 'b24_employees_synced', 'entity' => null, 'user_id' => null],
+            ['key' => 'b24_employees_synced', 'value' => (string) time()]
+        );
     }
 
     private function b24EnumLabel($b24Fields, $ufCode, $enumId)
