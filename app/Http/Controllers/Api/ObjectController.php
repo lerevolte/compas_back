@@ -161,6 +161,22 @@ class ObjectController extends Controller
             }
         }
 
+        // Поле «Пароль» в карточке пользователя не-админ видит только у себя.
+        // В чужих карточках поле типа password скрываем целиком (8548).
+        if ($slug === 'users' && $user && !$user->is_admin && !$isSelfUser
+            && isset($detail['columns']) && is_array($detail['columns'])) {
+            foreach ($detail['columns'] as $ck => $col) {
+                foreach ($col as $si => $section) {
+                    if (!empty($section['fields'])) {
+                        $detail['columns'][$ck][$si]['fields'] = array_values(array_filter(
+                            $section['fields'],
+                            fn ($f) => ($f['type'] ?? null) !== 'password'
+                        ));
+                    }
+                }
+            }
+        }
+
         if ($isExternalAccess) {
             $detail['readonly'] = true;
             if (isset($detail['columns']) && is_array($detail['columns'])) {

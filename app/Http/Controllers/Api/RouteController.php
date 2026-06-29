@@ -15,7 +15,15 @@ use App\Models\Task;
 
 class RouteController extends Controller
 {
-    public function list(Request $request) 
+    /**
+     * Поправочный коэффициент на пробки. Время в пути, которое отдаёт OSRM
+     * (расчёт по свободной дороге), умножаем на него, чтобы время прибытия на
+     * точки и общая длительность маршрута учитывали реальные пробки (8508).
+     * Применяется только к driving-времени, не к service_time на точках.
+     */
+    const TRAFFIC_COEFFICIENT = 1.7;
+
+    public function list(Request $request)
     {
         $limit = $request->per_page ? $request->per_page : 25;
         $page = $request->page ? $request->page : 1;
@@ -650,7 +658,7 @@ class RouteController extends Controller
                 $osrm = json_decode($data, true);
                 if ($osrm && $osrm['code'] === 'Ok' && isset($osrm['routes'][0])) {
                     $route->mileage = round($osrm['routes'][0]['distance'] / 1000, 1);
-                    $route->time = round($osrm['routes'][0]['duration'] / 60) + $totalServiceTime; // driving + service
+                    $route->time = round($osrm['routes'][0]['duration'] * self::TRAFFIC_COEFFICIENT / 60) + $totalServiceTime; // driving (с поправкой на пробки) + service
                 }
             } catch (\Exception $e) {
                 // OSRM unavailable — at least save service time
@@ -667,7 +675,7 @@ class RouteController extends Controller
             
             foreach ($new_tasks as $index => $task) {
                 if ($index > 0 && isset($legs[$index - 1])) {
-                    $travelMinutes = round($legs[$index - 1]['duration'] / 60);
+                    $travelMinutes = round($legs[$index - 1]['duration'] * self::TRAFFIC_COEFFICIENT / 60);
                     $currentTime->addMinutes($travelMinutes);
                 }
                 $task->plan_time = $currentTime->format('H:i');
