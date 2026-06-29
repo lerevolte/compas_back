@@ -381,21 +381,7 @@ class Bitrix24Controller extends Controller
         }
 
         // --- Счета (оплата) ---
-        $invoices = [];
-        try {
-            $invResp = Http::post($base . 'crm.invoice.list', [
-                'filter' => ['UF_DEAL_ID' => $deal['ID']],
-            ])->collect();
-            if (isset($invResp['result']) && is_array($invResp['result'])) {
-                foreach ($invResp['result'] as $invoice) {
-                    if (($invoice['UF_DEAL_ID'] ?? null) == $deal['ID']) {
-                        $invoices[] = $invoice['ACCOUNT_NUMBER'] ?? $invoice['ID'];
-                    }
-                }
-            }
-        } catch (\Throwable $e) {
-            Log::channel('bitrix24')->warning('deal-hook: invoice fetch failed', ['deal_id' => $dealId, 'error' => $e->getMessage()]);
-        }
+        $invoices = self::fetchDealInvoiceNumbers($base, $deal['ID']);
 
         // --- Сборка задачи ---
         $task = $existing ?: new \App\Models\Task();
@@ -498,13 +484,9 @@ class Bitrix24Controller extends Controller
         ]);
 
         // Оплата: счёт (если есть номера) или наличные
-        if (count($invoices) > 0) {
-            $task->payment_type = 1;
-            $task->payment = 'Счет: ' . implode(',', $invoices);
-        } else {
-            $task->payment_type = 2;
-            $task->payment = 'Нал: ' . (int) ($deal['OPPORTUNITY'] ?? 0) . ' р.';
-        }
+        $pay = self::buildPaymentFields($invoices, $deal['OPPORTUNITY'] ?? 0);
+        $task->payment_type = $pay['payment_type'];
+        $task->payment = $pay['payment'];
 
         // Ответственный: сопоставляем ответственного сделки (ASSIGNED_BY_ID) с
         // пользователем сервиса по полю «Сотрудник Bitrix24» (b24_responsible).
@@ -715,5 +697,47 @@ class Bitrix24Controller extends Controller
             }
         }
         return null;
+    }
+
+    /**
+     * Номера счетов, привязанных к сделке (crm.invoice.list по UF_DEAL_ID).
+     * Единый источник логики для вебхука и бэкфилла оплаты.
+     */
+    public static function fetchDealInvoiceNumbers(string $base, $dealId): array
+    {
+        $invoices = [];
+        try {
+            $invResp = Http::post($base . 'crm.invoice.list', [
+                'filter' => ['UF_DEAL_ID' => $dealId],
+            ])->collect();
+            if (isset($invResp['result']) && is_array($invResp['result'])) {
+                foreach ($invResp['result'] as $invoice) {
+                    if (($invoice['UF_DEAL_ID'] ?? null) == $dealId) {
+                        $invoices[] = $invoice['ACCOUNT_NUMBER'] ?? $invoice['ID'];
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::channel('bitrix24')->warning('invoice fetch failed', ['deal_id' => $dealId, 'error' => $e->getMessage()]);
+        }
+        return $invoices;
+    }
+
+    /**
+     * Поля оплаты задачи: «Счет: <номера>» если у сделки есть счета, иначе
+     * «Нал: <OPPORTUNITY> р.». Возвращает ['payment' => ..., 'payment_type' => ...].
+     */
+    public static function buildPaymentFields(array $invoices, $opportunity): array
+    {
+        if (count($invoices) > 0) {
+            return [
+                'payment_type' => 1,
+                'payment'      => 'Счет: ' . implode(',', $invoices),
+            ];
+        }
+        return [
+            'payment_type' => 2,
+            'payment'      => 'Нал: ' . (int) ($opportunity ?? 0) . ' р.',
+        ];
     }
 }

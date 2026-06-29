@@ -1111,13 +1111,13 @@ class Table
                     [
                         'value' => 'N',
                         'label' => 'Нет доступа',
-                        'color' => '#8F8F8F',
+                        'color' => '#ad0b0a',
                         'sort' => 0
                     ],
                     [
                         'value' => 'Y',
                         'label' => 'Только свои',
-                        'color' => '#898F37',
+                        'color' => '#000',
                         'sort' => 1
                     ],
                     [
@@ -1155,7 +1155,7 @@ class Table
                     [
                         'value' => 'N',
                         'label' => 'Нет доступа',
-                        'color' => '#8F8F8F',
+                        'color' => '#ad0b0a',
                         'sort' => 0
                     ],
                     // [
@@ -1198,13 +1198,13 @@ class Table
                     [
                         'value' => 'N',
                         'label' => 'Нет доступа',
-                        'color' => '#8F8F8F',
+                        'color' => '#ad0b0a',
                         'sort' => 0
                     ],
                     [
                         'value' => 'Y',
                         'label' => 'Только свои',
-                        'color' => '#898F37',
+                        'color' => '#000',
                         'sort' => 1
                     ],
                     [
@@ -1242,13 +1242,13 @@ class Table
                     [
                         'value' => 'N',
                         'label' => 'Нет доступа',
-                        'color' => '#8F8F8F',
+                        'color' => '#ad0b0a',
                         'sort' => 0
                     ],
                     [
                         'value' => 'Y',
                         'label' => 'Только свои',
-                        'color' => '#898F37',
+                        'color' => '#000',
                         'sort' => 1
                     ],
                     [
@@ -1286,7 +1286,7 @@ class Table
                     [
                         'value' => 'N',
                         'label' => 'Нет доступа',
-                        'color' => '#8F8F8F',
+                        'color' => '#ad0b0a',
                         'sort' => 0
                     ],
                     // [
@@ -1329,13 +1329,13 @@ class Table
                     [
                         'value' => 'N',
                         'label' => 'Нет доступа',
-                        'color' => '#8F8F8F',
+                        'color' => '#ad0b0a',
                         'sort' => 0
                     ],
                     [
                         'value' => 'Y',
                         'label' => 'Только свои',
-                        'color' => '#898F37',
+                        'color' => '#000',
                         'sort' => 1
                     ],
                     [

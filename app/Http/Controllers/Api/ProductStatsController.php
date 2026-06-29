@@ -130,46 +130,17 @@ class ProductStatsController extends Controller
     }
 
     /**
-     * Заголовок нижней таблицы: нужные поля задачи логистики (взятые из
-     * Table::get, чтобы тип/опции совпадали со страницей объектов) + столбец
-     * «Кол-во, шт» выбранного товара.
+     * Заголовок нижней таблицы. Берём ПОЛНЫЙ набор столбцов задачи логистики
+     * из Table::get — те же типы/опции/настройки и редактируемость, что и на
+     * /objects/logistic_tasks (8557). Дополнительно добавляем служебный столбец
+     * «Кол-во, шт» выбранного товара (только для чтения).
      */
     private function buildColumns(): array
     {
-        $all = collect(\App\Models\Table::get('logistic_tasks'))->keyBy('key');
-
-        $pick = function ($key, $title) use ($all) {
-            $col = $all->get($key);
-            if (!$col) {
-                return null;
-            }
-            $col = (array) $col;
-            $col['title'] = $title;
-            $col['enabled'] = true;
-            $col['read_only'] = 1;
-            $col['fixed'] = '';
-            return $col;
-        };
-
-        $productsColumn = [
-            'id'         => 'products',
-            'title'      => 'Состав заказа',
-            'key'        => 'products',
-            'width'      => '260px',
-            'enabled'    => true,
-            'sort_order' => '',
-            'type'       => 'json',
-            'is_plural'  => 0,
-            'is_link'    => 0,
-            'required'   => 0,
-            'fixed'      => '',
-            'fixTarget'  => '0px',
-            'read_only'  => 1,
-            'unit'       => '',
-            'mask'       => null,
-            'is_hidden'  => 0,
-            'options'    => [],
-        ];
+        $columns = collect(\App\Models\Table::get('logistic_tasks'))
+            ->map(fn ($col) => (array) $col)
+            ->values()
+            ->all();
 
         $qtyColumn = [
             'id'         => 'product_qty',
@@ -191,15 +162,21 @@ class ProductStatsController extends Controller
             'options'    => [],
         ];
 
-        $columns = array_filter([
-            $pick('point_status', 'Статус задачи'),
-            $pick('name', 'Название задачи'),
-            $productsColumn,
-            $qtyColumn,
-            $pick('user_id', 'Ответственный'),
-            $pick('comment', 'Примечание'),
-        ]);
+        // Вставляем «Кол-во, шт» перед служебным столбцом действий (actions),
+        // если он есть, иначе в конец.
+        $actionsIndex = null;
+        foreach ($columns as $i => $col) {
+            if (($col['key'] ?? null) === 'actions') {
+                $actionsIndex = $i;
+                break;
+            }
+        }
+        if ($actionsIndex !== null) {
+            array_splice($columns, $actionsIndex, 0, [$qtyColumn]);
+        } else {
+            $columns[] = $qtyColumn;
+        }
 
-        return array_values($columns);
+        return $columns;
     }
 }
