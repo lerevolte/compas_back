@@ -789,6 +789,18 @@ class Settings extends Model
 			cache()->getMemcached()->delete(tenant('id').':sidebarmenu-'.$user->id);
 
 		}
+
+		// Сбрасываем кэш полей моделей (ModelActions::getFields, ключ
+		// "{tenant}:{table}-fields"). Без этого после добавления/изменения поля
+		// (например «Оплата, руб») getFields отдаёт устаревший список без нового
+		// поля, и его значения не попадают в выдачу /routes/{id}/tasks (8579).
+		try {
+			$types = \DB::table('data_types')->pluck('name');
+			foreach ($types as $t) {
+				if (!$t) continue;
+				cache()->getMemcached()->delete(tenant('id').':'.$t.'-fields');
+			}
+		} catch (\Throwable $e) {}
 		// \App\Jobs\SettingsClearJob::dispatch();
 
 

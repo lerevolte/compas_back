@@ -731,6 +731,58 @@ class RouteController extends Controller
     }
 
     /**
+     * Настройки полей вкладки «Маршрут списком» (RouteTasksView): какие колонки
+     * задачи показывать и в каком порядке. Хранятся ОДНИМ общим конфигом на
+     * портал (user_id=null), чтобы внешняя ссылка (анонимный зритель) показывала
+     * ровно то же, что настроено внутри (8579).
+     */
+    public function tasks_view_fields()
+    {
+        return response()->json(['fields' => self::getTasksViewFields()]);
+    }
+
+    public static function getTasksViewFields(): array
+    {
+        $row = \DB::table('settings')
+            ->where('type', 'route_tasks_view_fields')
+            ->whereNull('user_id')
+            ->first();
+        if ($row && $row->value) {
+            $decoded = json_decode($row->value, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+        return [];
+    }
+
+    public function save_tasks_view_fields(Request $request)
+    {
+        $fields = $request->input('fields', []);
+        if (!is_array($fields)) {
+            $fields = [];
+        }
+        $clean = [];
+        foreach ($fields as $f) {
+            if (!isset($f['key'])) {
+                continue;
+            }
+            $clean[] = [
+                'key'     => (string) $f['key'],
+                'enabled' => !empty($f['enabled']),
+                'sort'    => (int) ($f['sort'] ?? 0),
+            ];
+        }
+
+        \DB::table('settings')->updateOrInsert(
+            ['type' => 'route_tasks_view_fields', 'entity' => null, 'user_id' => null],
+            ['key' => 'route_tasks_view_fields', 'value' => json_encode($clean, JSON_UNESCAPED_UNICODE)]
+        );
+
+        return response()->json(['success' => true]);
+    }
+
+    /**
      * Создать задачу логистики из адреса «Справочника адресов» и (опционально)
      * прикрепить её к маршруту.
      *

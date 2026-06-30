@@ -135,6 +135,24 @@ class ExternalLinkController extends Controller
             }, $list['data']);
         }
 
+        // Задачи маршрута выводим в порядке маршрута (по полю sort), а не в
+        // порядке по умолчанию (id) — иначе во внешней ссылке порядок точек не
+        // совпадал с маршрутом (8579). Сортируем по последовательности id из
+        // relation tasks() (она уже orderBy('sort')).
+        if ($isRouteTasks && isset($list['data']) && is_array($list['data'])) {
+            $orderedIds = \App\Models\Route::find($parentId)?->tasks()->pluck('id')->toArray() ?? [];
+            if (!empty($orderedIds)) {
+                $pos = array_flip($orderedIds);
+                $data = $list['data'];
+                usort($data, function ($a, $b) use ($pos) {
+                    $a = (array) $a;
+                    $b = (array) $b;
+                    return ($pos[$a['id'] ?? null] ?? PHP_INT_MAX) <=> ($pos[$b['id'] ?? null] ?? PHP_INT_MAX);
+                });
+                $list['data'] = array_values($data);
+            }
+        }
+
         return response()->json([
             'list'        => $list,
             'table'       => $table,
@@ -144,6 +162,9 @@ class ExternalLinkController extends Controller
             'categories'  => [],
             'permissions' => ['read_p' => 'A'],
             'tabs'        => [],
+            // Настройки полей «Маршрут списком» — те же, что внутри портала,
+            // чтобы внешняя ссылка показывала идентичный набор/порядок колонок (8579).
+            'route_tasks_view' => $isRouteTasks ? \App\Http\Controllers\Api\RouteController::getTasksViewFields() : [],
         ]);
     }
 

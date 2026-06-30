@@ -432,9 +432,11 @@ Route::middleware([
         Route::delete('routes', [App\Http\Controllers\Api\RouteController::class, 'delete']);
         Route::get('routes/{id}/tasks', [App\Http\Controllers\Api\RouteController::class, 'tasks']);
         Route::put('routes/{id}/tasks', [App\Http\Controllers\Api\RouteController::class, 'update_tasks']);
+        Route::get('route-tasks-view/fields', [App\Http\Controllers\Api\RouteController::class, 'tasks_view_fields']);
+        Route::put('route-tasks-view/fields', [App\Http\Controllers\Api\RouteController::class, 'save_tasks_view_fields']);
 
         Route::put(
-            'logistic_tasks/{id}/set_products', 
+            'logistic_tasks/{id}/set_products',
             [App\Http\Controllers\Api\TaskController::class, 'set_products']
         );
 
