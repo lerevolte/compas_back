@@ -426,7 +426,14 @@ class RouteController extends Controller
             );
         }
         $entity_class = $entity->model_name;
-        $model_fields = $entity_class::getFields();
+        // Берём поля из свежего get_settings (как EntityObject::list во внешней
+        // ссылке), а не из отдельно кэшируемого getFields — иначе после
+        // добавления поля (например «Оплата, руб») его не было в выдаче, пока
+        // не сброшен кэш getFields, и у админа поле выводилось пустым, хотя во
+        // внешней ссылке значение было (8579).
+        $model_fields = !empty($settings['logistic_tasks']['fields'])
+            ? collect($settings['logistic_tasks']['fields'])->values()
+            : $entity_class::getFields();
 
         $field_colors = array();
         $perms = array(
