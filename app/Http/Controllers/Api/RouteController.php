@@ -21,7 +21,7 @@ class RouteController extends Controller
      * точки и общая длительность маршрута учитывали реальные пробки (8508).
      * Применяется только к driving-времени, не к service_time на точках.
      */
-    const TRAFFIC_COEFFICIENT = 1.7;
+    const TRAFFIC_COEFFICIENT = 2;
 
     public function list(Request $request)
     {
