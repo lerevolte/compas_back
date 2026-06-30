@@ -100,6 +100,12 @@ class AnalyticsController extends Controller
         return response()->json($data);
     }
 
+    public function logistics_arrival_percent(Request $request)
+    {
+        $data = $this->analyticsService->logisticsArrivalPercent($request);
+        return response()->json($data);
+    }
+
     public function get_all_logistics_analytics(Request $request)
     {
         $data = $this->analyticsService->getAllLogisticsAnalytics($request);

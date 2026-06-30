@@ -1142,6 +1142,7 @@ class AnalyticsService
     public function logisticsReserveForDelivery(Request $request) { return $this->wrapLogistics('Заложено на доставку за период', $request, 'logistics-reserve-for-delivery', fn($r) => $this->logisticsRouteMetricLogic($r, 'reserve_for_delivery', 'Заложено на доставку', 'date')); }
     public function logisticsDeliveryPrice(Request $request) { return $this->wrapLogistics('Цена доставки за период', $request, 'logistics-delivery-price', fn($r) => $this->logisticsRouteMetricLogic($r, 'delivery_price', 'Цена доставки', 'date')); }
     public function logisticsTotalWeight(Request $request) { return $this->wrapLogistics('Общий вес за период', $request, 'logistics-total-weight', fn($r) => $this->logisticsRouteMetricLogic($r, 'weight', 'Общий вес', 'date')); }
+    public function logisticsArrivalPercent(Request $request) { return $this->wrapLogistics('Процент прибыли за период', $request, 'logistics-arrival-percent', fn($r) => $this->logisticsArrivalPercentLogic($r)); }
 
     protected function wrapLogistics($title, Request $request, $key, $callback)
     {
@@ -1277,6 +1278,45 @@ class AnalyticsService
         );
     }
 
+    // Процент прибыли по дням: (Σцена доставки − Σзаложено) / Σзаложено * 100.
+    // Формула совпадает с попапом статистики (AnalyticsController::buildStats).
+    protected function logisticsArrivalPercentLogic(Request $request)
+    {
+        $periodStart = $request->period['start'] ?? now()->subMonth()->format('Y-m-d');
+        $periodEnd = $request->period['end'] ?? now()->format('Y-m-d');
+
+        $routes = DB::table('routes')
+            ->select('date', 'delivery_price', 'reserve_for_delivery')
+            ->whereBetween('date', [$periodStart, $periodEnd])
+            ->orderBy('date')
+            ->get();
+
+        $grouped = $routes->groupBy(function ($item) {
+            return Carbon::parse($item->date)->format('Y-m-d H:i');
+        });
+
+        $legendData = [];
+        $sum = 0;
+        foreach ($grouped as $date => $items) {
+            $reserve = $items->sum('reserve_for_delivery');
+            $price = $items->sum('delivery_price');
+            $percent = $reserve > 0 ? round(($price - $reserve) / $reserve * 100, 1) : 0;
+            $legendData[] = [$date, $percent];
+            $sum += $percent;
+        }
+
+        return [
+            'legend' => [
+                [
+                    'name' => 'Процент прибыли',
+                    'data' => $legendData,
+                    'sum' => $sum,
+                    'id' => 1
+                ]
+            ]
+        ];
+    }
+
     protected function formatLogisticsResponse($title, $groupedData, $valueField)
     {
         $legendData = [];
@@ -1366,12 +1406,14 @@ class AnalyticsService
             $collect('all_income', 'all_income', 'Доходы с порталов');
             $collect('expense_moneta', 'expense_moneta', 'Расходы (монета)');
         } else {
-            $collect('logistics-car-count', 'logistics-car-count', 'Количество машин');
+            $collect('logistics-car-count', 'logistics-car-count', 'Количество маршрутов');
+            $collect('logistics-order-stats', 'logistics-order-stats', 'Статистика по заказам');
             $collect('logistics-route-mileage', 'logistics-route-mileage', 'Длина маршрутов');
             $collect('logistics-route-duration', 'logistics-route-duration', 'Время маршрутов');
             $collect('logistics-reserve-for-delivery', 'logistics-reserve-for-delivery', 'Заложено на доставку');
             $collect('logistics-delivery-price', 'logistics-delivery-price', 'Цена доставки');
             $collect('logistics-total-weight', 'logistics-total-weight', 'Общий вес');
+            $collect('logistics-arrival-percent', 'logistics-arrival-percent', 'Процент прибыли');
         }
 
         // 2. Сортируем список по полю order

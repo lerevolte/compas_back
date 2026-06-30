@@ -134,16 +134,28 @@ class ObjectController extends Controller
             return response()->json(['message' => $detail['error']['message']], $detail['error']['code']);
         }
 
+        // Создание нового объекта: id ещё нет (0/'0') либо это копия.
+        $isCreate = empty($id) || $id === '0' || $id === 0 || (bool) $request->is_copy;
+
         if ($user && !$user->is_admin) {
-            $up = $permissions['update_p'] ?? null;
             $canUpdate = true;
-            if ($up === 'N') {
-                $canUpdate = false;
-            } elseif ($up === 'Y') {
-                $ownerId = \Schema::hasColumn($slug, 'user_id')
-                    ? DB::table($slug)->where('id', $id)->value('user_id')
-                    : null;
-                $canUpdate = $ownerId !== null && (int) $ownerId === (int) $user->id;
+            if ($isCreate) {
+                // При СОЗДАНИИ редактируемость зависит от права на создание
+                // (create_p), а НЕ от update_p. Иначе при «Изменение: только
+                // свои» новый объект (у него ещё нет владельца) блокировался
+                // целиком, хотя право на создание есть (8563).
+                $cp = $permissions['create_p'] ?? null;
+                $canUpdate = $cp !== 'N';
+            } else {
+                $up = $permissions['update_p'] ?? null;
+                if ($up === 'N') {
+                    $canUpdate = false;
+                } elseif ($up === 'Y') {
+                    $ownerId = \Schema::hasColumn($slug, 'user_id')
+                        ? DB::table($slug)->where('id', $id)->value('user_id')
+                        : null;
+                    $canUpdate = $ownerId !== null && (int) $ownerId === (int) $user->id;
+                }
             }
             if (!$canUpdate) {
                 $detail['readonly'] = true;

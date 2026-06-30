@@ -680,6 +680,18 @@ class RouteController extends Controller
                 }
                 $task->plan_time = $currentTime->format('H:i');
                 $task->saveQuietly();
+
+                // $res['data'] собран ВЫШE (до пересчёта) со старым plan_time,
+                // поэтому патчим его свежим значением — иначе фронт показывает
+                // прежнее время прибытия и правка маршрута «ничего не меняет» (8508).
+                foreach ($res['data'] as &$row) {
+                    if (($row['id'] ?? null) == $task->id) {
+                        $row['plan_time'] = $task->plan_time;
+                        break;
+                    }
+                }
+                unset($row);
+
                 $serviceTime = (int) ($task->service_time ?? 0);
                 $currentTime->addMinutes($serviceTime);
             }
