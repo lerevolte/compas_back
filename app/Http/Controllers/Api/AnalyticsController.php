@@ -236,8 +236,10 @@ class AnalyticsController extends Controller
             'reserve_for_delivery' => $routes->sum('reserve_for_delivery'),
             'delivery_price' => $routes->sum('delivery_price'),
             'total_weight' => $routes->sum('weight'),
-            'arrival_percent' => $totalReserve > 0 
-                ? round(($totalDeliveryPrice - $totalReserve) / $totalReserve * 100, 1) 
+            // Прибыль = (заложено − фактическая цена) / заложено. Плюс, когда
+            // потратили меньше заложенного (8587).
+            'arrival_percent' => $totalReserve > 0
+                ? round(($totalReserve - $totalDeliveryPrice) / $totalReserve * 100, 1)
                 : 0,
         ];
     }

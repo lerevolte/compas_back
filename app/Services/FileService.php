@@ -38,7 +38,11 @@ class FileService
                 $img->save($new_path);
                 
                 $ext = 'jpg';
-            } elseif($ext == 'jpg') {
+            } elseif(in_array($ext, array('jpg', 'jpeg'))) {
+                // Раньше проверялся только 'jpg' — фото с телефона часто имеют
+                // расширение 'jpeg', для них orientate() не вызывался: сохранялся
+                // файл с EXIF-поворотом, полное фото браузер разворачивал сам, а
+                // превью (генерится из этого файла) оставалось повёрнутым (8595).
                 $old_file = $file;
                 $old_path = storage_path('app/public/'.$old_file);
 

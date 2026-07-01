@@ -392,7 +392,19 @@ class User extends \TCG\Voyager\Models\User
             $s = \App\Models\Settings::update();
         $sidebar_items2 = $s['settings']['sidebar_items'];
         $sidebar_items = [];
+        $seen_slugs = [];
         foreach($sidebar_items2 as $item) {
+            // Дедуп по slug: в sidebar_items могли появиться дубли (например две
+            // строки companies). Без дедупа пункт задваивается в меню и в списке
+            // «Сущности», а близнец с другим id мешает сохранению порядка/скрытия
+            // (8591, 8588). Оставляем первый по порядку дерева.
+            $slug = $item['slug'] ?? null;
+            if($slug !== null && $slug !== '' && isset($seen_slugs[$slug])) {
+                continue;
+            }
+            if($slug !== null && $slug !== '') {
+                $seen_slugs[$slug] = true;
+            }
             $sidebar_items[$item['id']] = $item;
         }
         $user_id = $this->id;

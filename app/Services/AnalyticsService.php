@@ -1300,7 +1300,9 @@ class AnalyticsService
         foreach ($grouped as $date => $items) {
             $reserve = $items->sum('reserve_for_delivery');
             $price = $items->sum('delivery_price');
-            $percent = $reserve > 0 ? round(($price - $reserve) / $reserve * 100, 1) : 0;
+            // Прибыль = (заложено − фактическая цена) / заложено. Плюс, когда
+            // потратили меньше, чем заложили на доставку (8587).
+            $percent = $reserve > 0 ? round(($reserve - $price) / $reserve * 100, 1) : 0;
             $legendData[] = [$date, $percent];
             $sum += $percent;
         }
