@@ -552,7 +552,25 @@ class User extends \TCG\Voyager\Models\User
                 }
             }
 
-        return array_values($menu);
+        // Финальный дедуп по slug: дубли могли остаться в СОХРАНЁННОМ меню
+        // пользователя (settings JSON), а не только в каноническом списке —
+        // тогда «Компании» выводились дважды. Оставляем первый пункт по порядку
+        // (8591).
+        $menu = array_values($menu);
+        $seen_final = [];
+        $deduped = [];
+        foreach($menu as $item) {
+            $slug = $item['slug'] ?? null;
+            if($slug !== null && $slug !== '' && isset($seen_final[$slug])) {
+                continue;
+            }
+            if($slug !== null && $slug !== '') {
+                $seen_final[$slug] = true;
+            }
+            $deduped[] = $item;
+        }
+
+        return $deduped;
     }
 
     /**

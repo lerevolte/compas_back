@@ -43,12 +43,18 @@ class FileService
                 // расширение 'jpeg', для них orientate() не вызывался: сохранялся
                 // файл с EXIF-поворотом, полное фото браузер разворачивал сам, а
                 // превью (генерится из этого файла) оставалось повёрнутым (8595).
+                // ВАЖНО: orientate() применяет EXIF-поворот к пикселям только при
+                // наличии расширения ext-exif; без него разворота не будет.
                 $old_file = $file;
                 $old_path = storage_path('app/public/'.$old_file);
 
-                $img = Image::make($old_path);
-                $img->orientate();
-                $img->save($old_path);
+                try {
+                    $img = Image::make($old_path);
+                    $img->orientate();
+                    $img->save($old_path);
+                } catch (\Throwable $e) {
+                    \Log::warning('file orientate failed', ['path' => $old_path, 'error' => $e->getMessage()]);
+                }
             }
             $document = new File();
             $document->name = $filename;
