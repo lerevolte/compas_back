@@ -2136,7 +2136,13 @@ class EntityObject
         $history_items = \App\Models\History::getDataList($history_events);
         $history_response_events = array_merge($history_response_events, $history_items['fields']);
 
-        unset($fields['route_id']);
+        $route_id = $fields['route_id'] ?? null;
+        if (is_array($route_id)) {
+            $route_id = array_pop($route_id);
+        }
+        if (empty($route_id)) {
+            unset($fields['route_id']);
+        }
 
         foreach($fields as $field => $value) {
             if($model_fields[$field]->type == 'relation' && $model_fields[$field]->is_plural && $model_fields[$field]->relation_table) {

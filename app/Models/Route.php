@@ -144,6 +144,30 @@ class Route extends Model
                 }
             }
         });
+
+        static::saving(function($model)
+        {
+            if (!$model->exists || $model->isDirty('car_id') || $model->isDirty('mileage')) {
+                $model->mileage_cost = $model->computeMileageCost();
+            }
+        });
+    }
+
+    public function computeMileageCost()
+    {
+        if (!$this->car_id) {
+            return null;
+        }
+        $car = Car::find($this->car_id);
+        if (!$car) {
+            return null;
+        }
+        $price = (float) str_replace(',', '.', trim((string) $car->price_per_km));
+        if (!$price) {
+            return null;
+        }
+        $mileage = (float) str_replace(',', '.', trim((string) $this->mileage));
+        return round($price * $mileage, 2);
     }
 
     /**

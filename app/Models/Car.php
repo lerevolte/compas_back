@@ -26,7 +26,17 @@ class Car extends Model
         {
             $user = \Auth::user();
             if(!$model->user_id && $user)
-                $model->user_id = $user->id; 
+                $model->user_id = $user->id;
+        });
+
+        static::saved(function($model)
+        {
+            if ($model->wasChanged('price_per_km')) {
+                foreach ($model->routes()->cursor() as $route) {
+                    $route->mileage_cost = $route->computeMileageCost();
+                    $route->saveQuietly();
+                }
+            }
         });
     }
 
