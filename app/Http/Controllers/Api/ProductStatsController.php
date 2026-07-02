@@ -34,19 +34,19 @@ class ProductStatsController extends Controller
         return is_string($name) ? $name : '';
     }
 
-    // Сводка: товар, в скольких заказах встречается, суммарное количество.
     public function products(Request $request)
     {
         $date = $request->delivery_date;
         if (!$date) {
-            return response()->json([]);
+            return response()->json(['products' => [], 'all_order_count' => 0, 'all_total_count' => 0]);
         }
 
         $tasks = Task::where('delivery_date', $date)
             ->whereNull('deleted_at')
-            ->whereNotNull('products')
             ->get(['id', 'products']);
 
+        $allOrderCount = $tasks->count();
+        $allTotalCount = 0;
         $stats = [];
         foreach ($tasks as $task) {
             $products = json_decode($task->products, true);
@@ -63,6 +63,7 @@ class ProductStatsController extends Controller
                     $stats[$name] = ['name' => $name, 'order_count' => 0, 'total_count' => 0];
                 }
                 $stats[$name]['total_count'] += (float) ($p['count'] ?? 0);
+                $allTotalCount += (float) ($p['count'] ?? 0);
                 if (!isset($seen[$name])) {
                     $stats[$name]['order_count']++;
                     $seen[$name] = true;
@@ -73,12 +74,13 @@ class ProductStatsController extends Controller
         $result = array_values($stats);
         usort($result, fn ($a, $b) => $b['total_count'] <=> $a['total_count']);
 
-        return response()->json($result);
+        return response()->json([
+            'products' => $result,
+            'all_order_count' => $allOrderCount,
+            'all_total_count' => $allTotalCount,
+        ]);
     }
 
-    // Задачи логистики, содержащие выбранный товар на дату доставки.
-    // Спец-режим all=1 — все задачи на дату (по всем товарам), для строки
-    // «Все товары» (8584). Тогда product можно не передавать.
     public function tasks(Request $request)
     {
         $date = $request->delivery_date;
@@ -88,26 +90,25 @@ class ProductStatsController extends Controller
             return response()->json([]);
         }
 
-        $tasks = Task::where('delivery_date', $date)
+        $query = Task::where('delivery_date', $date)
             ->whereNull('deleted_at')
-            ->whereNotNull('products')
-            ->orderBy('id')
-            ->get(['id', 'products']);
+            ->orderBy('id');
+        if (!$all) {
+            $query->whereNotNull('products');
+        }
+        $tasks = $query->get(['id', 'products']);
 
         $qtyById = [];
         foreach ($tasks as $task) {
             $products = json_decode($task->products, true);
-            if (!is_array($products)) {
-                continue;
-            }
             $qty = 0;
-            $has = false;
-            foreach ($products as $p) {
-                // В режиме «Все товары» берём все задачи и суммируем количество
-                // всех их товаров; иначе — только задачи с выбранным товаром.
-                if ($all || $this->productName($p) === $product) {
-                    $has = true;
-                    $qty += (float) ($p['count'] ?? 0);
+            $has = $all;
+            if (is_array($products)) {
+                foreach ($products as $p) {
+                    if ($all || $this->productName($p) === $product) {
+                        $has = true;
+                        $qty += (float) ($p['count'] ?? 0);
+                    }
                 }
             }
             if ($has) {
