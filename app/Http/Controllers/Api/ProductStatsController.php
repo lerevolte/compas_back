@@ -77,11 +77,14 @@ class ProductStatsController extends Controller
     }
 
     // Задачи логистики, содержащие выбранный товар на дату доставки.
+    // Спец-режим all=1 — все задачи на дату (по всем товарам), для строки
+    // «Все товары» (8584). Тогда product можно не передавать.
     public function tasks(Request $request)
     {
         $date = $request->delivery_date;
         $product = $request->product;
-        if (!$date || $product === null || $product === '') {
+        $all = filter_var($request->all, FILTER_VALIDATE_BOOLEAN);
+        if (!$date || (!$all && ($product === null || $product === ''))) {
             return response()->json([]);
         }
 
@@ -100,7 +103,9 @@ class ProductStatsController extends Controller
             $qty = 0;
             $has = false;
             foreach ($products as $p) {
-                if ($this->productName($p) === $product) {
+                // В режиме «Все товары» берём все задачи и суммируем количество
+                // всех их товаров; иначе — только задачи с выбранным товаром.
+                if ($all || $this->productName($p) === $product) {
                     $has = true;
                     $qty += (float) ($p['count'] ?? 0);
                 }

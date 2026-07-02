@@ -342,6 +342,12 @@ class ObjectController extends Controller
     public function delete($slug, Request $request): JsonResponse
     {
         $user = Auth::user();
+
+        // Пользователя с id=1 (системный/владелец портала) удалять нельзя (8588).
+        if ($slug === 'users' && in_array(1, array_map('intval', (array) $request->ids), true)) {
+            return response()->json(['message' => 'Этого пользователя нельзя удалить'], 403);
+        }
+
         if ($user && !$user->is_admin) {
             $perms = $this->getPermissions($user, $slug);
             if (isset($perms['delete_p']) && $perms['delete_p'] === 'N') {

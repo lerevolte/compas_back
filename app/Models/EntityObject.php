@@ -1692,10 +1692,13 @@ class EntityObject
         }
 
         $paginator = $paginator->paginate(function($total) use ($limit){
-            if(!$limit){
+            // $limit может прийти пустой/нечисловой строкой (например при
+            // сортировке локальной таблицы задач на /product-stats), из-за чего
+            // paginate падал с «Unsupported operand types: string * int» (8584).
+            if(!$limit || !is_numeric($limit)){
                 return $total;
             }
-            return $limit;
+            return (int) $limit;
         });
         //$paginator = $paginator->paginate($limit);
 
