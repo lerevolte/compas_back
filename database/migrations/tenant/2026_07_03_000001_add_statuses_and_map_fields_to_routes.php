@@ -55,6 +55,7 @@ return new class extends Migration
                 'title' => $meta['title'],
                 'required' => 0,
                 'only_read' => 1,
+                'visible_always' => 1,
                 'section_id' => $sectionId,
                 'sort' => ++$maxSort,
                 'created_at' => now(),
