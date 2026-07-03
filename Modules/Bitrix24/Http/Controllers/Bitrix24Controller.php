@@ -423,12 +423,7 @@ class Bitrix24Controller extends Controller
                 $dt->setTimezone(new \DateTimeZone(config('app.timezone', 'Europe/Moscow')));
                 $task->delivery_date = $dt->format('Y-m-d');
             } catch (\Exception $e) {
-                if ($isNew && empty($task->delivery_date)) {
-                    $task->delivery_date = date('Y-m-d');
-                }
             }
-        } elseif ($isNew && empty($task->delivery_date)) {
-            $task->delivery_date = date('Y-m-d');
         }
 
         // Телефон: спец-поле сделки, иначе из контакта

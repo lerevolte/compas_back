@@ -238,8 +238,7 @@ class Route extends Model
         $car = Car::find($carId);
         if (!$car) return null;
 
-        $hex = static::resolveHexFromCarColumn($car->color_status)
-            ?: static::resolveHexFromCarColumn($car->color);
+        $hex = static::resolveHexFromCarColumn($car->color_status);
         if (!$hex) return null;
 
         // Поле color сущности routes
@@ -289,8 +288,7 @@ class Route extends Model
         $employee = Employee::find($employeeId);
         if (!$employee) return null;
 
-        $hex = static::resolveHexFromCarColumn($employee->color_status)
-            ?: static::resolveHexFromCarColumn($employee->color);
+        $hex = static::resolveHexFromCarColumn($employee->color_status);
         if (!$hex) return null;
 
         $routeColorField = \DB::table('data_rows')
