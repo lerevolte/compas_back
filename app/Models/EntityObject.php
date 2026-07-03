@@ -1360,6 +1360,9 @@ class EntityObject
                     $paginator = $paginator->where('route_id', $routeId);
                 }
             }
+            if ($slug == 'routes' && isset($request->filter['car_id']) && $request->filter['car_id'] !== null && $request->filter['car_id'] !== 'null') {
+                $paginator = $paginator->where('car_id', $request->filter['car_id']);
+            }
             foreach($request->filter as $field => $val) {
                 if($val == 'null')
                     $val = null;
@@ -1369,6 +1372,8 @@ class EntityObject
                 // route_id IS NULL и отменяла учёт удалённых маршрутов —
                 // задачи удалённого маршрута не попадали в «Задачи логистики».
                 if($slug == 'logistic_tasks' && $field == 'route_id')
+                    continue;
+                if($slug == 'routes' && $field == 'car_id')
                     continue;
                 if($slug == 'logistic_tasks' && in_array($field, ['car_requirements', 'employee_requirements'], true))
                     continue;

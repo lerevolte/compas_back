@@ -136,12 +136,13 @@ class TenantService
                     ]);
                 
             };
+            \DB::table('sidebar_items')->delete();
             $objects = \DB::connection('seeds')->table('sidebar_items')->get();
             foreach ($objects as $object) {
                 $odata = collect($object)->toArray();
 
                 \DB::table('sidebar_items')->insert([$odata]);
-                
+
             };
 
             $objects = \DB::connection('seeds')->table('field_sections')->get();
