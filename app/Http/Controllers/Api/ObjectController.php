@@ -199,13 +199,17 @@ class ObjectController extends Controller
                 ->filter()
                 ->values()
                 ->all();
-            $filterFields = function ($fields) use ($restricted) {
+            $filterFields = null;
+            $filterFields = function ($fields) use ($restricted, &$filterFields) {
                 $fields = array_values(array_filter(
                     is_array($fields) ? $fields : [],
                     fn ($f) => !in_array(is_array($f) ? ($f['key'] ?? null) : null, $restricted, true)
                 ));
                 foreach ($fields as $fi => $f) {
                     $fields[$fi]['can_edit'] = 0;
+                    if (is_array($f) && ($f['type'] ?? null) == 'text_group' && !empty($f['fields']) && is_array($f['fields'])) {
+                        $fields[$fi]['fields'] = $filterFields($f['fields']);
+                    }
                 }
                 return $fields;
             };

@@ -498,18 +498,31 @@ class RouteController extends Controller
             return response()->json(['error' => 'Route not found'], 404);
         }
 
-        $color = \DB::table('field_values')->where('id', $route->color)->first();
+        $colorValue = null;
 
-        // actual_path исторически собирался из car_points (фактические треки
-        // от Pilot GPS). Таблицы car_points в текущем тенанте нет и логика
-        // не используется — убрана, чтобы перенос задачи в маршрут не падал
-        // с 1146 (см. FetchGpsData команду, если потребуется вернуть).
-        // Дефолт #b6b6b6 — это первый «Не выбрано» из палитры маршрута,
-        // должен совпадать с фронтом (см. LogisticMap.vue / logisticClass.js).
+        $carId = $route->car_id;
+        if (is_string($carId) && ValueHelper::isJson($carId)) {
+            $decoded = json_decode($carId, true);
+            $carId = is_array($decoded) ? ($decoded[0] ?? null) : $carId;
+        }
+        if (is_array($carId)) {
+            $carId = $carId[0] ?? null;
+        }
+        if ($carId && \Schema::hasColumn('cars', 'color_status')) {
+            $carColorId = \DB::table('cars')->where('id', $carId)->value('color_status');
+            if ($carColorId && is_numeric($carColorId)) {
+                $colorValue = \DB::table('field_values')->where('id', $carColorId)->value('color');
+            }
+        }
+
+        if (!$colorValue && $route->color) {
+            $colorValue = \DB::table('field_values')->where('id', $route->color)->value('color');
+        }
+
         return response()->json([
             'actual_path' => [],
             'loading_time' => $route->loading_time ?? '07:00',
-            'color' => $color ? $color->color : '#b6b6b6',
+            'color' => $colorValue ?: '#b6b6b6',
             'name' => $route->name,
         ]);
     }

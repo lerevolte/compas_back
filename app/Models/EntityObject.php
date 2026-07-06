@@ -2032,6 +2032,24 @@ class EntityObject
             }
             $saved_fields = is_array($saved_fields) ? $saved_fields : [];
 
+            $request_rel = $request->rel_fields;
+            if(is_string($request_rel) && $request_rel !== '') {
+                $request_rel = explode(',', $request_rel);
+            }
+            if(is_array($request_rel)) {
+                $saved_keys = array();
+                foreach($saved_fields as $col) {
+                    $k = is_array($col) ? ($col['key'] ?? null) : (is_object($col) ? ($col->key ?? null) : null);
+                    if($k) $saved_keys[$k] = true;
+                }
+                foreach($request_rel as $rk) {
+                    $rk = trim((string)$rk);
+                    if($rk !== '' && strpos($rk, 'rel__') === 0 && !isset($saved_keys[$rk])) {
+                        $saved_fields[] = ['key' => $rk, 'enabled' => true];
+                    }
+                }
+            }
+
             $rel_cols = array();
             foreach($saved_fields as $col) {
                 $key = is_array($col) ? ($col['key'] ?? null) : (is_object($col) ? ($col->key ?? null) : null);

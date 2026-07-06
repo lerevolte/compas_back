@@ -29,7 +29,9 @@ class TenantController extends Controller
 
         $account = null;
         if($tenant) {
-            $account = \App\Models\Account::where('name', $tenant->id)->first();
+            $account = \App\Models\Account::where('tenant_id', $tenant->id)->first();
+            if(!$account)
+                $account = \App\Models\Account::where('name', $tenant->id)->first();
             if(!$account)
                 $account = \App\Models\Account::whereJsonContains('name->value', $tenant->id)->first();
             if(!$account)
