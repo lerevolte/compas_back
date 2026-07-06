@@ -241,12 +241,25 @@ class Table
             $table_columns = collect($tables[$slug]['fields']);
             $table_columns = $table_columns->keyBy('key')->toArray();
             foreach($table_columns as $key => $column) {
-                // Столбцы связанных сущностей (rel__{slug}__{field}, задача 14) не
-                // принадлежат модели маршрута — сохраняем их. Значение бэкенд
-                // отдаёт уже отформатированным текстом, поэтому тип всегда text.
                 if(strpos((string)$key, 'rel__') === 0) {
                     $table_columns[$key]['type'] = 'text';
                     $table_columns[$key]['read_only'] = 1;
+                    $rel_parts = explode('__', (string)$key);
+                    if(count($rel_parts) >= 3) {
+                        $rel_slug = $rel_parts[1];
+                        $rel_field_key = implode('__', array_slice($rel_parts, 2));
+                        $rel_name = \DB::table('data_types')->where('slug', $rel_slug)->value('name') ?: $rel_slug;
+                        if(isset($settings[$rel_name]['fields'])) {
+                            $rel_field = collect($settings[$rel_name]['fields'])->first(function($f) use ($rel_field_key) {
+                                return $f->field == $rel_field_key;
+                            });
+                            if($rel_field && $rel_field->type == 'status') {
+                                $rel_options = $settings[$rel_name]['options'][$rel_field_key] ?? ($settings['list_values'][$rel_field->id] ?? []);
+                                $table_columns[$key]['type'] = 'status';
+                                $table_columns[$key]['options'] = array_values(is_array($rel_options) ? $rel_options : []);
+                            }
+                        }
+                    }
                     continue;
                 }
                 if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'iconDrag' && $key != 'iconDelete' || isset($settings[$slug]['perms'][$key]['read']) && !$settings[$slug]['perms'][$key]['read'])

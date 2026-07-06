@@ -191,16 +191,45 @@ class ObjectController extends Controller
 
         if ($isExternalAccess) {
             $detail['readonly'] = true;
+            $restricted = DB::table('data_rows')
+                ->where('data_type_id', $entity->id)
+                ->whereNotNull('roles_read')
+                ->whereNotIn('roles_read', ['', '[]', '0'])
+                ->pluck('field')
+                ->filter()
+                ->values()
+                ->all();
+            $filterFields = function ($fields) use ($restricted) {
+                $fields = array_values(array_filter(
+                    is_array($fields) ? $fields : [],
+                    fn ($f) => !in_array(is_array($f) ? ($f['key'] ?? null) : null, $restricted, true)
+                ));
+                foreach ($fields as $fi => $f) {
+                    $fields[$fi]['can_edit'] = 0;
+                }
+                return $fields;
+            };
             if (isset($detail['columns']) && is_array($detail['columns'])) {
                 foreach ($detail['columns'] as $ck => $col) {
                     foreach ($col as $si => $section) {
                         if (!empty($section['fields'])) {
-                            foreach ($section['fields'] as $fi => $f) {
-                                $detail['columns'][$ck][$si]['fields'][$fi]['can_edit'] = 0;
+                            $detail['columns'][$ck][$si]['fields'] = $filterFields($section['fields']);
+                        }
+                        if (!empty($section['children']) && is_array($section['children'])) {
+                            foreach ($section['children'] as $ci => $child) {
+                                if (!empty($child['fields'])) {
+                                    $detail['columns'][$ck][$si]['children'][$ci]['fields'] = $filterFields($child['fields']);
+                                }
                             }
                         }
                     }
                 }
+            }
+            if (!empty($restricted) && isset($detail['hidden_fields']) && is_array($detail['hidden_fields'])) {
+                $detail['hidden_fields'] = array_values(array_filter(
+                    $detail['hidden_fields'],
+                    fn ($f) => !in_array(is_array($f) ? ($f['key'] ?? null) : null, $restricted, true)
+                ));
             }
         }
 

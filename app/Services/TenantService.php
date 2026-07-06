@@ -162,9 +162,26 @@ class TenantService
             $objects = \DB::connection('seeds')->table('data_types')->get();
             foreach ($objects as $object) {
                 $odata = collect($object)->toArray();
-                
+
                 \DB::table('data_types')->insert([$odata]);
             };
+
+            $data_types_by_id = \DB::table('data_types')->get()->keyBy('id');
+            foreach (\DB::table('data_rows')->get() as $data_row) {
+                $data_type = $data_types_by_id[$data_row->data_type_id] ?? null;
+                if (!$data_type || !$data_type->slug || !$data_row->field) {
+                    continue;
+                }
+                if ($data_row->type == 'text_group') {
+                    continue;
+                }
+                if (!Schema::hasTable($data_type->slug) || Schema::hasColumn($data_type->slug, $data_row->field)) {
+                    continue;
+                }
+                Schema::table($data_type->slug, function (Blueprint $table) use ($data_row) {
+                    $table->text($data_row->field)->nullable();
+                });
+            }
 
             $objects = \DB::connection('seeds')->table('section_fields_sort')->get();
             foreach ($objects as $object) {
@@ -466,8 +483,10 @@ class TenantService
                     email: $data['email'],
                     password: $data['password']
                 ));
-            } catch (\Exception $e) {
-                \Log::warning('Failed to send registration email: ' . $e->getMessage());
+            } catch (\Throwable $e) {
+                \Log::error('Failed to send registration email to ' . $data['email'] . ': ' . $e->getMessage(), [
+                    'exception' => $e,
+                ]);
             }
             
             return [

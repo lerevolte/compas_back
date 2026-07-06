@@ -15,12 +15,30 @@ class TenantController extends Controller
                 'success' => false,
                 'error' => 'Неправильный адрес портала'
             ], 200);
-        $domain = strtolower($request->domain);
-        $account = \App\Models\Account::where('name', $domain)->first();
-        if(!$account)
-            $account = \App\Models\Account::whereJsonContains('name->value', $domain)->first();
+        $domain = strtolower(trim($request->domain));
+        $domain = preg_replace('/\.compas\.pro$/', '', $domain);
 
-        if(Tenant::find($domain) && $account || $domain == 'admin')
+        $tenant = Tenant::find($domain);
+        if(!$tenant) {
+            $record = \Stancl\Tenancy\Database\Models\Domain::where('domain', $domain)
+                ->orWhere('domain', $domain.'.compas.pro')
+                ->first();
+            if($record)
+                $tenant = Tenant::find($record->tenant_id);
+        }
+
+        $account = null;
+        if($tenant) {
+            $account = \App\Models\Account::where('name', $tenant->id)->first();
+            if(!$account)
+                $account = \App\Models\Account::whereJsonContains('name->value', $tenant->id)->first();
+            if(!$account)
+                $account = \App\Models\Account::where('name', $domain)->first();
+            if(!$account)
+                $account = \App\Models\Account::whereJsonContains('name->value', $domain)->first();
+        }
+
+        if($tenant && $account || $domain == 'admin')
             return response()->json([
                 'success' => true
             ], 200);

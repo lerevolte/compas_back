@@ -41,7 +41,7 @@ class InstallAddressesEntity extends Command
     private array $fields = [
         'id', 'created_at', 'updated_at', 'name', 'photo', 'service_time',
         'address', 'phone', 'time', 'car_requirements', 'employee_requirements',
-        'client_id', 'user_id', 'comment', 'contact',
+        'client_id', 'user_id', 'comment', 'contact', 'weight', 'delivery_price',
     ];
 
     public function handle(): int
@@ -268,6 +268,8 @@ class InstallAddressesEntity extends Command
             'user_id'               => $base(['field' => 'user_id', 'type' => 'relation', 'title' => 'Ответственный', 'sort' => 12, 'required' => 1, 'details' => '{"table":"users"}', 'is_link' => 1, 'relation_table' => 'users', 'related_field' => 'task_id', 'is_inactive' => 1]),
             'comment'               => $base(['field' => 'comment', 'type' => 'text', 'title' => 'Примечание', 'sort' => 50]),
             'contact'               => $base(['field' => 'contact', 'type' => 'text', 'title' => 'Контактное лицо', 'sort' => 51]),
+            'weight'                => $base(['field' => 'weight', 'type' => 'number', 'title' => 'Вес', 'unit' => 'кг', 'sort' => 52]),
+            'delivery_price'        => $base(['field' => 'delivery_price', 'type' => 'number', 'title' => 'Цена доставки', 'unit' => 'руб', 'sort' => 53]),
         ];
     }
 
@@ -315,6 +317,8 @@ CREATE TABLE IF NOT EXISTS `addresses` (
   `time` text DEFAULT NULL,
   `comment` text DEFAULT NULL,
   `contact` text DEFAULT NULL,
+  `weight` text DEFAULT NULL,
+  `delivery_price` text DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL);

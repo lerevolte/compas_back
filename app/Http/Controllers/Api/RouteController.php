@@ -629,17 +629,7 @@ class RouteController extends Controller
             }
         }
 
-        // Total weight from products
-        $totalWeight = 0;
-        foreach ($new_tasks as $task) {
-            $products = json_decode($task->products, true);
-            if (is_array($products)) {
-                foreach ($products as $product) {
-                    $totalWeight += ($product['weight'] ?? 0) * ($product['count'] ?? 1);
-                }
-            }
-        }
-        $route->weight = $totalWeight;
+        $route->weight = $route->tasks()->sum('weight');
 
         // Mileage and time — calculate via OSRM if tasks have addresses
         $addresses = [];
@@ -826,6 +816,8 @@ class RouteController extends Controller
             'user_id'               => \Auth::id() ?? $address->user_id,
             'comment'               => $address->comment,
             'contact'               => $address->contact,
+            'weight'                => $address->weight ?? null,
+            'delivery_price'        => $address->delivery_price ?? null,
         ];
 
         $result = $crud->batch('logistic_tasks', [$row]);
@@ -884,6 +876,8 @@ class RouteController extends Controller
             'user_id'               => \Auth::id() ?? $warehouse->user_id,
             'comment'               => $warehouse->comment,
             'contact'               => $warehouse->contact,
+            'weight'                => $warehouse->weight ?? null,
+            'delivery_price'        => $warehouse->delivery_price ?? null,
         ];
 
         $result = $crud->batch('logistic_tasks', [$row]);

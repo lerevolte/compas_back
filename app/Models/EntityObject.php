@@ -1213,6 +1213,54 @@ class EntityObject
         );
         $sorted_values = array();
         $category_slug = null;
+        if(strpos((string)$sort_field, 'rel__') === 0) {
+            $rel_sort_fk_map = ['companies' => 'company_id', 'cars' => 'car_id', 'employees' => 'employee_id'];
+            $rel_sort_parts = explode('__', $sort_field);
+            $rel_sort_slug = $rel_sort_parts[1] ?? null;
+            $rel_sort_field = count($rel_sort_parts) > 2 ? implode('__', array_slice($rel_sort_parts, 2)) : null;
+            if($rel_sort_slug && $rel_sort_field && isset($rel_sort_fk_map[$rel_sort_slug])) {
+                $rel_sort_fk = $rel_sort_fk_map[$rel_sort_slug];
+                $rel_sort_name = \DB::table('data_types')->where('slug', $rel_sort_slug)->value('name') ?: $rel_sort_slug;
+                $rel_sort_model = $settings['models'][$rel_sort_name] ?? null;
+                $rel_sort_values = array();
+                if($rel_sort_model) {
+                    try {
+                        $rel_sort_class = $rel_sort_model->model_name;
+                        $rel_sort_values = $rel_sort_class::query()->pluck($rel_sort_field, 'id')->toArray();
+                    } catch (\Throwable $e) {
+                        $rel_sort_values = array();
+                    }
+                }
+                $rel_sort_extract = function($v) {
+                    if(is_array($v))
+                        $v = $v[0] ?? null;
+                    if(is_string($v) && ValueHelper::isJson($v)) {
+                        $d = json_decode($v, true);
+                        if(is_array($d)) {
+                            if(array_key_exists('value', $d))
+                                return is_scalar($d['value']) ? $d['value'] : null;
+                            if(array_key_exists('text', $d))
+                                return is_scalar($d['text']) ? $d['text'] : null;
+                            $first = $d[0] ?? null;
+                            return is_scalar($first) ? $first : null;
+                        }
+                    }
+                    return is_scalar($v) ? $v : null;
+                };
+                $rel_sort_rows = $entity_class::select('id', $rel_sort_fk);
+                if($request->trashed)
+                    $rel_sort_rows = $rel_sort_rows->onlyTrashed();
+                $rel_sorted_ids = $rel_sort_rows->get()->sortBy(function($item) use ($rel_sort_fk, $rel_sort_values, $rel_sort_extract) {
+                    $rid = $rel_sort_extract($item->{$rel_sort_fk});
+                    $val = ($rid !== null && isset($rel_sort_values[$rid])) ? $rel_sort_extract($rel_sort_values[$rid]) : null;
+                    return $val === null ? '' : $val;
+                }, SORT_NATURAL, $sort_order != 'asc')->pluck('id')->toArray();
+                if(count($rel_sorted_ids)) {
+                    $sorted_values = implode(',', $rel_sorted_ids);
+                    $paginator = $entity_class::orderByRaw("FIELD(id, $sorted_values)");
+                }
+            }
+        }
         foreach($model_fields as $field) {
             if($field->field == $sort_field && $field->type == 'relation' && $field->is_plural && $field->relation_table) {
                 $relation = $field->relation_table;
@@ -1996,7 +2044,7 @@ class EntityObject
                 $rslug = $parts[1];
                 if(!isset($rel_fk_map[$rslug]))
                     continue;
-                $rel_cols[] = ['key' => $key, 'slug' => $rslug, 'fk' => $rel_fk_map[$rslug], 'field' => implode('__', array_slice($parts, 2))];
+                $rel_cols[] = ['key' => $key, 'slug' => $rslug, 'fk' => $rel_fk_map[$rslug], 'field' => implode('__', array_slice($parts, 2)), 'type' => null];
             }
             if(count($rel_cols)) {
                 $extractFk = function($v) {
@@ -2014,6 +2062,15 @@ class EntityObject
                 foreach(array_unique(array_column($rel_cols, 'slug')) as $rslug) {
                     // self::list ожидает ключ настроек = name сущности (а не slug).
                     $rel_name = \DB::table('data_types')->where('slug', $rslug)->value('name') ?: $rslug;
+                    $rel_field_defs = collect($settings[$rel_name]['fields'] ?? []);
+                    foreach($rel_cols as $rci => $rc) {
+                        if($rc['slug'] != $rslug)
+                            continue;
+                        $fdef = $rel_field_defs->first(function($f) use ($rc) {
+                            return $f->field == $rc['field'];
+                        });
+                        $rel_cols[$rci]['type'] = $fdef->type ?? null;
+                    }
                     $fk = $rel_fk_map[$rslug];
                     $ids = array();
                     foreach($paginator->items() as $it) {
@@ -2077,7 +2134,8 @@ class EntityObject
                         $val = null;
                         $fkVal = $extractFk($it->{$rc['fk']} ?? null);
                         if($fkVal && isset($rel_formatted[$rc['slug']][$fkVal]) && array_key_exists($rc['field'], $rel_formatted[$rc['slug']][$fkVal])) {
-                            $val = $toText($rel_formatted[$rc['slug']][$fkVal][$rc['field']]);
+                            $raw = $rel_formatted[$rc['slug']][$fkVal][$rc['field']];
+                            $val = ($rc['type'] ?? null) == 'status' ? $raw : $toText($raw);
                         }
                         $objects[$it->id][$rc['key']] = $val;
                     }
@@ -2145,8 +2203,14 @@ class EntityObject
         if (is_array($route_id)) {
             $route_id = array_pop($route_id);
         }
-        if (empty($route_id)) {
+        if (is_array($route_id)) {
+            $route_id = $route_id['value'] ?? null;
+        }
+        if (empty($route_id) || !is_scalar($route_id)) {
             unset($fields['route_id']);
+            $route_id = null;
+        } else {
+            $fields['route_id'] = $route_id;
         }
 
         foreach($fields as $field => $value) {
@@ -2284,6 +2348,21 @@ class EntityObject
         }
 
         $object->save();
+
+        if($slug == 'logistic_tasks' && $route_id) {
+            $route_task_ids = \App\Models\Task::where('route_id', $route_id)
+                ->where('id', '!=', $object->id)
+                ->orderBy('sort')
+                ->pluck('id')
+                ->toArray();
+            $route_task_ids[] = $object->id;
+            try {
+                app(\App\Http\Controllers\Api\RouteController::class)
+                    ->update_tasks($route_id, new \Illuminate\Http\Request(['ids' => $route_task_ids]));
+            } catch (\Throwable $e) {
+                \Log::warning('EntityObject::copy route attach failed: '.$e->getMessage());
+            }
+        }
 
         \App\Models\Settings::clear_cache();
         $settings = \App\Models\Settings::get(true);
