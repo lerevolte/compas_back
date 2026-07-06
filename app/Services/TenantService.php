@@ -172,9 +172,6 @@ class TenantService
                 if (!$data_type || !$data_type->slug || !$data_row->field) {
                     continue;
                 }
-                if ($data_row->type == 'text_group') {
-                    continue;
-                }
                 if (!Schema::hasTable($data_type->slug) || Schema::hasColumn($data_type->slug, $data_row->field)) {
                     continue;
                 }

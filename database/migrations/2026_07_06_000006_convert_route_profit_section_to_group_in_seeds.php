@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -160,6 +161,21 @@ return new class extends Migration
                 'group_id' => $groupId,
                 'sort' => $k,
             ]);
+        }
+
+        if ($schema->hasTable('routes')) {
+            $columnFields = $db->table('data_rows')
+                ->whereIn('id', array_merge($memberIds, [$groupId]))
+                ->pluck('field')
+                ->filter()
+                ->all();
+            foreach ($columnFields as $columnField) {
+                if (!$schema->hasColumn('routes', $columnField)) {
+                    $schema->table('routes', function (Blueprint $table) use ($columnField) {
+                        $table->text($columnField)->nullable();
+                    });
+                }
+            }
         }
 
         if ($oldSectionId) {
