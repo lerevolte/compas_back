@@ -6,8 +6,6 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    private array $groupFields = ['reserve_for_delivery', 'mileage_cost', 'delivery_cost'];
-
     public function up(): void
     {
         $schema = Schema::connection('seeds');
@@ -22,45 +20,83 @@ return new class extends Migration
             return;
         }
 
-        $targetSectionId = $db->table('data_rows')
+        $fallbackSectionId = $db->table('data_rows')
             ->where('data_type_id', $typeId)
             ->where('field', 'mileage')
             ->value('section_id');
-        if (!$targetSectionId) {
-            $targetSectionId = $db->table('field_sections')
+        if (!$fallbackSectionId) {
+            $fallbackSectionId = $db->table('field_sections')
                 ->where('page', 'routes')
                 ->whereNull('module')
                 ->orderBy('id')
                 ->value('id');
         }
-        if (!$targetSectionId) {
-            $targetSectionId = $db->table('field_sections')->where('page', 'routes')->orderBy('id')->value('id');
+        if (!$fallbackSectionId) {
+            $fallbackSectionId = $db->table('field_sections')->where('page', 'routes')->orderBy('id')->value('id');
         }
 
-        $fieldIds = [];
-        foreach ($this->groupFields as $field) {
-            $fid = $db->table('data_rows')
-                ->where('data_type_id', $typeId)
-                ->where('field', $field)
-                ->value('id');
-            if ($fid) {
-                $fieldIds[] = (int) $fid;
-            }
+        $oldSectionId = $db->table('field_sections')
+            ->where('page', 'routes')
+            ->where('name', 'Прибыль по маршруту')
+            ->value('id');
+
+        $reserveId = $db->table('data_rows')
+            ->where('data_type_id', $typeId)
+            ->where('field', 'reserve_for_delivery')
+            ->value('id');
+        $mileageCostId = $db->table('data_rows')
+            ->where('data_type_id', $typeId)
+            ->where('field', 'mileage_cost')
+            ->value('id');
+
+        $userCostId = $db->table('data_rows')
+            ->where('data_type_id', $typeId)
+            ->where('title', 'Стоимость доставки')
+            ->where('field', '!=', 'delivery_cost')
+            ->orderBy('id')
+            ->value('id');
+        $ownCostId = $db->table('data_rows')
+            ->where('data_type_id', $typeId)
+            ->where('title', 'Стоимость доставки')
+            ->where('field', 'delivery_cost')
+            ->value('id');
+
+        if ($userCostId && $ownCostId) {
+            $db->table('data_rows')->where('id', $ownCostId)->delete();
+            $ownCostId = null;
         }
-        if (!count($fieldIds)) {
+        $costId = $userCostId ?: $ownCostId;
+
+        $memberIds = array_values(array_filter([
+            $reserveId ? (int) $reserveId : null,
+            $mileageCostId ? (int) $mileageCostId : null,
+            $costId ? (int) $costId : null,
+        ]));
+        if (!count($memberIds)) {
             return;
         }
 
-        $groupId = $db->table('data_rows')
+        $group = $db->table('data_rows')
             ->where('data_type_id', $typeId)
             ->where('type', 'text_group')
             ->where('title', 'Прибыль по маршруту')
-            ->value('id');
+            ->first();
 
-        if (!$groupId) {
+        if ($group) {
+            $groupId = $group->id;
+            $update = ['subfields' => json_encode($memberIds)];
+            $groupSectionValid = $group->section_id
+                && $group->section_id != $oldSectionId
+                && $db->table('field_sections')->where('id', $group->section_id)->where('page', 'routes')->exists();
+            if (!$groupSectionValid && $fallbackSectionId) {
+                $update['section_id'] = $fallbackSectionId;
+                $update['hide'] = 0;
+            }
+            $db->table('data_rows')->where('id', $groupId)->update($update);
+        } else {
             $maxSort = (int) $db->table('data_rows')
                 ->where('data_type_id', $typeId)
-                ->where('section_id', $targetSectionId)
+                ->where('section_id', $fallbackSectionId)
                 ->max('sort');
             $groupId = $db->table('data_rows')->insertGetId([
                 'data_type_id' => $typeId,
@@ -71,7 +107,7 @@ return new class extends Migration
                 'details' => null,
                 'visible_always' => 1,
                 'label_color' => '',
-                'section_id' => $targetSectionId,
+                'section_id' => $fallbackSectionId,
                 'group_id' => null,
                 'sort' => $maxSort + 1,
                 'created_at' => now(),
@@ -107,33 +143,29 @@ return new class extends Migration
                 'related_field' => null,
                 'is_unique' => 0,
                 'is_program' => 0,
-                'subfields' => json_encode($fieldIds),
+                'subfields' => json_encode($memberIds),
                 'dependency_fields' => null,
             ]);
             $db->table('data_rows')->where('id', $groupId)->update(['field' => 'route_profit_'.$groupId]);
-        } else {
-            $db->table('data_rows')->where('id', $groupId)->update([
-                'subfields' => json_encode($fieldIds),
-                'section_id' => $targetSectionId,
-            ]);
         }
 
-        foreach ($fieldIds as $k => $fid) {
+        $db->table('data_rows')
+            ->where('data_type_id', $typeId)
+            ->where('group_id', $groupId)
+            ->whereNotIn('id', $memberIds)
+            ->update(['group_id' => null]);
+
+        foreach ($memberIds as $k => $fid) {
             $db->table('data_rows')->where('id', $fid)->update([
                 'group_id' => $groupId,
-                'section_id' => $targetSectionId,
                 'sort' => $k,
             ]);
         }
 
-        $oldSectionId = $db->table('field_sections')
-            ->where('page', 'routes')
-            ->where('name', 'Прибыль по маршруту')
-            ->value('id');
         if ($oldSectionId) {
             $db->table('data_rows')
                 ->where('section_id', $oldSectionId)
-                ->update(['section_id' => $targetSectionId]);
+                ->update(['section_id' => $fallbackSectionId]);
             if ($schema->hasTable('section_fields_sort')) {
                 $db->table('section_fields_sort')->where('section_id', $oldSectionId)->delete();
             }
@@ -159,6 +191,7 @@ return new class extends Migration
             ->where('data_type_id', $typeId)
             ->where('type', 'text_group')
             ->where('title', 'Прибыль по маршруту')
+            ->where('field', 'like', 'route_profit%')
             ->value('id');
         if ($groupId) {
             $db->table('data_rows')->where('group_id', $groupId)->update(['group_id' => null]);
