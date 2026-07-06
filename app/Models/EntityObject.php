@@ -516,6 +516,11 @@ class EntityObject
                     $fields_data[$field->field]['fields'] = array();
 
                     foreach($subfields as $subfield) {
+                        if (!$isAuthenticated
+                            && !empty($subfield->roles_read)
+                            && !in_array(trim((string) $subfield->roles_read), ['', '[]', '0'], true)) {
+                            continue;
+                        }
                         if (isset($fields_data[$subfield->field])) {
                             $subfield_data = $fields_data[$subfield->field];
                             //$subsection_data['fields'][] = $fields_data[$subfield->field];
@@ -574,6 +579,11 @@ class EntityObject
                         }
 
                         $fields_data[$field->field]['fields'][] = $subfield_data;
+                    }
+
+                    if (!$isAuthenticated && !count($fields_data[$field->field]['fields'])) {
+                        unset($fields_data[$field->field]);
+                        continue;
                     }
                 }
                 if($request->is_copy && $slug == 'companies' && ($field->field == 'employee_id' || $field->field == 'car_id' || $field->field == 'fine_id')) {
