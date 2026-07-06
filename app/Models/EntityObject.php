@@ -578,6 +578,9 @@ class EntityObject
                             );
                         }
 
+                        if (!$isAuthenticated && !$subfield->visible_always && static::isEmptyFieldValue($subfield_data['value'] ?? null)) {
+                            continue;
+                        }
                         $fields_data[$field->field]['fields'][] = $subfield_data;
                     }
 
@@ -2152,6 +2155,31 @@ class EntityObject
         );
         return $res;
 
+    }
+
+    protected static function isEmptyFieldValue($value): bool
+    {
+        if ($value === null || $value === '') {
+            return true;
+        }
+        if (is_array($value)) {
+            if (array_key_exists('value', $value)) {
+                $inner = $value['value'];
+                if ($inner === null || $inner === '') {
+                    return true;
+                }
+                if (is_array($inner)) {
+                    return count(array_filter($inner, function ($x) {
+                        return $x !== null && $x !== '';
+                    })) === 0;
+                }
+                return false;
+            }
+            return count(array_filter($value, function ($x) {
+                return $x !== null && $x !== '' && $x !== [];
+            })) === 0;
+        }
+        return false;
     }
 
     public static function copy($slug, $source, $fields)
