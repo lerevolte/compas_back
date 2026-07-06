@@ -244,6 +244,7 @@ class Table
                 if(strpos((string)$key, 'rel__') === 0) {
                     $table_columns[$key]['type'] = 'text';
                     $table_columns[$key]['read_only'] = 1;
+                    $table_columns[$key]['can_edit'] = 0;
                     $rel_parts = explode('__', (string)$key);
                     if(count($rel_parts) >= 3) {
                         $rel_slug = $rel_parts[1];
@@ -253,10 +254,31 @@ class Table
                             $rel_field = collect($settings[$rel_name]['fields'])->first(function($f) use ($rel_field_key) {
                                 return $f->field == $rel_field_key;
                             });
-                            if($rel_field && $rel_field->type == 'status') {
-                                $rel_options = $settings[$rel_name]['options'][$rel_field_key] ?? ($settings['list_values'][$rel_field->id] ?? []);
-                                $table_columns[$key]['type'] = 'status';
+                            if($rel_field) {
+                                $table_columns[$key]['type'] = $rel_field->type;
+                                $table_columns[$key]['is_plural'] = $rel_field->is_plural;
+                                $table_columns[$key]['unit'] = $rel_field->unit;
+                                $table_columns[$key]['mask'] = $rel_field->mask;
+                                $table_columns[$key]['is_external_link'] = $rel_field->is_external_link;
+                                $table_columns[$key]['set_color'] = $rel_field->set_color;
+                                $table_columns[$key]['color'] = $rel_field->label_color;
+
+                                $rel_options = array();
+                                if($rel_field->type == 'relation' && isset($settings['list_values'][$rel_field->id])) {
+                                    $rel_options = array_slice($settings['list_values'][$rel_field->id], 0, 19, true);
+                                } elseif(isset($settings[$rel_name]['options'][$rel_field_key])) {
+                                    $rel_options = $settings[$rel_name]['options'][$rel_field_key];
+                                } elseif(isset($settings['list_values'][$rel_field->id])) {
+                                    $rel_options = $settings['list_values'][$rel_field->id];
+                                }
                                 $table_columns[$key]['options'] = array_values(is_array($rel_options) ? $rel_options : []);
+
+                                if($rel_field->type == 'relation' && $rel_field->details) {
+                                    $rel_details = json_decode($rel_field->details, true);
+                                    if(isset($rel_details['table'])) {
+                                        $table_columns[$key]['related_table'] = $rel_details['table'];
+                                    }
+                                }
                             }
                         }
                     }

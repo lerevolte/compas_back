@@ -143,6 +143,19 @@ class Route extends Model
                     $model->employee_requirements = null;
                 }
             }
+
+            if (($model->isDirty('car_id') || $model->isDirty('employee_id')) && !$model->isDirty('color')) {
+                $resolved = null;
+                if ($model->car_id) {
+                    $resolved = static::resolveColorFromCar((int) $model->car_id);
+                }
+                if (!$resolved && $model->employee_id) {
+                    $resolved = static::resolveColorFromEmployee((int) $model->employee_id);
+                }
+                if ($resolved) {
+                    $model->color = $resolved;
+                }
+            }
         });
 
         static::saving(function($model)
@@ -239,6 +252,9 @@ class Route extends Model
         if (!$car) return null;
 
         $hex = static::resolveHexFromCarColumn($car->color_status);
+        if (!$hex) {
+            $hex = static::defaultStatusHex('cars', 'color_status');
+        }
         if (!$hex) return null;
 
         // Поле color сущности routes
@@ -289,6 +305,9 @@ class Route extends Model
         if (!$employee) return null;
 
         $hex = static::resolveHexFromCarColumn($employee->color_status);
+        if (!$hex) {
+            $hex = static::defaultStatusHex('employees', 'color_status');
+        }
         if (!$hex) return null;
 
         $routeColorField = \DB::table('data_rows')
@@ -328,6 +347,33 @@ class Route extends Model
      * Может быть либо числовым ID записи field_values, либо уже строкой
      * с hex/линейным градиентом.
      */
+    protected static function defaultStatusHex(string $slug, string $field): ?string
+    {
+        $fieldRow = \DB::table('data_rows')
+            ->where('field', $field)
+            ->whereIn('data_type_id', function ($q) use ($slug) {
+                $q->select('id')->from('data_types')->where('slug', $slug);
+            })
+            ->first();
+        if (!$fieldRow) return null;
+
+        $fv = \DB::table('field_values')
+            ->where('field_id', $fieldRow->id)
+            ->where('is_hidden', 0)
+            ->orderBy('sort')
+            ->orderBy('id')
+            ->first();
+        if (!$fv) {
+            $fv = \DB::table('field_values')
+                ->where('field_id', $fieldRow->id)
+                ->orderBy('sort')
+                ->orderBy('id')
+                ->first();
+        }
+
+        return $fv && $fv->color ? (string) $fv->color : null;
+    }
+
     protected static function resolveHexFromCarColumn($value): ?string
     {
         if ($value === null || $value === '') return null;

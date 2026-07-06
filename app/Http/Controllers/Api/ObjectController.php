@@ -207,11 +207,14 @@ class ObjectController extends Controller
                 ));
                 foreach ($fields as $fi => $f) {
                     $fields[$fi]['can_edit'] = 0;
-                    if (is_array($f) && ($f['type'] ?? null) == 'text_group' && !empty($f['fields']) && is_array($f['fields'])) {
-                        $fields[$fi]['fields'] = $filterFields($f['fields']);
+                    if (is_array($f) && ($f['type'] ?? null) == 'text_group') {
+                        $fields[$fi]['fields'] = $filterFields($f['fields'] ?? []);
                     }
                 }
-                return $fields;
+                return array_values(array_filter(
+                    $fields,
+                    fn ($f) => !(is_array($f) && ($f['type'] ?? null) == 'text_group' && empty($f['fields']))
+                ));
             };
             if (isset($detail['columns']) && is_array($detail['columns'])) {
                 foreach ($detail['columns'] as $ck => $col) {
