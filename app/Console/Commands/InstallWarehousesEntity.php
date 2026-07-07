@@ -246,7 +246,6 @@ class InstallWarehousesEntity extends Command
             'time'                  => $base(['field' => 'time', 'type' => 'text', 'title' => 'Окно', 'sort' => 8, 'module' => '["logistic"]', 'module_section_id' => $mod, 'mask' => '##:## - ##:##']),
             'car_requirements'      => $base(['field' => 'car_requirements', 'type' => 'select_dropdown', 'title' => 'Требования к машине', 'sort' => 9, 'is_plural' => 1, 'details' => '{"options":[{"label":"Гидролифт","value":0},{"label":"Манипулятор","value":1},{"label":"Ручная","value":2}]}']),
             'employee_requirements' => $base(['field' => 'employee_requirements', 'type' => 'select_dropdown', 'title' => 'Требования к сотруднику', 'sort' => 10, 'is_plural' => 1, 'details' => '{"options":[{"label":"Гражданство РФ","value":0}]}']),
-            'client_id'             => $base(['field' => 'client_id', 'type' => 'relation', 'title' => 'Клиент', 'sort' => 11, 'is_plural' => 1, 'details' => '{"table": "clients"}', 'is_link' => 1, 'relation_table' => 'clients', 'related_field' => 'task_id']),
             'user_id'               => $base(['field' => 'user_id', 'type' => 'relation', 'title' => 'Ответственный', 'sort' => 12, 'required' => 1, 'details' => '{"table":"users"}', 'is_link' => 1, 'relation_table' => 'users', 'related_field' => 'task_id', 'is_inactive' => 1]),
             'comment'               => $base(['field' => 'comment', 'type' => 'text', 'title' => 'Примечание', 'sort' => 50]),
             'contact'               => $base(['field' => 'contact', 'type' => 'text', 'title' => 'Контактное лицо', 'sort' => 51]),
@@ -268,7 +267,6 @@ class InstallWarehousesEntity extends Command
                 'roles_read' => [], 'has_roles_read' => false,
             ],
             ['title' => 'История изменений', 'tab' => 'history', 'sort' => 3, 'enabled' => true, 'id' => 3, 'has_roles_read' => false, 'roles_read' => null],
-            ['title' => 'Клиент', 'tab' => 'client_id', 'slug' => 'clients', 'sort' => 3, 'enabled' => 1, 'id' => 4],
         ], JSON_UNESCAPED_SLASHES);
     }
 
