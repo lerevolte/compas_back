@@ -17,7 +17,13 @@ class SearchService
         $settings = app('settings');
         $data = array();
         if(isset($params['entity'])) {
-            $entity = $settings['models'][$params['entity']];
+            $entity = $settings['models'][$params['entity']] ?? null;
+            // Сущность отсутствует или выключена — поиск по ней ничего не отдаёт
+            // (8657). Иначе поиск товаров в задаче логистики возвращал строки из
+            // таблицы products, хотя сущность «Товары» на портале отключена.
+            if(!$entity || !$entity->enable) {
+                return array();
+            }
             $entity_class = $entity->model_name;
             $slug = $entity->slug;
         }

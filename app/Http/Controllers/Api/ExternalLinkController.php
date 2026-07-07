@@ -169,6 +169,41 @@ class ExternalLinkController extends Controller
     }
 
     /**
+     * Задачи маршрута со статусами (statusColor) для внешней ссылки. Переиспользует
+     * RouteController::tasks — та же форма, что в авторизованной части, поэтому поле
+     * «Статусы» получает разбивку по задачам, а «Маршрут на карте» — точки/статусы (8651).
+     */
+    public function routeTasks($token, RouteController $routeController, Request $request)
+    {
+        $link = $this->validRouteLink($token);
+        $this->actAsSystemUser();
+        return $routeController->tasks($link->model_id, $request);
+    }
+
+    /**
+     * Данные карты маршрута (цвет линии и т.п.) для внешней ссылки. Переиспользует
+     * RouteController::map_data (8651).
+     */
+    public function routeMapData($token, RouteController $routeController, Request $request)
+    {
+        $link = $this->validRouteLink($token);
+        $this->actAsSystemUser();
+        return $routeController->map_data($link->model_id, $request);
+    }
+
+    /**
+     * Валидная и живая внешняя ссылка на деталку маршрута (model_slug = routes).
+     */
+    private function validRouteLink($token): ExternalLink
+    {
+        $link = ExternalLink::where('token', $token)->firstOrFail();
+        if (!$link->isValid() || $link->model_slug !== 'routes') {
+            abort(404, 'Link is expired or no longer available');
+        }
+        return $link;
+    }
+
+    /**
      * Имена полей сущности с непустым roles_read (ограничение видимости по
      * ролям). Во внешней ссылке такие поля не отдаём.
      */

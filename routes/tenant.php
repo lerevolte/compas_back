@@ -100,6 +100,24 @@ Route::get('/api/external/{token}/table/{slug}', [App\Http\Controllers\Api\Exter
         PreventAccessFromCentralDomains::class,
         'tenantkeeper'
     ]);
+// Задачи маршрута со статусами (statusColor) и данные карты для внешней ссылки
+// на деталку маршрута (без auth). Дают ту же форму, что авторизованные
+// routes/{id}/tasks и routes/{id}/map_data — нужны полям «Статусы» и
+// «Маршрут на карте» во внешней ссылке (8651).
+Route::get('/api/external/{token}/route-tasks', [App\Http\Controllers\Api\ExternalLinkController::class, 'routeTasks'])
+    ->name('external.route_tasks')
+    ->middleware([
+        InitializeTenancyByDomain::class,
+        PreventAccessFromCentralDomains::class,
+        'tenantkeeper'
+    ]);
+Route::get('/api/external/{token}/route-map', [App\Http\Controllers\Api\ExternalLinkController::class, 'routeMapData'])
+    ->name('external.route_map')
+    ->middleware([
+        InitializeTenancyByDomain::class,
+        PreventAccessFromCentralDomains::class,
+        'tenantkeeper'
+    ]);
 Route::middleware([
     'api',
     InitializeTenancyByDomain::class,
