@@ -41,11 +41,16 @@ class CrudService
                 ];
             }
             if ($slug == 'logistic_tasks' && array_key_exists('delivery_date', $row) && $row['id'] && !isset($row['copy'])) {
-                // Проверяем существование записи с заполненным route_id
-                // Используем exists() для оптимизации, чтобы не грузить всю модель
-                $is_routed = $entity_class::where('id', $row['id'])
+                // Проверяем, что задача привязана к СУЩЕСТВУЮЩЕМУ маршруту.
+                // Route использует SoftDeletes: после удаления маршрута route_id
+                // у задачи остаётся, но самого маршрута уже нет. Route::where()
+                // учитывает SoftDeletes-скоуп (удалённые не считаются) — иначе
+                // delivery_date блокировалась бы навсегда у осиротевших задач
+                // («Дату доставки нужно менять у связанного маршрута»).
+                $route_id = $entity_class::where('id', $row['id'])
                     ->whereNotNull('route_id')
-                    ->exists();
+                    ->value('route_id');
+                $is_routed = $route_id && \App\Models\Route::where('id', $route_id)->exists();
 
                 if ($is_routed) {
                     return [
