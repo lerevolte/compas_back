@@ -319,7 +319,12 @@ class EntityObject
                 $fields_data[$field->field]['can_read'] = $settings[$slug]['perms'][$field->field]['read'] || $isAdmin ? 1 : 0;
                 $fields_data[$field->field]['can_edit'] = isset($data['deleted_at']) || $field->only_read ||
                     !($settings[$slug]['perms'][$field->field]['write'] ?? 1) && !$isAdmin ? 0 : 1;
-                if ($slug == 'logistic_tasks' && $field->field == 'delivery_date' && $current->route_id && !$request->is_copy) {
+                if ($slug == 'logistic_tasks' && $field->field == 'delivery_date' && $current->route_id && !$request->is_copy
+                    && \App\Models\Route::whereKey($current->route_id)->exists()) {
+                    // Блокируем дату только если маршрут ЖИВ. Route использует
+                    // SoftDeletes: после удаления маршрута route_id у задачи
+                    // остаётся, но whereKey()->exists() удалённый не найдёт —
+                    // иначе поле навсегда серое у осиротевших задач.
                     $fields_data[$field->field]['can_edit'] = 0;
                 }
                 // Обработка значений полей
@@ -783,7 +788,12 @@ class EntityObject
                 if(!$id && $permissions['create_p'] == 'Y' && $field->field == 'user_id' && !\Auth::user()->is_admin) {
                     $fields_data[$field->field]['can_edit'] = 0;
                 }
-                if ($slug == 'logistic_tasks' && $field->field == 'delivery_date' && $current->route_id && !$request->is_copy) {
+                if ($slug == 'logistic_tasks' && $field->field == 'delivery_date' && $current->route_id && !$request->is_copy
+                    && \App\Models\Route::whereKey($current->route_id)->exists()) {
+                    // Блокируем дату только если маршрут ЖИВ. Route использует
+                    // SoftDeletes: после удаления маршрута route_id у задачи
+                    // остаётся, но whereKey()->exists() удалённый не найдёт —
+                    // иначе поле навсегда серое у осиротевших задач.
                     $fields_data[$field->field]['can_edit'] = 0;
                 }
                 if($id && $permissions['update_p'] == 'Y' && $current->user_id != \Auth::user()->id && !\Auth::user()->is_admin && $slug != 'users' && \Auth::user()->id != $id ||
