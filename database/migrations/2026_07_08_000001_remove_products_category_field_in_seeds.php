@@ -22,20 +22,10 @@ return new class extends Migration
         DB::connection('seeds')->table('data_rows')
             ->whereIn('data_type_id', $typeIds)
             ->whereIn('field', $this->fields)
-            ->update(['hide' => 1]);
+            ->delete();
     }
 
     public function down(): void
     {
-        if (!Schema::connection('seeds')->hasTable('data_rows') || !Schema::connection('seeds')->hasTable('data_types')) {
-            return;
-        }
-
-        $typeIds = DB::connection('seeds')->table('data_types')->where('slug', 'products')->pluck('id');
-
-        DB::connection('seeds')->table('data_rows')
-            ->whereIn('data_type_id', $typeIds)
-            ->whereIn('field', $this->fields)
-            ->update(['hide' => 0]);
     }
 };

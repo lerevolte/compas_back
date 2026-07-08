@@ -22,24 +22,12 @@ return new class extends Migration
         DB::table('data_rows')
             ->whereIn('data_type_id', $typeIds)
             ->whereIn('field', $this->fields)
-            ->update(['hide' => 1]);
+            ->delete();
 
         \App\Models\Settings::clear_cache();
     }
 
     public function down(): void
     {
-        if (!Schema::hasTable('data_rows') || !Schema::hasTable('data_types')) {
-            return;
-        }
-
-        $typeIds = DB::table('data_types')->where('slug', 'products')->pluck('id');
-
-        DB::table('data_rows')
-            ->whereIn('data_type_id', $typeIds)
-            ->whereIn('field', $this->fields)
-            ->update(['hide' => 0]);
-
-        \App\Models\Settings::clear_cache();
     }
 };
