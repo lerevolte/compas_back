@@ -69,6 +69,15 @@ class ObjectController extends Controller
             return response()->json(['message' => $list['error']['message']], $list['error']['code']);
         }
 
+        if ($slug === 'addresses') {
+            if ($user && $user->is_admin) {
+                $permissions['create_task_p'] = 'A';
+            } else {
+                $taskPermissions = $this->getPermissions($user, 'logistic_tasks');
+                $permissions['create_task_p'] = $taskPermissions['create_p'] ?? 'A';
+            }
+        }
+
         // 5. Загрузка категорий (Замена if/else на маппинг)
         $categories = $this->getCategoriesForSlug($slug);
 
