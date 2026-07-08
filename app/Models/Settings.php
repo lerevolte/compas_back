@@ -606,13 +606,13 @@ class Settings extends Model
 		                        		$name = json_decode($object->name, true)['value'];
 		                        	}
 
-
-		                        	// $last_name = '';
-		                        	// if(isset($object->last_name))
-		                        	// 	$last_name = $object->last_name;
-		                        	// if(ValueHelper::isJson($last_name)) {
-		                        	// 	$last_name = json_decode($object->last_name, true)['value'];
-		                        	// }
+		                        	$last_name = '';
+		                        	if($details['table'] == 'users' && isset($object->last_name)) {
+		                        		$last_name = $object->last_name;
+		                        		if(ValueHelper::isJson($last_name)) {
+		                        			$last_name = json_decode($object->last_name, true)['value'] ?? '';
+		                        		}
+		                        	}
 		                        	$obj_arr = $object->toArray();
 
 		                        	$label = [
@@ -622,7 +622,7 @@ class Settings extends Model
 												'is_hidden' => 0,
 												'field_id' => $field->id,
 												'color' => $resolveDisplayColor(array_key_exists('color', $obj_arr) && !$object->color ? $object->getColor() : ($object->color ?? '')),
-												'text' => $name//.($last_name ? ' '.$last_name:''),
+												'text' => trim($name.($last_name ? ' '.$last_name : '')),
 											];
 											// Для товаров подкидываем цену/вес/количество — фронт
 											// (getRow в Body.vue) подхватывает их при выборе товара

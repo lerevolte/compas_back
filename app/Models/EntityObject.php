@@ -86,6 +86,12 @@ class EntityObject
         }
         if (isset($object->first_name)) {
             $text = trim($object->first_name . ' ' . ($object->last_name ?? ''));
+        } elseif ($table == 'users' && isset($object->last_name) && $object->last_name) {
+            $last_name = $object->last_name;
+            if (ValueHelper::isJson($last_name)) {
+                $last_name = json_decode($last_name, true)['value'] ?? '';
+            }
+            $text = trim($text . ' ' . $last_name);
         }
 
         $avatar = $object->avatar ?? ($object->photo ?? '');
