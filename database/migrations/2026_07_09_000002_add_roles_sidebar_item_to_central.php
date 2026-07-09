@@ -22,6 +22,7 @@ return new class extends Migration
         }
 
         $sort = (int) DB::table('sidebar_items')->max('sort');
+        $maxRgt = (int) DB::table('sidebar_items')->max('_rgt');
 
         DB::table('sidebar_items')->insert([
             'name' => 'Настройка ролей сущности',
@@ -29,8 +30,8 @@ return new class extends Migration
             'link' => '/roles',
             'sort' => $sort + 1,
             'parent_id' => null,
-            '_lft' => 0,
-            '_rgt' => 0,
+            '_lft' => $maxRgt + 1,
+            '_rgt' => $maxRgt + 2,
             'is_hidden' => 0,
             'enabled' => 1,
             'created_at' => now(),
