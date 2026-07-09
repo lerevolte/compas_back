@@ -66,40 +66,17 @@ class SpaController extends Controller
             }
             die();
         }
+        // Nuxt запрашивает _payload.json при каждом SPA-переходе. Файлы лежат в
+        // public/landing/, но catch-all роут перехватывает запрос и раньше отдавал HTML.
+        if (!tenant('id')) {
+            $payload = $this->landingPayload();
+            if ($payload !== null) {
+                return $payload;
+            }
+        }
+
         $account = null;
-        $allow_dirs = [
-            "https://compas.pro",
-            "https://compas.pro/404",
-            "https://compas.pro/payment",
-            "https://compas.pro/tariffs",
-            "https://compas.pro/contacts",
-            "https://compas.pro/auth/entry",
-            "https://compas.pro/auth/registration",
-            "https://compas.pro/auth/accounts",
-            "https://compas.pro/docs",
-            "https://compas.pro/docs/license",
-            "https://compas.pro/docs/politics",
-            //"https://compas.pro/guides",
-            "https://compas.pro/guides-category",
-            "https://compas.pro/articles",
-            "https://compas.pro/articles-category",
-            "https://compas.pro/questions",
-            "https://compas.pro/questions-category",
-            "https://compas.pro/knowledge",
-            "https://compas.pro/knowledge-category",
-            "https://compas.pro/products/fines",
-            "https://compas.pro/products/fines/list",
-            "https://compas.pro/products/fines/po-sts",
-            "https://compas.pro/products/fines/po-voditelskomu-udostovereniyu",
-            "https://compas.pro/products/fines/po-nomeru-postanovleniya",
-            "https://compas.pro/products/fines/po-nomeru-avto",
-            "https://compas.pro/products/fines/po-inn",
-            "https://compas.pro/products/distance/mkad",
-            "https://compas.pro/products/distance/kad",
-            "https://compas.pro/products/distance",
-            "https://compas.pro/osago",
-            "https://compas.pro/osago/processing"
-        ];
+        $allow_dirs = array_merge($this->staticLandingUrls(), $this->staticHtmlUrls());
 
         if(tenant('id')){
             $tenant = tenant('id');
@@ -117,94 +94,27 @@ class SpaController extends Controller
             if(in_array(url()->current(), $allow_dirs)) {
                 $path = public_path('landing/index.html');
             } else {
-                $allow_dirs2 = Cache::get('key', function () {
-                    $allow_dirs2 = [];
-                    $faq_categories = \DB::table('faq_categories')->whereNull('deleted_at')->pluck('slug');
-                    $blog_categories = \DB::table('blog_categories')->whereNull('deleted_at')->pluck('slug');
-                    $knowledge_categories = \DB::table('knowledge_categories')->whereNull('deleted_at')->pluck('slug');
-                    $guide_categories = \DB::table('guide_categories')->whereNull('deleted_at')->pluck('slug');
-                    $faq = \DB::table('faq')->whereNull('deleted_at')->where('is_active', 1)->pluck('slug');
-                    $blog = \DB::table('articles')->whereNull('deleted_at')->where('is_active', 1)->pluck('slug');
-                    $knowledge = \DB::table('knowledge')->whereNull('deleted_at')->where('is_active', 1)->pluck('slug');
-                    $guides = \DB::table('guides')->whereNull('deleted_at')->where('is_active', 1)->pluck('slug');
-                    foreach ($blog_categories as $slug) {
-                        $s = json_decode($slug,true);
-                        if(isset($s['value']))
-                            $slug = $s['value'];
-                        $allow_dirs2[] = implode('/', ['https://compas.pro/articles-category', $slug]);
-                    }
+                $allow_dirs = array_merge($allow_dirs, $this->dynamicLandingUrls());
 
-                    foreach ($faq_categories as $slug) {
-                        $s = json_decode($slug,true);
-                        if(isset($s['value']))
-                            $slug = $s['value'];
-                        $allow_dirs2[] = implode('/', ['https://compas.pro/questions-category', $slug]);
-                    }
-                    
-                    foreach ($knowledge_categories as $slug) {
-                        $s = json_decode($slug,true);
-                        if(isset($s['value']))
-                            $slug = $s['value'];
-                        $allow_dirs2[] = implode('/', ['https://compas.pro/knowledge-category', $slug]);
-                    }
-
-                    foreach ($guide_categories as $slug) {
-                        $s = json_decode($slug,true);
-                        if(isset($s['value']))
-                            $slug = $s['value'];
-                        $allow_dirs2[] = implode('/', ['https://compas.pro/guides-category', $slug]);
-                    }
-
-                    foreach ($faq as $slug) {
-                        $s = json_decode($slug,true);
-                        if(isset($s['value']))
-                            $slug = $s['value'];
-                        $allow_dirs2[] = implode('/', ['https://compas.pro/questions', $slug]);
-                    }
-                    
-                    foreach ($blog as $slug) {
-                        $s = json_decode($slug,true);
-                        if(isset($s['value']))
-                            $slug = $s['value'];
-                        $allow_dirs2[] = implode('/', ['https://compas.pro/articles', $slug]);
-                    }
-
-                    foreach ($knowledge as $slug) {
-                        $s = json_decode($slug,true);
-                        if(isset($s['value']))
-                            $slug = $s['value'];
-                        $allow_dirs2[] = implode('/', ['https://compas.pro/knowledge', $slug]);
-                    }
-
-                    foreach ($guides as $slug) {
-                        $s = json_decode($slug,true);
-                        if(isset($s['value']))
-                            $slug = $s['value'];
-                        $allow_dirs2[] = implode('/', ['https://compas.pro/guides', $slug]);
-                    }
-
-                    return $allow_dirs2;
-                });
-                
-                $allow_dirs = array_merge($allow_dirs, $allow_dirs2);
-
-                if(!in_array(url()->current(), $allow_dirs) && !strstr(url()->current(), '_payload.json')) {
+                if(!in_array(url()->current(), $allow_dirs)) {
                     info(url()->current());
                     info('abort');
                     abort(404);
                 }
             }
-            
+
             $url = str_replace('https://compas.pro/', '', url()->current());
             $url_parts = explode('/', $url);
-            if(!strstr($url, '_payload.json') && file_exists(public_path("landing/{$url}/index.html"))) {
+            if(file_exists(public_path("landing/{$url}/index.html"))) {
                 $path = public_path("landing/{$url}/index.html");
             }
             elseif(file_exists(public_path("landing/{$url_parts[0]}/index.html"))) {
                 $path = public_path('landing/200.html');
             }
             else {
-                if($k = array_search('guides', $url_parts) && isset($url_parts[$k+1])){
+                // Детальные страницы гайдов не пререндерятся — отдаём SPA-оболочку.
+                $k = array_search('guides', $url_parts);
+                if($k !== false && isset($url_parts[$k+1])){
                     $path = public_path('landing/200.html');
                 } else
                     $path = public_path('landing/index.html');
@@ -216,11 +126,37 @@ class SpaController extends Controller
         return file_get_contents($path);
     }
 
-    public function pages()
+    /**
+     * Nuxt тянет _payload.json при каждом SPA-переходе. Собранные файлы лежат в
+     * public/landing/, а catch-all роут перехватывал запрос и отдавал HTML —
+     * фронт логировал "Cannot load payload ... is not valid JSON".
+     */
+    private function landingPayload()
     {
-        
-        $allow_dirs = [
+        $path = trim(request()->path(), '/');
+
+        if (!str_ends_with($path, '_payload.json') || str_contains($path, '..')) {
+            return null;
+        }
+
+        $file = public_path('landing/' . $path);
+
+        if (!is_file($file)) {
+            abort(404);
+        }
+
+        return response()->file($file, ['Content-Type' => 'application/json']);
+    }
+
+    /**
+     * Статические маршруты лендинга. Используется и для отдачи страниц (__invoke),
+     * и для списка пререндера (pages()), чтобы списки не разъезжались.
+     */
+    private function staticLandingUrls(): array
+    {
+        return [
             "https://compas.pro",
+            "https://compas.pro/404",
             "https://compas.pro/payment",
             "https://compas.pro/tariffs",
             "https://compas.pro/contacts",
@@ -230,12 +166,15 @@ class SpaController extends Controller
             "https://compas.pro/docs",
             "https://compas.pro/docs/license",
             "https://compas.pro/docs/politics",
+            "https://compas.pro/guides",
+            "https://compas.pro/guides-category",
             "https://compas.pro/articles",
             "https://compas.pro/articles-category",
             "https://compas.pro/questions",
             "https://compas.pro/questions-category",
             "https://compas.pro/knowledge",
             "https://compas.pro/knowledge-category",
+            "https://compas.pro/products",
             "https://compas.pro/products/fines",
             "https://compas.pro/products/fines/list",
             "https://compas.pro/products/fines/po-sts",
@@ -243,60 +182,66 @@ class SpaController extends Controller
             "https://compas.pro/products/fines/po-nomeru-postanovleniya",
             "https://compas.pro/products/fines/po-nomeru-avto",
             "https://compas.pro/products/fines/po-inn",
-            "https://compas.pro/products/distance/mkad",
-            "https://compas.pro/products/distance/kad",
-            "https://compas.pro/products/distance"
+            "https://compas.pro/products/distance",
+            "https://compas.pro/products/distance/rasstoyanie-ot-mkad",
+            "https://compas.pro/products/distance/rasstoyanie-ot-kad",
+            "https://compas.pro/products/osago",
+            "https://compas.pro/products/osago/processing",
         ];
-
-        $faq_categories = \DB::table('faq_categories')->whereNull('deleted_at')->pluck('slug');
-        $blog_categories = \DB::table('blog_categories')->whereNull('deleted_at')->pluck('slug');
-        $knowledge_categories = \DB::table('knowledge_categories')->whereNull('deleted_at')->pluck('slug');
-        $faq = \DB::table('faq')->whereNull('deleted_at')->pluck('slug');
-        $blog = \DB::table('articles')->whereNull('deleted_at')->pluck('slug');
-        $knowledge = \DB::table('knowledge')->whereNull('deleted_at')->pluck('slug');
-        foreach ($blog_categories as $slug) {
-            $s = json_decode($slug,true);
-            if(isset($s['value']))
-                $slug = $s['value'];
-            $allow_dirs[] = implode('/', ['https://compas.pro/articles-category', $slug]);
-        }
-
-        foreach ($faq_categories as $slug) {
-            $s = json_decode($slug,true);
-            if(isset($s['value']))
-                $slug = $s['value'];
-            $allow_dirs[] = implode('/', ['https://compas.pro/questions-category', $slug]);
-        }
-        
-        foreach ($knowledge_categories as $slug) {
-            $s = json_decode($slug,true);
-            if(isset($s['value']))
-                $slug = $s['value'];
-            $allow_dirs[] = implode('/', ['https://compas.pro/knowledge-category', $slug]);
-        }
-
-        foreach ($faq as $slug) {
-            $s = json_decode($slug,true);
-            if(isset($s['value']))
-                $slug = $s['value'];
-            $allow_dirs[] = implode('/', ['https://compas.pro/questions', $slug]);
-        }
-        
-        foreach ($blog as $slug) {
-            $s = json_decode($slug,true);
-            if(isset($s['value']))
-                $slug = $s['value'];
-            $allow_dirs[] = implode('/', ['https://compas.pro/articles', $slug]);
-        }
-
-        foreach ($knowledge as $slug) {
-            $s = json_decode($slug,true);
-            if(isset($s['value']))
-                $slug = $s['value'];
-            $allow_dirs[] = implode('/', ['https://compas.pro/knowledge', $slug]);
-        }
-
-        return response()->json($allow_dirs);
     }
 
+    /**
+     * Страницы лендинга, которых нет в Nuxt-роутере: свёрстанный вручную статический HTML.
+     * Их нельзя пререндерить, но отдавать по прямой ссылке нужно.
+     */
+    private function staticHtmlUrls(): array
+    {
+        return [
+            "https://compas.pro/products/logisticheskaya-programma",
+        ];
+    }
+
+    /**
+     * Маршруты, которые зависят от контента в БД.
+     */
+    private function dynamicLandingUrls(): array
+    {
+        return Cache::remember('landing:allowed-urls', now()->addMinutes(10), function () {
+            $sections = [
+                'articles-category' => ['table' => 'blog_categories',      'active' => false],
+                'questions-category' => ['table' => 'faq_categories',       'active' => false],
+                'knowledge-category' => ['table' => 'knowledge_categories', 'active' => false],
+                'guides-category'    => ['table' => 'guide_categories',     'active' => false],
+                'questions'          => ['table' => 'faq',                  'active' => true],
+                'articles'           => ['table' => 'articles',             'active' => true],
+                'knowledge'          => ['table' => 'knowledge',            'active' => true],
+                'guides'             => ['table' => 'guides',               'active' => true],
+            ];
+
+            $urls = [];
+
+            foreach ($sections as $prefix => $section) {
+                $query = \DB::table($section['table'])->whereNull('deleted_at');
+
+                if ($section['active']) {
+                    $query->where('is_active', 1);
+                }
+
+                foreach ($query->pluck('slug') as $slug) {
+                    $decoded = json_decode($slug, true);
+                    if (isset($decoded['value'])) {
+                        $slug = $decoded['value'];
+                    }
+                    $urls[] = 'https://compas.pro/' . $prefix . '/' . $slug;
+                }
+            }
+
+            return $urls;
+        });
+    }
+
+    public function pages()
+    {
+        return response()->json(array_merge($this->staticLandingUrls(), $this->dynamicLandingUrls()));
+    }
 }

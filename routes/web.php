@@ -309,5 +309,16 @@ Route::group(['middleware' => ['web']], function() {
         return Illuminate\Support\Facades\Response::make($output, 200);
 
     });
-    Route::get('{path}', App\Http\Controllers\SpaController::class)->where('path', '^(?!api).*$');  
+
+    // Переезд URL продуктовых страниц. Должно стоять до catch-all роута.
+    $movedPaths = [
+        'products/distance/mkad' => 'products/distance/rasstoyanie-ot-mkad',
+        'products/distance/kad'  => 'products/distance/rasstoyanie-ot-kad',
+        'products/logistics'     => 'products/logisticheskaya-programma',
+    ];
+    foreach ($movedPaths as $from => $to) {
+        Route::redirect($from, '/' . $to, 301);
+    }
+
+    Route::get('{path}', App\Http\Controllers\SpaController::class)->where('path', '^(?!api).*$');
 });
