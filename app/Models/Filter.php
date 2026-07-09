@@ -49,7 +49,7 @@ class Filter extends Model
                     $config = json_decode($filter->config, true);
                     $fields = array();
                     if($config) {
-                        foreach($config['fields'] as $f => $value) {
+                        foreach(($config['fields'] ?? []) as $f => $value) {
                             if(!is_array($value))
                                 continue;
                             $field_key = $value['key'];
@@ -95,6 +95,7 @@ class Filter extends Model
                             'title' => $filter->name,
                             'sort' => $filter->sort,
                             'is_hidden' => $filter->is_hidden,
+                            'search' => (bool)($config['search'] ?? false),
                             'fields' => $fields
                         );
                     }

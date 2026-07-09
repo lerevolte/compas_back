@@ -191,10 +191,7 @@ class EntityObject
                 $current->route_id = $request->route_id;
             }
             foreach ($model_fields as $mf) {
-                if (in_array($mf->type, ['relation', 'file', 'text_group'])) continue;
-                // Значение по умолчанию применяется только при активном чекбоксе
-                // set_default (по аналогии с set_color): значение может быть
-                // сохранено, но не участвовать в создании объектов (8461).
+                if (in_array($mf->type, ['relation', 'file', 'text_group', 'status', 'select_dropdown', 'redactor'])) continue;
                 if (empty($mf->set_default)) continue;
                 if (!isset($mf->default_value) || $mf->default_value === null || $mf->default_value === '') continue;
                 if ($current->{$mf->field} !== null && $current->{$mf->field} !== '') continue;

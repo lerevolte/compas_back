@@ -39,6 +39,7 @@ class FilterController extends Controller
             $config['fields'][$field] = $value;
         }
         if(isset($config['fields'])) {
+            $config['search'] = $request->boolean('search');
             $item->config = json_encode($config, JSON_UNESCAPED_UNICODE);
             $item->save();
         }
@@ -70,11 +71,12 @@ class FilterController extends Controller
             'user_id' => \Auth::user()->id
         ]);
 
-        if($request->get('fields')) {
-            $config = array();
+        if($request->has('fields')) {
+            $config = array('fields' => array());
             foreach($request->all()['fields'] as $field => $value) {
                 $config['fields'][$field] = $value;
             }
+            $config['search'] = $request->boolean('search');
             $filter->config = json_encode($config, JSON_UNESCAPED_UNICODE);
         }
         $filter->save();
