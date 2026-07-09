@@ -83,7 +83,7 @@ class SpaController extends Controller
         }
 
         $account = null;
-        $allow_dirs = array_merge($this->staticLandingUrls(), $this->staticHtmlUrls());
+        $allow_dirs = $this->staticLandingUrls();
 
         if(tenant('id')){
             $tenant = tenant('id');
@@ -194,16 +194,6 @@ class SpaController extends Controller
             "https://compas.pro/products/distance/rasstoyanie-ot-kad",
             "https://compas.pro/products/osago",
             "https://compas.pro/products/osago/processing",
-        ];
-    }
-
-    /**
-     * Страницы лендинга, которых нет в Nuxt-роутере: свёрстанный вручную статический HTML.
-     * Их нельзя пререндерить, но отдавать по прямой ссылке нужно.
-     */
-    private function staticHtmlUrls(): array
-    {
-        return [
             "https://compas.pro/products/logisticheskaya-programma",
         ];
     }
