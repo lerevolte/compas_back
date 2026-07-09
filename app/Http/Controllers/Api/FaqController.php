@@ -274,4 +274,22 @@ class FaqController extends Controller
 
         return response()->json($result);
     }
+
+    public function questions()
+    {
+        if (!\Schema::hasTable('faq')) {
+            return response()->json([]);
+        }
+
+        $items = \App\Models\Faq::orderBy('id')->get(['id', 'name']);
+
+        $data = $items->map(function ($item) {
+            return [
+                'id' => $item->id,
+                'name' => $item->getStringValue('name'),
+            ];
+        })->values();
+
+        return response()->json($data);
+    }
 }

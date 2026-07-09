@@ -351,9 +351,11 @@ Route::middleware([
             [App\Http\Controllers\Api\TariffController::class, 'set']
         );
 
+        Route::get('redactor/questions', [App\Http\Controllers\Api\FaqController::class, 'questions']);
+
         Route::get('objects/search', [App\Http\Controllers\Api\ObjectController::class, 'search']);
         // Route::get(
-        //     'objects/{model}', 
+        //     'objects/{model}',
         //     [App\Http\Controllers\Api\ObjectController::class, 'list']
         // );
         Route::get(

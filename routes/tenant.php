@@ -325,6 +325,8 @@ Route::middleware([
             [App\Http\Controllers\Api\TariffController::class, 'set']
         )->name('tariffs.set');
 
+        Route::get('redactor/questions', [App\Http\Controllers\Api\FaqController::class, 'questions'])->name('redactor.questions');
+
         Route::get('objects/search', [App\Http\Controllers\Api\ObjectController::class, 'search'])->name('objects.search');
         Route::get(
             'objects/{model}', 
