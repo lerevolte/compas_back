@@ -485,6 +485,8 @@ class User extends \TCG\Voyager\Models\User
             }
         }
 
+        $admin_pages = ['settings', 'modules', 'trash', 'roles', 'tariffs'];
+
         foreach($menu as $k => $item) {
 
             if(isset($sidebar_items[$item['id']])) {
@@ -508,8 +510,8 @@ class User extends \TCG\Voyager\Models\User
                         //$menu[$k]['children'][$i]['enabled'] = 1;
                     }
                     
-                    if(isset($child['slug']) && isset($s['models'][$child['slug']]) && 
-                        isset($permissions[$s['models'][$child['slug']]->id]) && 
+                    if(isset($child['slug']) && !in_array($child['slug'], $admin_pages) && isset($s['models'][$child['slug']]) &&
+                        isset($permissions[$s['models'][$child['slug']]->id]) &&
                         $permissions[$s['models'][$child['slug']]->id]->read_p == 'N'
                     ) {
                         unset($menu[$k]['children'][$i]);
@@ -538,8 +540,8 @@ class User extends \TCG\Voyager\Models\User
                 //$menu[$k]['enabled'] = 1;
             }
             
-            if(isset($item['slug']) && isset($s['models'][$item['slug']]) && 
-                isset($permissions[$s['models'][$item['slug']]->id]) && 
+            if(isset($item['slug']) && !in_array($item['slug'], $admin_pages) && isset($s['models'][$item['slug']]) &&
+                isset($permissions[$s['models'][$item['slug']]->id]) &&
                 $permissions[$s['models'][$item['slug']]->id]->read_p == 'N'
             ) {
                 unset($menu[$k]);
