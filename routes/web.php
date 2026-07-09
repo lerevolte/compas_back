@@ -310,14 +310,23 @@ Route::group(['middleware' => ['web']], function() {
 
     });
 
-    // Переезд URL продуктовых страниц. Должно стоять до catch-all роута.
     $movedPaths = [
         'products/distance/mkad' => 'products/distance/rasstoyanie-ot-mkad',
         'products/distance/kad'  => 'products/distance/rasstoyanie-ot-kad',
-        'products/logistics'     => 'products/logisticheskaya-programma',
     ];
     foreach ($movedPaths as $from => $to) {
         Route::redirect($from, '/' . $to, 301);
+    }
+
+    $retiredPaths = [
+        'products/fines',
+        'products/osago',
+        'products/logistics',
+        'products/logisticheskaya-programma',
+    ];
+    foreach ($retiredPaths as $path) {
+        Route::redirect($path, '/', 301);
+        Route::redirect($path . '/{rest}', '/', 301)->where('rest', '.*');
     }
 
     Route::get('{path}', App\Http\Controllers\SpaController::class)->where('path', '^(?!api).*$');

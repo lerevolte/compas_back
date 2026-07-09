@@ -7,18 +7,8 @@ use App\Services\CrudService;
 
 class SpaController extends Controller
 {
-    /**
-     * Список URL лендинга, зависящих от контента в БД.
-     * Сбрасывается из AppServiceProvider при сохранении контента;
-     * TTL остаётся страховкой на случай записи в обход Eloquent.
-     */
     public const ALLOWED_URLS_CACHE_KEY = 'landing:allowed-urls';
 
-    /**
-     * Get the SPA view.
-     *
-     * @return \Illuminate\Http\Response
-     */
     public function __invoke()
     {
         if(request()->n) {
@@ -73,8 +63,6 @@ class SpaController extends Controller
             }
             die();
         }
-        // Nuxt запрашивает _payload.json при каждом SPA-переходе. Файлы лежат в
-        // public/landing/, но catch-all роут перехватывает запрос и раньше отдавал HTML.
         if (!tenant('id')) {
             $payload = $this->landingPayload();
             if ($payload !== null) {
@@ -119,7 +107,6 @@ class SpaController extends Controller
                 $path = public_path('landing/200.html');
             }
             else {
-                // Детальные страницы гайдов не пререндерятся — отдаём SPA-оболочку.
                 $k = array_search('guides', $url_parts);
                 if($k !== false && isset($url_parts[$k+1])){
                     $path = public_path('landing/200.html');
@@ -133,11 +120,6 @@ class SpaController extends Controller
         return file_get_contents($path);
     }
 
-    /**
-     * Nuxt тянет _payload.json при каждом SPA-переходе. Собранные файлы лежат в
-     * public/landing/, а catch-all роут перехватывал запрос и отдавал HTML —
-     * фронт логировал "Cannot load payload ... is not valid JSON".
-     */
     private function landingPayload()
     {
         $path = trim(request()->path(), '/');
@@ -155,10 +137,6 @@ class SpaController extends Controller
         return response()->file($file, ['Content-Type' => 'application/json']);
     }
 
-    /**
-     * Статические маршруты лендинга. Используется и для отдачи страниц (__invoke),
-     * и для списка пререндера (pages()), чтобы списки не разъезжались.
-     */
     private function staticLandingUrls(): array
     {
         return [
@@ -182,25 +160,12 @@ class SpaController extends Controller
             "https://compas.pro/knowledge",
             "https://compas.pro/knowledge-category",
             "https://compas.pro/products",
-            "https://compas.pro/products/fines",
-            "https://compas.pro/products/fines/list",
-            "https://compas.pro/products/fines/po-sts",
-            "https://compas.pro/products/fines/po-voditelskomu-udostovereniyu",
-            "https://compas.pro/products/fines/po-nomeru-postanovleniya",
-            "https://compas.pro/products/fines/po-nomeru-avto",
-            "https://compas.pro/products/fines/po-inn",
             "https://compas.pro/products/distance",
             "https://compas.pro/products/distance/rasstoyanie-ot-mkad",
             "https://compas.pro/products/distance/rasstoyanie-ot-kad",
-            "https://compas.pro/products/osago",
-            "https://compas.pro/products/osago/processing",
-            "https://compas.pro/products/logisticheskaya-programma",
         ];
     }
 
-    /**
-     * Маршруты, которые зависят от контента в БД.
-     */
     private function dynamicLandingUrls(): array
     {
         return Cache::remember(self::ALLOWED_URLS_CACHE_KEY, now()->addMinutes(10), function () {
