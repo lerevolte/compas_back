@@ -8,6 +8,13 @@ use App\Services\CrudService;
 class SpaController extends Controller
 {
     /**
+     * Список URL лендинга, зависящих от контента в БД.
+     * Сбрасывается из AppServiceProvider при сохранении контента;
+     * TTL остаётся страховкой на случай записи в обход Eloquent.
+     */
+    public const ALLOWED_URLS_CACHE_KEY = 'landing:allowed-urls';
+
+    /**
      * Get the SPA view.
      *
      * @return \Illuminate\Http\Response
@@ -206,7 +213,7 @@ class SpaController extends Controller
      */
     private function dynamicLandingUrls(): array
     {
-        return Cache::remember('landing:allowed-urls', now()->addMinutes(10), function () {
+        return Cache::remember(self::ALLOWED_URLS_CACHE_KEY, now()->addMinutes(10), function () {
             $sections = [
                 'articles-category' => ['table' => 'blog_categories',      'active' => false],
                 'questions-category' => ['table' => 'faq_categories',       'active' => false],

@@ -2,10 +2,27 @@
 
 namespace App\Providers;
 
+use App\Http\Controllers\SpaController;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
+    /**
+     * Контент, от которого зависит список URL лендинга (см. SpaController::dynamicLandingUrls).
+     * Таблицы этих моделей совпадают с теми, что читает контроллер.
+     */
+    private const LANDING_CONTENT_MODELS = [
+        \App\Models\Article::class,
+        \App\Models\Guide::class,
+        \App\Models\Knowledge::class,
+        \App\Models\Faq::class,
+        \App\Models\BlogCategory::class,
+        \App\Models\GuideCategory::class,
+        \App\Models\KnowledgeCategory::class,
+        \App\Models\FaqCategory::class,
+    ];
+
     /**
      * Register any application services.
      *
@@ -22,10 +39,20 @@ class AppServiceProvider extends ServiceProvider
         
     }
 
-    // public function boot()
-    // {
-    //     $this->warmUpCache();
-    // }
+    public function boot()
+    {
+        // Без сброса новая или снятая с публикации страница до 10 минут отдаёт
+        // не тот статус: 404 на свежей статье и 200 на снятой.
+        // Контент лендинга живёт в центральной БД, поэтому ключ здесь без tenant-префикса.
+        $forget = fn () => Cache::forget(SpaController::ALLOWED_URLS_CACHE_KEY);
+
+        foreach (self::LANDING_CONTENT_MODELS as $model) {
+            $model::saved($forget);
+            $model::deleted($forget);
+            $model::restored($forget);
+            $model::forceDeleted($forget);
+        }
+    }
 
     // protected function warmUpCache()
     // {
