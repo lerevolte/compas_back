@@ -17,6 +17,7 @@ class EntityObject
     // в information_schema — не дёргаем их повторно для одной таблицы).
     protected static $relation_tables_cache = [];
     protected static $deleted_at_columns_cache = [];
+    protected static $columns_cache = [];
 
     /**
      * Таблица, на которую смотрит relation-поле (details.table либо
@@ -42,6 +43,15 @@ class EntityObject
             self::$deleted_at_columns_cache[$table] = \Schema::hasColumn($table, 'deleted_at');
         }
         return self::$deleted_at_columns_cache[$table];
+    }
+
+    protected static function tableHasColumn(string $table, string $column): bool
+    {
+        $key = $table . '.' . $column;
+        if (!array_key_exists($key, self::$columns_cache)) {
+            self::$columns_cache[$key] = \Schema::hasColumn($table, $column);
+        }
+        return self::$columns_cache[$key];
     }
 
     /**
@@ -1244,8 +1254,10 @@ class EntityObject
             $rel_sort_parts = explode('__', $sort_field);
             $rel_sort_slug = $rel_sort_parts[1] ?? null;
             $rel_sort_field = count($rel_sort_parts) > 2 ? implode('__', array_slice($rel_sort_parts, 2)) : null;
-            if($rel_sort_slug && $rel_sort_field && isset($rel_sort_fk_map[$rel_sort_slug])) {
-                $rel_sort_fk = $rel_sort_fk_map[$rel_sort_slug];
+            $rel_sort_fk = ($rel_sort_slug && isset($rel_sort_fk_map[$rel_sort_slug])) ? $rel_sort_fk_map[$rel_sort_slug] : null;
+            if(!$rel_sort_field || !$rel_sort_fk || !self::tableHasColumn((new $entity_class)->getTable(), $rel_sort_fk)) {
+                $sort_field = 'id';
+            } else {
                 $rel_sort_name = \DB::table('data_types')->where('slug', $rel_sort_slug)->value('name') ?: $rel_sort_slug;
                 $rel_sort_model = $settings['models'][$rel_sort_name] ?? null;
                 $rel_sort_values = array();
