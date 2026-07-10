@@ -323,6 +323,8 @@ Route::group(['middleware' => ['web']], function() {
         'products/osago',
         'products/logistics',
         'products/logisticheskaya-programma',
+        'questions',
+        'questions-category',
     ];
     foreach ($retiredPaths as $path) {
         Route::redirect($path, '/', 301);
