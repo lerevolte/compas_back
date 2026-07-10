@@ -202,43 +202,6 @@ Route::group(['middleware' => ['web']], function() {
       
 
     });
-    Route::get('/sitemap_faq.xml', function () {
-        $articles = \App\Models\Faq::get();
-        $output = '';
-        $output_articles = '';
-        foreach($articles as $article) {
-            $slug = json_decode($article->slug, true);
-            if(isset($slug['value']))
-                $slug = $slug['value'];
-            else
-                $slug = $article->slug;
-            $datetime = new \DateTime($article->updated_at);
-            $lastmod = $datetime->format('Y-m-d\TH:i:sP');
-
-            $output_articles.='<url>
-                <loc>https://compas.pro/questions/'.$slug.'</loc>
-                <lastmod>'.$lastmod.'</lastmod>
-                <changefreq>monthly</changefreq>
-                <priority>0.5</priority>
-              </url>';
-        }
-        $output = "<"."?xml version=\"1.0\" encoding=\"utf-8\"?".">";
-        $output.= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-              '.$output_articles.'
-            </urlset>';
-
-        return response($output, 200, [
-            'Content-Type' => 'application/xml'
-        ]);
-
-        \File::put(public_path().'/sitemap_faq.xml', $output);
-
-        return Illuminate\Support\Facades\Response::make($output, 200);
-        
-      
-
-    });
-
     Route::get('/sitemap_knowledge.xml', function () {
         $articles = \App\Models\Knowledge::get();
         $output = '';
