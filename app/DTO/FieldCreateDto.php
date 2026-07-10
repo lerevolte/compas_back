@@ -13,7 +13,7 @@ final class FieldCreateDto
         public readonly ?string $color,
         public readonly string $type,
         public readonly ?string $unit,
-        public readonly string $button_name,
+        public readonly ?string $button_name,
         public readonly ?int $section_id,
         public readonly int $visible_always,
         public readonly int $is_external_link,
