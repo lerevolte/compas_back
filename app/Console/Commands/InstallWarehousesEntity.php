@@ -37,7 +37,7 @@ class InstallWarehousesEntity extends Command
     private array $fields = [
         'id', 'created_at', 'updated_at', 'name', 'photo', 'service_time',
         'address', 'phone', 'time', 'car_requirements', 'employee_requirements',
-        'client_id', 'user_id', 'comment', 'contact', 'weight', 'delivery_price',
+        'client_id', 'user_id', 'comment', 'contact', 'weight', 'delivery_price', 'volume',
     ];
 
     public function handle(): int
@@ -251,6 +251,7 @@ class InstallWarehousesEntity extends Command
             'contact'               => $base(['field' => 'contact', 'type' => 'text', 'title' => 'Контактное лицо', 'sort' => 51]),
             'weight'                => $base(['field' => 'weight', 'type' => 'number', 'title' => 'Вес', 'unit' => 'кг', 'sort' => 52]),
             'delivery_price'        => $base(['field' => 'delivery_price', 'type' => 'number', 'title' => 'Цена доставки', 'unit' => 'руб', 'sort' => 53]),
+            'volume'                => $base(['field' => 'volume', 'type' => 'number', 'title' => 'Объем', 'unit' => 'л', 'sort' => 54]),
         ];
     }
 
@@ -297,6 +298,7 @@ CREATE TABLE IF NOT EXISTS `warehouses` (
   `contact` text DEFAULT NULL,
   `weight` text DEFAULT NULL,
   `delivery_price` text DEFAULT NULL,
+  `volume` text DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL);

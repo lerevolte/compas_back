@@ -128,9 +128,28 @@ class ProductStatsController extends Controller
             $row['product_qty'] = $qtyById[$row['id']] ?? 0;
         }
         unset($row);
+        $rows = array_values($rows);
+
+        $sortField = $listed['sort_field'] ?? null;
+        $sortOrder = $listed['sort_order'] ?? null;
+
+        $tables = \Auth::user() && \Auth::user()->tables ? json_decode(\Auth::user()->tables, true) : null;
+        if (($tables['logistic_tasks']['sort_field'] ?? null) === 'product_qty') {
+            $savedOrder = strtolower((string) ($tables['logistic_tasks']['sort_order'] ?? 'asc'));
+            $savedOrder = in_array($savedOrder, ['asc', 'desc'], true) ? $savedOrder : 'asc';
+            usort($rows, fn ($a, $b) => $savedOrder === 'asc'
+                ? ($a['product_qty'] <=> $b['product_qty'])
+                : ($b['product_qty'] <=> $a['product_qty']));
+            $sortField = 'product_qty';
+            $sortOrder = $savedOrder;
+        }
 
         return response()->json([
-            'list'  => ['data' => array_values($rows)],
+            'list'  => [
+                'data'       => $rows,
+                'sort_field' => $sortField,
+                'sort_order' => $sortOrder,
+            ],
             'table' => $this->buildColumns(),
         ]);
     }

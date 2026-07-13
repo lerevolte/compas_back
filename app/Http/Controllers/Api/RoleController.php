@@ -233,6 +233,14 @@ class RoleController extends Controller
             \DB::table('permissions')->insert([['entity_id' => $entity_id, 'role_id' => $role->id]]);
         }
 
+        \App\Models\Settings::clear_cache();
+
+        $now = Carbon::now();
+        if(\DB::table('local_cache')->where(['url' => 'roles', 'user_id' => \Auth::user()->id])->exists())
+            \DB::table('local_cache')->where(['url' => 'roles', 'user_id' => \Auth::user()->id])->update(['updated_at' => $now]);
+        else
+            \DB::table('local_cache')->insert(['url' => 'roles', 'user_id' => \Auth::user()->id, 'created_at' => $now, 'updated_at' => $now]);
+
         // $res = Permission::whereNotNull('entity_id')->where('role_id', $role->id)->get()->keyBy('entity_id')->toArray();
         // foreach($res as $entity => $entity_permission) {
         //     $permissions[] = array(
@@ -264,6 +272,14 @@ class RoleController extends Controller
                     )
             );
         $role->delete();
+
+        \App\Models\Settings::clear_cache();
+
+        $now = Carbon::now();
+        if(\DB::table('local_cache')->where(['url' => 'roles', 'user_id' => \Auth::user()->id])->exists())
+            \DB::table('local_cache')->where(['url' => 'roles', 'user_id' => \Auth::user()->id])->update(['updated_at' => $now]);
+        else
+            \DB::table('local_cache')->insert(['url' => 'roles', 'user_id' => \Auth::user()->id, 'created_at' => $now, 'updated_at' => $now]);
 
         return response()->json(
                     array(

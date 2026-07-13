@@ -25,6 +25,9 @@ class GuideController extends Controller
             $add_params = [];
         $add_params['filter']['is_active'] = 1;
         $request->merge($add_params);
+        if (!$request->sort_field && \Schema::hasColumn('guides', 'sort')) {
+            $request->merge(['sort_field' => 'sort', 'sort_order' => 'asc']);
+        }
         $list = \App\Models\EntityObject::list('guides', $request);
 
         $categories = \App\Models\GuideCategory::get()->toTree()->toArray();

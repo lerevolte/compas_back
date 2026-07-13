@@ -891,6 +891,7 @@ class RouteController extends Controller
             'contact'               => $warehouse->contact,
             'weight'                => $warehouse->weight ?? null,
             'delivery_price'        => $warehouse->delivery_price ?? null,
+            'volume'                => $warehouse->volume ?? null,
         ];
 
         $result = $crud->batch('logistic_tasks', [$row]);
