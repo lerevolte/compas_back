@@ -552,7 +552,8 @@ class EntityObject
                             $subfield_data['can_edit'] = 0;
                         }
                         if($id && $permissions['update_p'] == 'Y' && \Auth::user() && $current->user_id != \Auth::user()->id && !$isAdmin && $slug != 'users' && \Auth::user() && \Auth::user()->id != $id ||
-                            $id && $permissions['update_p'] == 'N' && !$isAdmin) {
+                            $id && $permissions['update_p'] == 'N' && !$isAdmin ||
+                            $id && $permissions['update_p'] == 'E' && !$isAdmin && \Auth::user() && (!$current->employee_id || !\Auth::user()->employee_id || (int)$current->employee_id !== (int)\Auth::user()->employee_id)) {
                                 $subfield_data['can_edit'] = 0;
                         }
                         $val = (string)$current->{$subfield->field};
@@ -810,7 +811,8 @@ class EntityObject
                     $fields_data[$field->field]['can_edit'] = 0;
                 }
                 if($id && $permissions['update_p'] == 'Y' && $current->user_id != \Auth::user()->id && !\Auth::user()->is_admin && $slug != 'users' && \Auth::user()->id != $id ||
-                    $id && $permissions['update_p'] == 'N' && !\Auth::user()->is_admin/* || $field->field == 'payment'*/) {
+                    $id && $permissions['update_p'] == 'N' && !\Auth::user()->is_admin/* || $field->field == 'payment'*/ ||
+                    $id && $permissions['update_p'] == 'E' && !\Auth::user()->is_admin && (!$current->employee_id || !\Auth::user()->employee_id || (int)$current->employee_id !== (int)\Auth::user()->employee_id)) {
                         $fields_data[$field->field]['can_edit'] = 0;
                 }
 
@@ -1007,7 +1009,8 @@ class EntityObject
                             $subfield_data['can_edit'] = 0;
                         }
                         if($id && $permissions['update_p'] == 'Y' && $current->user_id != \Auth::user()->id && !\Auth::user()->is_admin && $slug != 'users' && \Auth::user()->id != $id ||
-                            $id && $permissions['update_p'] == 'N' && !\Auth::user()->is_admin) {
+                            $id && $permissions['update_p'] == 'N' && !\Auth::user()->is_admin ||
+                            $id && $permissions['update_p'] == 'E' && !\Auth::user()->is_admin && (!$current->employee_id || !\Auth::user()->employee_id || (int)$current->employee_id !== (int)\Auth::user()->employee_id)) {
                                 $subfield_data['can_edit'] = 0;
                         }
                         $val = (string)$current->{$subfield->field};

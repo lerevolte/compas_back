@@ -1150,16 +1150,22 @@ class Table
                         'sort' => 0
                     ],
                     [
-                        'value' => 'Y',
-                        'label' => 'Только свои',
+                        'value' => 'E',
+                        'label' => 'Сотрудник',
                         'color' => '#000',
                         'sort' => 1
+                    ],
+                    [
+                        'value' => 'Y',
+                        'label' => 'Ответственный',
+                        'color' => '#000',
+                        'sort' => 2
                     ],
                     [
                         'value' => 'A',
                         'label' => 'Есть доступ',
                         'color' => '#3C7C2B',
-                        'sort' => 2
+                        'sort' => 3
                     ]
                 ]
             ],
@@ -1237,16 +1243,22 @@ class Table
                         'sort' => 0
                     ],
                     [
-                        'value' => 'Y',
-                        'label' => 'Только свои',
+                        'value' => 'E',
+                        'label' => 'Сотрудник',
                         'color' => '#000',
                         'sort' => 1
+                    ],
+                    [
+                        'value' => 'Y',
+                        'label' => 'Ответственный',
+                        'color' => '#000',
+                        'sort' => 2
                     ],
                     [
                         'value' => 'A',
                         'label' => 'Есть доступ',
                         'color' => '#3C7C2B',
-                        'sort' => 2
+                        'sort' => 3
                     ]
                 ]
             ],
@@ -1282,7 +1294,7 @@ class Table
                     ],
                     [
                         'value' => 'Y',
-                        'label' => 'Только свои',
+                        'label' => 'Ответственный',
                         'color' => '#000',
                         'sort' => 1
                     ],

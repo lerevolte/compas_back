@@ -62,6 +62,10 @@ class ObjectController extends Controller
         if (isset($permissions['read_p']) && $permissions['read_p'] === 'Y' && !$user->is_admin) {
             $request->merge(['filter' => array_merge($request->input('filter', []), ['user_id' => $user->id])]);
         }
+        if (isset($permissions['read_p']) && $permissions['read_p'] === 'E' && !$user->is_admin
+            && \Schema::hasColumn($slug, 'employee_id')) {
+            $request->merge(['filter' => array_merge($request->input('filter', []), ['employee_id' => $user->employee_id ?: -1])]);
+        }
 
         // 4. Получение списка объектов
         $list = EntityObject::list($slug, $request);
@@ -129,6 +133,15 @@ class ObjectController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
+        if ($user && !$user->is_admin && $id && $id !== '0'
+            && isset($permissions['read_p']) && $permissions['read_p'] === 'E'
+            && \Schema::hasColumn($slug, 'employee_id')) {
+            $employeeId = DB::table($slug)->where('id', $id)->value('employee_id');
+            if (!$employeeId || !$user->employee_id || (int) $employeeId !== (int) $user->employee_id) {
+                return response()->json(['message' => 'Forbidden'], 403);
+            }
+        }
+
         // 2. Параметры запроса
         if ($user && isset($permissions['read_p']) && $permissions['read_p'] === 'Y' && !$user->is_admin) {
             $request->merge(['user_id' => $user->id]);
@@ -164,6 +177,12 @@ class ObjectController extends Controller
                         ? DB::table($slug)->where('id', $id)->value('user_id')
                         : null;
                     $canUpdate = $ownerId !== null && (int) $ownerId === (int) $user->id;
+                } elseif ($up === 'E') {
+                    $employeeId = \Schema::hasColumn($slug, 'employee_id')
+                        ? DB::table($slug)->where('id', $id)->value('employee_id')
+                        : null;
+                    $canUpdate = $employeeId !== null && $user->employee_id !== null
+                        && (int) $employeeId === (int) $user->employee_id;
                 }
             }
             if (!$canUpdate) {
@@ -375,6 +394,18 @@ class ObjectController extends Controller
                     $owner = DB::table($slug)->where('id', $row['id'])->value('user_id');
                     if ($owner !== null && (int) $owner !== (int) $user->id) {
                         return response()->json(['message' => 'Можно редактировать только свои записи'], 403);
+                    }
+                }
+            }
+            if ($hasUpdate && isset($perms['update_p']) && $perms['update_p'] === 'E'
+                && \Schema::hasColumn($slug, 'employee_id')) {
+                foreach (($request->rows ?? []) as $row) {
+                    if (empty($row['id']) || !empty($row['copy'])) {
+                        continue;
+                    }
+                    $employeeId = DB::table($slug)->where('id', $row['id'])->value('employee_id');
+                    if (!$employeeId || !$user->employee_id || (int) $employeeId !== (int) $user->employee_id) {
+                        return response()->json(['message' => 'Можно редактировать только записи своего сотрудника'], 403);
                     }
                 }
             }

@@ -515,8 +515,23 @@ class RouteController extends Controller
             }
         }
 
-        if (!$colorValue && $route->color) {
-            $colorValue = \DB::table('field_values')->where('id', $route->color)->value('color');
+        if (!$colorValue && $route->employee_id && \Schema::hasColumn('employees', 'color_status')) {
+            $employeeId = $route->employee_id;
+            if (is_string($employeeId) && ValueHelper::isJson($employeeId)) {
+                $decoded = json_decode($employeeId, true);
+                $employeeId = is_array($decoded) ? ($decoded[0] ?? null) : $employeeId;
+            }
+            if (is_array($employeeId)) {
+                $employeeId = $employeeId[0] ?? null;
+            }
+            if ($employeeId) {
+                $empColor = \DB::table('employees')->where('id', $employeeId)->value('color_status');
+                if ($empColor && is_numeric($empColor)) {
+                    $colorValue = \DB::table('field_values')->where('id', $empColor)->value('color');
+                } elseif (is_string($empColor) && $empColor !== '') {
+                    $colorValue = $empColor;
+                }
+            }
         }
 
         return response()->json([
