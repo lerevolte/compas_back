@@ -252,9 +252,9 @@ class SyncLogisticModuleFields extends Command
     {
         $logisticChild = ['title' => 'Логистика', 'sort' => 1, 'enabled' => 1, 'id' => 0, 'alias' => 'logistic'];
 
-        $menu = $db->table('settings')->where(['type' => 'menu', 'entity' => $slug])->first();
+        $menus = $db->table('settings')->where(['type' => 'menu', 'entity' => $slug])->get();
 
-        if (!$menu) {
+        if ($menus->isEmpty()) {
             $db->table('settings')->insert([
                 'key' => 'menu', 'display_name' => null,
                 'value' => json_encode([
@@ -272,51 +272,53 @@ class SyncLogisticModuleFields extends Command
             return;
         }
 
-        $tabs = json_decode($menu->value, true);
-        if (!is_array($tabs)) {
-            $tabs = [];
-        }
-
-        $modulesKey = null;
-        foreach ($tabs as $k => $tab) {
-            if (($tab['tab'] ?? null) === 'modules') {
-                $modulesKey = $k;
-                break;
+        foreach ($menus as $menu) {
+            $tabs = json_decode($menu->value, true);
+            if (!is_array($tabs)) {
+                $tabs = [];
             }
-        }
 
-        if ($modulesKey === null) {
-            $maxSort = 0;
-            $maxId = 0;
-            foreach ($tabs as $tab) {
-                $maxSort = max($maxSort, (int) ($tab['sort'] ?? 0));
-                $maxId = max($maxId, (int) ($tab['id'] ?? 0));
-            }
-            $tabs[] = [
-                'title' => 'Модули', 'tab' => 'modules', 'sort' => $maxSort + 1, 'enabled' => 1, 'id' => $maxId + 1,
-                'childs' => [$logisticChild],
-                'component' => ['name' => 'AsyncComponentWrapper'],
-                'roles_read' => [], 'has_roles_read' => false,
-            ];
-        } else {
-            $tabs[$modulesKey]['enabled'] = 1;
-            $childs = $tabs[$modulesKey]['childs'] ?? [];
-            $hasLogistic = false;
-            foreach ($childs as $ck => $child) {
-                if (($child['alias'] ?? null) === 'logistic') {
-                    $childs[$ck]['enabled'] = 1;
-                    $hasLogistic = true;
+            $modulesKey = null;
+            foreach ($tabs as $k => $tab) {
+                if (($tab['tab'] ?? null) === 'modules') {
+                    $modulesKey = $k;
+                    break;
                 }
             }
-            if (!$hasLogistic) {
-                $childs[] = $logisticChild;
-            }
-            $tabs[$modulesKey]['childs'] = array_values($childs);
-        }
 
-        $db->table('settings')->where('id', $menu->id)->update([
-            'value' => json_encode($tabs, JSON_UNESCAPED_SLASHES),
-        ]);
+            if ($modulesKey === null) {
+                $maxSort = 0;
+                $maxId = 0;
+                foreach ($tabs as $tab) {
+                    $maxSort = max($maxSort, (int) ($tab['sort'] ?? 0));
+                    $maxId = max($maxId, (int) ($tab['id'] ?? 0));
+                }
+                $tabs[] = [
+                    'title' => 'Модули', 'tab' => 'modules', 'sort' => $maxSort + 1, 'enabled' => 1, 'id' => $maxId + 1,
+                    'childs' => [$logisticChild],
+                    'component' => ['name' => 'AsyncComponentWrapper'],
+                    'roles_read' => [], 'has_roles_read' => false,
+                ];
+            } else {
+                $tabs[$modulesKey]['enabled'] = 1;
+                $childs = $tabs[$modulesKey]['childs'] ?? [];
+                $hasLogistic = false;
+                foreach ($childs as $ck => $child) {
+                    if (($child['alias'] ?? null) === 'logistic') {
+                        $childs[$ck]['enabled'] = 1;
+                        $hasLogistic = true;
+                    }
+                }
+                if (!$hasLogistic) {
+                    $childs[] = $logisticChild;
+                }
+                $tabs[$modulesKey]['childs'] = array_values($childs);
+            }
+
+            $db->table('settings')->where('id', $menu->id)->update([
+                'value' => json_encode($tabs, JSON_UNESCAPED_SLASHES),
+            ]);
+        }
     }
 
     private function ensureLogisticModuleRow(ConnectionInterface $db, string $label, $now): void
