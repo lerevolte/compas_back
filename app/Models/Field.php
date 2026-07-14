@@ -155,7 +155,14 @@ class Field extends Model
         return $field_values;
     }
 
-    public static function getStatusesWithHidden(int $field_id) 
+    public static function getDefaultStatusValue(int $field_id)
+    {
+        $first = collect(self::getStatusesVisible($field_id))->first();
+
+        return $first->id ?? null;
+    }
+
+    public static function getStatusesWithHidden(int $field_id)
     {
         $field_values = \DB::table('field_values')->orderBy('is_hidden', 'asc')->orderBy('sort')->where('field_id', $field_id)->get();
 

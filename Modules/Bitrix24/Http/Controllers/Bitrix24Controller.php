@@ -532,6 +532,23 @@ class Bitrix24Controller extends Controller
                     $task->{$dr->field} = $dr->default_value;
                 }
             }
+
+            $statusRows = \DB::table('data_rows')
+                ->whereIn('data_type_id', function ($q) {
+                    $q->select('id')->from('data_types')->where('slug', 'logistic_tasks');
+                })
+                ->where('type', 'status')
+                ->where('is_remove', 0)
+                ->get(['id', 'field']);
+            foreach ($statusRows as $sr) {
+                if (($task->{$sr->field} === null || $task->{$sr->field} === '')
+                    && \Schema::hasColumn('logistic_tasks', $sr->field)) {
+                    $defaultStatus = \App\Models\Field::getDefaultStatusValue($sr->id);
+                    if ($defaultStatus) {
+                        $task->{$sr->field} = $defaultStatus;
+                    }
+                }
+            }
         }
 
         // История изменений — как при обычной работе с объектом через UI

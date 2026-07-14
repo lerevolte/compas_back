@@ -340,14 +340,7 @@ class ObjectController extends Controller
         // Получаем permissions только если есть ID типа данных
         $permissions = [];
         if ($dataTypeId && $user) {
-            $permissions = $user->role->permissions()
-                ->select(['read_p', 'create_p', 'update_p', 'delete_p', 'export_p', 'import_p'])
-                ->where('entity_id', $dataTypeId)
-                ->first();
-             
-             if ($permissions) {
-                 $permissions = $permissions->toArray();
-             }
+            $permissions = $this->getPermissions($user, $slug, $dataTypeId);
         }
 
         // Связанные сущности модуля
@@ -605,6 +598,17 @@ class ObjectController extends Controller
      */
     private function getPermissions($user, $slug, $dataTypeId = null): array
     {
+        if ($user && $user->is_admin) {
+            return [
+                'read_p'   => 'A',
+                'create_p' => 'A',
+                'update_p' => 'A',
+                'delete_p' => 'A',
+                'export_p' => 'A',
+                'import_p' => 'A',
+            ];
+        }
+
         if (!$dataTypeId) {
             $dataType = DB::table('data_types')->where('slug', $slug)->first();
             if (!$dataType) return [];

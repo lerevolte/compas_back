@@ -444,8 +444,15 @@ class CrudService
                     $ob->{$field} = $value;
                 }
             }
+            foreach($model_fields as $mf) {
+                if($mf->type == 'status' && ($ob->{$mf->field} === null || $ob->{$mf->field} === '')) {
+                    $default_status = \App\Models\Field::getDefaultStatusValue($mf->id);
+                    if($default_status)
+                        $ob->{$mf->field} = $default_status;
+                }
+            }
             if(!$ob->name) {
-                
+
                 $ob->name = $entity->title_singular.' #'.$ob->id;
             }
             if(in_array($ob->id, $copied_ids)) {
