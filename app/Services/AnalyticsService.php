@@ -1220,10 +1220,10 @@ class AnalyticsService
         $groupBy = $request->input('group_by');
 
         $tasks = DB::table('logistic_tasks')
-            ->select($dateField, 'point_status')
-            ->whereNotNull('route_id')
-            ->whereBetween($dateField, [$periodStart, $periodEnd])
-            ->orderBy($dateField)
+            ->join('routes', 'routes.id', '=', 'logistic_tasks.route_id')
+            ->select('routes.date as delivery_date', 'logistic_tasks.point_status')
+            ->whereBetween('routes.date', [$periodStart, $periodEnd])
+            ->orderBy('routes.date')
             ->get();
 
         if ($groupBy === 'all') {

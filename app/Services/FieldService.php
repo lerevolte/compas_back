@@ -432,8 +432,11 @@ class FieldService
                         unset($field_values[$status['value']]);
                     }
                 }
-                if(count($field_values)) {
-                    \DB::table('field_values')->whereIn('id', array_keys($field_values))->delete();
+                $removedIds = array_keys(array_filter($field_values, function($value) {
+                    return !$value->is_hidden;
+                }));
+                if(count($removedIds)) {
+                    \DB::table('field_values')->whereIn('id', $removedIds)->delete();
                 }
             }
                 
