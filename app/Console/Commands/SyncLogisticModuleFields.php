@@ -169,16 +169,20 @@ class SyncLogisticModuleFields extends Command
                 ->get(['id', 'field', 'title', 'module', 'module_section_id']);
 
             $attached = 0;
+            $orderedIds = [];
             foreach ($specs as $spec) {
                 $row = $this->matchRow($rows, $spec);
                 if (!$row) {
                     $this->warn("    [{$label}] {$slug}: поле не найдено — ".implode('/', $spec['titles'])." (".implode('/', $spec['fields']).")");
                     continue;
                 }
+                $orderedIds[] = $row->id;
                 if ($this->attachToModule($db, $row, $sectionId)) {
                     $attached++;
                 }
             }
+
+            $this->syncSectionSort($db, $sectionId, $orderedIds);
 
             $this->syncMenu($db, $slug);
 
@@ -234,6 +238,29 @@ class SyncLogisticModuleFields extends Command
         }
 
         return $changed;
+    }
+
+    private function syncSectionSort(ConnectionInterface $db, int $sectionId, array $orderedIds): void
+    {
+        if (!$orderedIds) {
+            return;
+        }
+
+        $extras = $db->table('data_rows')
+            ->whereJsonContains('module_section_id', $sectionId)
+            ->where('is_remove', 0)
+            ->whereNotIn('id', $orderedIds)
+            ->orderBy('sort')
+            ->pluck('id')
+            ->toArray();
+
+        $db->table('section_fields_sort')->where('section_id', $sectionId)->delete();
+
+        $insert = [];
+        foreach (array_merge($orderedIds, $extras) as $i => $fieldId) {
+            $insert[] = ['section_id' => $sectionId, 'field_id' => $fieldId, 'sort' => $i];
+        }
+        $db->table('section_fields_sort')->insert($insert);
     }
 
     private function decodeJsonList($value): array
