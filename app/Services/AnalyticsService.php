@@ -1214,47 +1214,21 @@ class AnalyticsService
 
     protected function logisticsOrderStatsLogic(Request $request)
     {
-        $dateField = 'delivery_date';
         $periodStart = $request->period['start'] ?? now()->subMonth()->format('Y-m-d');
         $periodEnd = $request->period['end'] ?? now()->format('Y-m-d');
-        $groupBy = $request->input('group_by');
 
         $tasks = DB::table('logistic_tasks')
             ->join('routes', 'routes.id', '=', 'logistic_tasks.route_id')
-            ->select('routes.date as delivery_date', 'logistic_tasks.point_status')
+            ->select('routes.date as delivery_date')
             ->whereBetween('routes.date', [$periodStart, $periodEnd])
             ->orderBy('routes.date')
             ->get();
 
-        if ($groupBy === 'all') {
-            return [
-                'legend' => [[
-                    'name' => 'Все заказы',
-                    'sum' => $tasks->count(),
-                    'data' => [['Всего', $tasks->count()]],
-                    'id' => 'total_all'
-                ]]
-            ];
-        }
+        $data = $tasks->groupBy(function ($item) {
+            return Carbon::parse($item->delivery_date)->format('Y-m-d H:i');
+        });
 
-        $grouped = $tasks->groupBy('point_status');
-        $legend = [];
-
-        foreach ($grouped as $status => $items) {
-            $data = $items->groupBy(function ($item) use ($dateField) {
-                return Carbon::parse($item->$dateField)->format('Y-m-d H:i');
-            });
-
-            $legend[] = [
-                'name' => $status,
-                'data' => $data->map(function ($group) use ($dateField) {
-                    return [$group->first()->$dateField, $group->count()];
-                })->values()->toArray(),
-                'sum' => $items->count(),
-                'id' => $status
-            ];
-        }
-        return ['legend' => $legend];
+        return $this->formatLogisticsResponse('Все заказы', $data, 'count', $request);
     }
 
     protected function logisticsRouteMetricLogic(Request $request, $field, $title, $dateField)
