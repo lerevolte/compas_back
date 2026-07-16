@@ -206,6 +206,8 @@ class CrudService
                         $new_relations[$row['id']] = array('field' => $field, 'entities' => array());
                     $rel = $ob->{$relation_table};
                     $old_relations[$row['id']]['entities'][$relation_table] = $rel ? $rel->pluck('id')->toArray() : [];
+                    if(!is_array($value))
+                        $value = $value === null || $value === '' ? [] : [$value];
                     $new_relations[$row['id']]['entities'][$relation_table] = array_filter($value, 'is_int');
                 }
                 
@@ -348,6 +350,8 @@ class CrudService
                     if (!method_exists($ob, $relation_table)) {
                         continue;
                     }
+                    if(!is_array($value))
+                        $value = $value === null || $value === '' ? [] : [$value];
                     $new_values = array_filter($value, 'is_int');
 
                     foreach($new_values as $nv) {
