@@ -130,6 +130,10 @@ class Route extends Model
                 $ids = array_values(array_map('intval', array_filter($model->employee_id, 'is_numeric')));
                 $model->employee_id = json_encode($ids);
             }
+            $mileageRaw = str_replace(',', '.', trim((string) $model->mileage));
+            if ($mileageRaw !== '' && is_numeric($mileageRaw)) {
+                $model->mileage = (string) (int) round((float) $mileageRaw);
+            }
             if (!$model->exists || $model->isDirty('car_id') || $model->isDirty('mileage')) {
                 $model->mileage_cost = $model->computeMileageCost();
             }

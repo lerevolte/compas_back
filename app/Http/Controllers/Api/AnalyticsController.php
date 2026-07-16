@@ -231,7 +231,7 @@ class AnalyticsController extends Controller
             'order_stats' => $orderStats,
             'total_orders' => $tasks->count(),
             'car_count' => $routes->count(),
-            'mileage' => $routes->sum('mileage'),
+            'mileage' => (int) round($routes->sum('mileage')),
             'duration' => $routes->sum('time'),
             'reserve_for_delivery' => $routes->sum('reserve_for_delivery'),
             'delivery_price' => $routes->sum('delivery_price'),

@@ -682,7 +682,7 @@ class RouteController extends Controller
                 
                 $osrm = json_decode($data, true);
                 if ($osrm && $osrm['code'] === 'Ok' && isset($osrm['routes'][0])) {
-                    $route->mileage = round($osrm['routes'][0]['distance'] / 1000, 1);
+                    $route->mileage = (int) round($osrm['routes'][0]['distance'] / 1000);
                     $route->time = round($osrm['routes'][0]['duration'] * self::TRAFFIC_COEFFICIENT / 60) + $totalServiceTime; // driving (с поправкой на пробки) + service
                 }
             } catch (\Exception $e) {
