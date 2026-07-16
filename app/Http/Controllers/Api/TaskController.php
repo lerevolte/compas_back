@@ -19,6 +19,14 @@ class TaskController extends Controller
         info('set produts');
         info($id);
         info($request->products);
+        $user = Auth::user();
+        if (!$user || !$user->is_admin) {
+            $settings = app('settings');
+            $perms = $settings['logistic_tasks']['perms']['products'] ?? null;
+            if (!$user || ($perms && (!$perms['read'] || !$perms['write']))) {
+                return response()->json(['message' => 'Нет прав на изменение состава'], 403);
+            }
+        }
         $products = array();
         foreach ($request->products as $product) {
             $products[] = array(

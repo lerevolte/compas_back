@@ -100,6 +100,9 @@ class Menu
                 unset($menu[$k]);
             } elseif(isset($menu_item['has_roles_read']) && $menu_item['has_roles_read'] && isset($menu_item['roles_read']) && count($menu_item['roles_read']) && !in_array($user->role_id, $menu_item['roles_read']) && !$user->is_admin) {
                 unset($menu[$k]);
+            } elseif($slug == 'logistic_tasks' && isset($menu_item['tab']) && $menu_item['tab'] == 'products' && !$user->is_admin
+                && isset($s['logistic_tasks']['perms']['products']['read']) && !$s['logistic_tasks']['perms']['products']['read']) {
+                unset($menu[$k]);
             } elseif(isset($menu_item['tab']) && $menu_item['tab'] == 'modules') {
                 foreach($menu_item['childs'] as $i => $child) {
                     if(!isset($s['modules'][$child['alias']]) || !$s['modules'][$child['alias']]->enabled)

@@ -83,6 +83,16 @@ class Employee extends Model
         return $this->belongsToMany(Car::class, 'car_employee');
     }
 
+    public function routes()
+    {
+        return $this->belongsToMany(Route::class, 'route_employee');
+    }
+
+    public function logistic_tasks()
+    {
+        return $this->belongsToMany(Task::class, 'logistic_task_employee', 'employee_id', 'logistic_task_id');
+    }
+
     public function users()
     {
         return $this->hasMany(User::class, 'employee_id');

@@ -173,11 +173,11 @@ class MapController extends Controller
         $routesForJs = $routesFromDb->map(function ($route) use ($validatedDate, $radius) {
 
             $actualPathData = [];
-            if ($route->employee_id) {
+            $routeEmployeeId = $route->firstEmployeeId();
+            if ($routeEmployeeId) {
                 $factDate = Carbon::parse($validatedDate)->format('d.m.Y');
 
-                // Теперь получаем не только координаты, но и скорость со временем
-                $actualPathData = FactRoute::where('user_id', $route->employee_id)
+                $actualPathData = FactRoute::where('user_id', $routeEmployeeId)
                     ->where('date', $factDate)
                     ->orderBy('time', 'asc')
                     ->get(['latitude', 'longitude', 'speed', 'time']) // Получаем нужные поля
@@ -215,7 +215,7 @@ class MapController extends Controller
             $allTasksForRoute = $tasksForJs;
             //dd($allTasksForRoute);
             $analysisService = new RouteAnalysisService($allTasksForRoute->toArray(), $radius);
-            $analysisResult = $analysisService->analyze($route->employee_id, Carbon::parse($validatedDate)->format('d.m.Y'));
+            $analysisResult = $analysisService->analyze($routeEmployeeId, Carbon::parse($validatedDate)->format('d.m.Y'));
 
             return [
                 'id' => $route->id,

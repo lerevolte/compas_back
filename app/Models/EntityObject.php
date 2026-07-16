@@ -133,6 +133,42 @@ class EntityObject
         ];
     }
 
+    public static function currentEmployeeMatch($current): bool
+    {
+        $user = \Auth::user();
+        if (!$user || !$user->employee_id || !$current) {
+            return false;
+        }
+        $userEmployeeId = (int) $user->employee_id;
+        if (is_object($current) && method_exists($current, 'employees')) {
+            try {
+                if ($current->employees()->where('employees.id', $userEmployeeId)->exists()) {
+                    return true;
+                }
+            } catch (\Throwable $e) {}
+        }
+        $raw = is_object($current) ? ($current->employee_id ?? null) : null;
+        if ($raw === null || $raw === '') {
+            return false;
+        }
+        if (is_numeric($raw)) {
+            return (int) $raw === $userEmployeeId;
+        }
+        $decoded = json_decode((string) $raw, true);
+        if (!is_array($decoded)) {
+            return false;
+        }
+        if (array_key_exists('value', $decoded)) {
+            $decoded = is_array($decoded['value']) ? $decoded['value'] : [$decoded['value']];
+        }
+        foreach ($decoded as $v) {
+            if (is_numeric($v) && (int) $v === $userEmployeeId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static function detail($slug, $id, Request $request, $settings = null)
     {
         $settings = $settings ?: app('settings');
@@ -315,6 +351,10 @@ class EntityObject
                 $field_value = ValueHelper::isJson($val) && $field->field != 'products' && is_array(json_decode($val, true))
                     ? json_decode($val, true)
                     : $val;
+
+                if ($slug == 'logistic_tasks' && $field->field == 'products' && method_exists($current, 'getHtmlProducts')) {
+                    $field_value = $current->getHtmlProducts();
+                }
 
                 if ($field->type == 'relation' && $field->is_plural && $field->relation_table) {
                     $relation_table = $field->relation_table;
@@ -553,7 +593,7 @@ class EntityObject
                         }
                         if($id && $permissions['update_p'] == 'Y' && \Auth::user() && $current->user_id != \Auth::user()->id && !$isAdmin && $slug != 'users' && \Auth::user() && \Auth::user()->id != $id ||
                             $id && $permissions['update_p'] == 'N' && !$isAdmin ||
-                            $id && $permissions['update_p'] == 'E' && !$isAdmin && \Auth::user() && (!$current->employee_id || !\Auth::user()->employee_id || (int)$current->employee_id !== (int)\Auth::user()->employee_id)) {
+                            $id && $permissions['update_p'] == 'E' && !$isAdmin && \Auth::user() && !self::currentEmployeeMatch($current)) {
                                 $subfield_data['can_edit'] = 0;
                         }
                         $val = (string)$current->{$subfield->field};
@@ -812,7 +852,7 @@ class EntityObject
                 }
                 if($id && $permissions['update_p'] == 'Y' && $current->user_id != \Auth::user()->id && !\Auth::user()->is_admin && $slug != 'users' && \Auth::user()->id != $id ||
                     $id && $permissions['update_p'] == 'N' && !\Auth::user()->is_admin/* || $field->field == 'payment'*/ ||
-                    $id && $permissions['update_p'] == 'E' && !\Auth::user()->is_admin && (!$current->employee_id || !\Auth::user()->employee_id || (int)$current->employee_id !== (int)\Auth::user()->employee_id)) {
+                    $id && $permissions['update_p'] == 'E' && !\Auth::user()->is_admin && !self::currentEmployeeMatch($current)) {
                         $fields_data[$field->field]['can_edit'] = 0;
                 }
 
@@ -1010,7 +1050,7 @@ class EntityObject
                         }
                         if($id && $permissions['update_p'] == 'Y' && $current->user_id != \Auth::user()->id && !\Auth::user()->is_admin && $slug != 'users' && \Auth::user()->id != $id ||
                             $id && $permissions['update_p'] == 'N' && !\Auth::user()->is_admin ||
-                            $id && $permissions['update_p'] == 'E' && !\Auth::user()->is_admin && (!$current->employee_id || !\Auth::user()->employee_id || (int)$current->employee_id !== (int)\Auth::user()->employee_id)) {
+                            $id && $permissions['update_p'] == 'E' && !\Auth::user()->is_admin && !self::currentEmployeeMatch($current)) {
                                 $subfield_data['can_edit'] = 0;
                         }
                         $val = (string)$current->{$subfield->field};

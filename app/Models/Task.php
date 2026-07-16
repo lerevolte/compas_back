@@ -27,6 +27,14 @@ class Task extends Model
                 $model->user_id = $user->id;
        });
 
+       static::saving(function($model)
+       {
+            if (is_array($model->employee_id)) {
+                $ids = array_values(array_map('intval', array_filter($model->employee_id, 'is_numeric')));
+                $model->employee_id = json_encode($ids);
+            }
+       });
+
        // Задача создаётся/привязывается к маршруту — подтягиваем дату
        // маршрута в delivery_date. Срабатывает и на create, и на update,
        // т.к. для нового объекта isDirty('route_id') == true. Обратная
@@ -164,6 +172,11 @@ class Task extends Model
     public function clients()
     {
         return $this->belongsToMany(Client::class, 'logistic_task_client');
+    }
+
+    public function employees()
+    {
+        return $this->belongsToMany(Employee::class, 'logistic_task_employee', 'logistic_task_id', 'employee_id');
     }
 
     public function setProducts(array $products)

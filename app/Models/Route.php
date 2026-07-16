@@ -49,17 +49,17 @@ class Route extends Model
                     if (!$car) $car = $extractId($request->input('car_id'));
                     if ($car) $model->car_id = (int) $car;
                 }
-                if (!$model->employee_id) {
+                if (!$model->employee_id || $model->employee_id === '[]') {
                     $emp = $row && isset($row['employee_id']) ? $extractId($row['employee_id']) : null;
                     if (!$emp) $emp = $extractId($request->input('employee_id'));
-                    if ($emp) $model->employee_id = (int) $emp;
+                    if ($emp) $model->employee_id = json_encode([(int) $emp]);
                 }
             }
 
             if (!$model->company_id) {
                 // 1. Пытаемся взять из сотрудника
-                if ($model->employee_id) {
-                    $employee = Employee::find($model->employee_id);
+                if ($model->firstEmployeeId()) {
+                    $employee = Employee::find($model->firstEmployeeId());
                     if ($employee && $employee->company_id) {
                         $model->company_id = $employee->company_id;
                     }
@@ -114,11 +114,9 @@ class Route extends Model
 
             // 3. Привязка сотрудника: копируем requirements из Employee в employee_requirements Маршрута
             if ($model->isDirty('employee_id')) {
-                if ($model->employee_id) {
-                    $employee = Employee::find($model->employee_id);
-                    if ($employee) {
-                        $model->employee_requirements = $employee->requirements;
-                    }
+                $employee = $model->firstEmployeeId() ? Employee::find($model->firstEmployeeId()) : null;
+                if ($employee) {
+                    $model->employee_requirements = $employee->requirements;
                 } else {
                     $model->employee_requirements = null;
                 }
@@ -128,10 +126,59 @@ class Route extends Model
 
         static::saving(function($model)
         {
+            if (is_array($model->employee_id)) {
+                $ids = array_values(array_map('intval', array_filter($model->employee_id, 'is_numeric')));
+                $model->employee_id = json_encode($ids);
+            }
             if (!$model->exists || $model->isDirty('car_id') || $model->isDirty('mileage')) {
                 $model->mileage_cost = $model->computeMileageCost();
             }
         });
+    }
+
+    public function employeeIds(): array
+    {
+        $raw = $this->employee_id;
+        if (is_array($raw)) {
+            $decoded = $raw;
+        } elseif (is_numeric($raw)) {
+            return (int) $raw ? [(int) $raw] : [];
+        } elseif (is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (!is_array($decoded)) {
+                return [];
+            }
+            if (array_key_exists('value', $decoded)) {
+                $decoded = is_array($decoded['value']) ? $decoded['value'] : [$decoded['value']];
+            }
+        } else {
+            return [];
+        }
+        $ids = [];
+        foreach ($decoded as $v) {
+            if (is_numeric($v) && (int) $v) {
+                $ids[] = (int) $v;
+            }
+        }
+        return $ids;
+    }
+
+    public function firstEmployeeId(): ?int
+    {
+        $ids = $this->employeeIds();
+        if (count($ids)) {
+            return $ids[0];
+        }
+        if ($this->exists && \Schema::hasTable('route_employee')) {
+            $id = \DB::table('route_employee')->where('route_id', $this->id)->value('employee_id');
+            return $id ? (int) $id : null;
+        }
+        return null;
+    }
+
+    public function employees()
+    {
+        return $this->belongsToMany(Employee::class, 'route_employee');
     }
 
     public function computeMileageCost()
@@ -252,7 +299,7 @@ class Route extends Model
     public function getTaskFilters()
     {
         $car = $this->car;
-        $employee = $this->employee;
+        $employee = $this->firstEmployeeId() ? Employee::find($this->firstEmployeeId()) : $this->employees()->first();
         $settings = get_settings();
 
         // Требования берём с привязанной машины/сотрудника (как вес/объём —

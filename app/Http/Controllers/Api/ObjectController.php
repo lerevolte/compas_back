@@ -63,7 +63,7 @@ class ObjectController extends Controller
             $request->merge(['filter' => array_merge($request->input('filter', []), ['user_id' => $user->id])]);
         }
         if (isset($permissions['read_p']) && $permissions['read_p'] === 'E' && !$user->is_admin
-            && \Schema::hasColumn($slug, 'employee_id')) {
+            && $this->hasEmployeeBinding($slug)) {
             $request->merge(['filter' => array_merge($request->input('filter', []), ['employee_id' => $user->employee_id ?: -1])]);
         }
 
@@ -135,9 +135,8 @@ class ObjectController extends Controller
 
         if ($user && !$user->is_admin && $id && $id !== '0'
             && isset($permissions['read_p']) && $permissions['read_p'] === 'E'
-            && \Schema::hasColumn($slug, 'employee_id')) {
-            $employeeId = DB::table($slug)->where('id', $id)->value('employee_id');
-            if (!$employeeId || !$user->employee_id || (int) $employeeId !== (int) $user->employee_id) {
+            && $this->hasEmployeeBinding($slug)) {
+            if (!$this->isUserEmployeeObject($slug, $id, $user)) {
                 return response()->json(['message' => 'Forbidden'], 403);
             }
         }
@@ -178,11 +177,8 @@ class ObjectController extends Controller
                         : null;
                     $canUpdate = $ownerId !== null && (int) $ownerId === (int) $user->id;
                 } elseif ($up === 'E') {
-                    $employeeId = \Schema::hasColumn($slug, 'employee_id')
-                        ? DB::table($slug)->where('id', $id)->value('employee_id')
-                        : null;
-                    $canUpdate = $employeeId !== null && $user->employee_id !== null
-                        && (int) $employeeId === (int) $user->employee_id;
+                    $canUpdate = $this->hasEmployeeBinding($slug)
+                        && $this->isUserEmployeeObject($slug, $id, $user);
                 }
             }
             if (!$canUpdate) {
@@ -289,11 +285,20 @@ class ObjectController extends Controller
         // 4. Дополнительные данные (продукты, история)
         $products = [];
         $tableKeys = [];
-        
+
         if ($slug === 'logistic_tasks') {
-            $tableKeys = Table::get_order_products();
-            if ($id) {
-                $products = EntityObject::list('products', new Request(['order_id' => $id]));
+            $productsPerms = $this->getProductsFieldPerms($user, $entity->id, $isExternalAccess);
+            if ($productsPerms['read']) {
+                $tableKeys = Table::get_order_products();
+                if (!$productsPerms['write']) {
+                    foreach ($tableKeys as $tk => $tableKey) {
+                        $tableKeys[$tk]['read_only'] = 1;
+                        $tableKeys[$tk]['can_edit'] = 0;
+                    }
+                }
+                if ($id) {
+                    $products = EntityObject::list('products', new Request(['order_id' => $id]));
+                }
             }
         }
 
@@ -327,17 +332,27 @@ class ObjectController extends Controller
             return response()->json(['message' => $detail['error']['message']], $detail['error']['code']);
         }
 
-        // Данные для specific cases
+        $user = Auth::user();
+        $dataTypeId = DB::table('data_types')->where('slug', $slug)->value('id');
+
         $products = [];
+        $tableKeys = [];
         if ($slug === 'logistic_tasks') {
-            $products = EntityObject::list('products', new Request(['order_id' => $id]));
+            $productsPerms = $this->getProductsFieldPerms($user, $dataTypeId, !$user);
+            if ($productsPerms['read']) {
+                $products = EntityObject::list('products', new Request(['order_id' => $id]));
+                $tableKeys = Table::get_order_products();
+                if (!$productsPerms['write']) {
+                    foreach ($tableKeys as $tk => $tableKey) {
+                        $tableKeys[$tk]['read_only'] = 1;
+                        $tableKeys[$tk]['can_edit'] = 0;
+                    }
+                }
+            }
+        } else {
+            $tableKeys = Table::get_order_products();
         }
 
-        // Проверка прав (используем уже существующего юзера из Auth)
-        $user = Auth::user();
-        $dataTypeId = DB::table('data_types')->where('slug', $slug)->value('id'); // Используем value для оптимизации
-        
-        // Получаем permissions только если есть ID типа данных
         $permissions = [];
         if ($dataTypeId && $user) {
             $permissions = $this->getPermissions($user, $slug, $dataTypeId);
@@ -345,11 +360,11 @@ class ObjectController extends Controller
 
         // Связанные сущности модуля
         $moduleModel = Module::where('slug', $module)->firstOrFail();
-        
+
         return response()->json([
             'detail'           => $detail,
             'products'         => $products,
-            'table'            => Table::get_order_products(),
+            'table'            => $tableKeys,
             'history_events'   => History::list($slug, $id, $module, new Request(['filter' => 'events'])),
             'history_fields'   => History::list($slug, $id, $module),
             'menu'             => Menu::get($slug),
@@ -391,13 +406,12 @@ class ObjectController extends Controller
                 }
             }
             if ($hasUpdate && isset($perms['update_p']) && $perms['update_p'] === 'E'
-                && \Schema::hasColumn($slug, 'employee_id')) {
+                && $this->hasEmployeeBinding($slug)) {
                 foreach (($request->rows ?? []) as $row) {
                     if (empty($row['id']) || !empty($row['copy'])) {
                         continue;
                     }
-                    $employeeId = DB::table($slug)->where('id', $row['id'])->value('employee_id');
-                    if (!$employeeId || !$user->employee_id || (int) $employeeId !== (int) $user->employee_id) {
+                    if (!$this->isUserEmployeeObject($slug, $row['id'], $user)) {
                         return response()->json(['message' => 'Можно редактировать только записи своего сотрудника'], 403);
                     }
                 }
@@ -596,6 +610,81 @@ class ObjectController extends Controller
     /**
      * Получает права доступа пользователя к сущности
      */
+    private function getProductsFieldPerms($user, $entityId, $isExternalAccess = false): array
+    {
+        if ($user && $user->is_admin) {
+            return ['read' => true, 'write' => true];
+        }
+        if ($isExternalAccess || !$user) {
+            $rolesRead = DB::table('data_rows')
+                ->where('data_type_id', $entityId)
+                ->where('field', 'products')
+                ->value('roles_read');
+            $restricted = $rolesRead && !in_array(trim((string) $rolesRead), ['', '[]', '0'], true);
+            return ['read' => !$restricted, 'write' => false];
+        }
+        $settings = app('settings');
+        $perms = $settings['logistic_tasks']['perms']['products'] ?? null;
+        if (!$perms) {
+            return ['read' => true, 'write' => true];
+        }
+        return ['read' => (bool) $perms['read'], 'write' => (bool) $perms['write']];
+    }
+
+    private static $employeePivots = [
+        'routes' => ['table' => 'route_employee', 'fk' => 'route_id'],
+        'logistic_tasks' => ['table' => 'logistic_task_employee', 'fk' => 'logistic_task_id'],
+    ];
+
+    private function hasEmployeeBinding($slug): bool
+    {
+        if (isset(self::$employeePivots[$slug]) && \Schema::hasTable(self::$employeePivots[$slug]['table'])) {
+            return true;
+        }
+        return \Schema::hasColumn($slug, 'employee_id');
+    }
+
+    private function isUserEmployeeObject($slug, $id, $user): bool
+    {
+        $userEmployeeId = (int) ($user->employee_id ?: 0);
+        if (!$userEmployeeId || !$id) {
+            return false;
+        }
+        $pivot = self::$employeePivots[$slug] ?? null;
+        if ($pivot && \Schema::hasTable($pivot['table'])) {
+            $linked = DB::table($pivot['table'])
+                ->where($pivot['fk'], $id)
+                ->where('employee_id', $userEmployeeId)
+                ->exists();
+            if ($linked) {
+                return true;
+            }
+        }
+        if (!\Schema::hasColumn($slug, 'employee_id')) {
+            return false;
+        }
+        $raw = DB::table($slug)->where('id', $id)->value('employee_id');
+        if ($raw === null || $raw === '') {
+            return false;
+        }
+        if (is_numeric($raw)) {
+            return (int) $raw === $userEmployeeId;
+        }
+        $decoded = json_decode((string) $raw, true);
+        if (!is_array($decoded)) {
+            return false;
+        }
+        if (array_key_exists('value', $decoded)) {
+            $decoded = is_array($decoded['value']) ? $decoded['value'] : [$decoded['value']];
+        }
+        foreach ($decoded as $v) {
+            if (is_numeric($v) && (int) $v === $userEmployeeId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private function getPermissions($user, $slug, $dataTypeId = null): array
     {
         if ($user && $user->is_admin) {

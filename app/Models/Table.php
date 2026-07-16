@@ -222,6 +222,26 @@ class Table
         if($permissions) {
             $permissions = $permissions->toArray();
         }
+        if(!$permissions) {
+            $data_types = \DB::table('data_types')->where('enable', 1)->where('hidden', 0)->get()->keyBy('id')->toArray();
+            $res = \App\Models\Permission::whereNotNull('entity_id')->where('role_id', \Auth::user()->role_id)->get()->keyBy('entity_id')->toArray();
+            foreach($data_types as $entity_id => $data_type) {
+                if(!array_key_exists($entity_id, $res)) {
+                    \DB::table('permissions')->insert([['entity_id' => $entity_id, 'role_id' => \Auth::user()->role_id]]);
+                }
+            }
+            $permissions = \Auth::user()->role->permissions()->select([
+                'read_p',
+                'create_p',
+                'update_p',
+                'delete_p',
+                'export_p',
+                'import_p'
+            ])->where('entity_id', $entity->id)->first();
+            if($permissions) {
+                $permissions = $permissions->toArray();
+            }
+        }
         $permissions_all = \Auth::user()->role->permissions->keyBy('entity_id')->toArray();
         $end_time = microtime(true);  // Время окончания
 
@@ -361,13 +381,13 @@ class Table
                         'mask' => $field->mask
                     );
                     $table_columns[$field->field]['type'] = $field->type;
-                    $table_columns[$field->field]['read_only'] = $field->only_read || !$settings[$slug]['perms'][$field->field]['write'] || $permissions['update_p'] == 'N' ? 1 : 0;
-                    if(\Auth::user()->is_admin && !$field->only_read) 
+                    $table_columns[$field->field]['read_only'] = $field->only_read || (isset($settings[$slug]['perms'][$field->field]['write']) && !$settings[$slug]['perms'][$field->field]['write']) || (isset($permissions['update_p']) && $permissions['update_p'] == 'N') ? 1 : 0;
+                    if(\Auth::user()->is_admin && !$field->only_read)
                         $table_columns[$field->field]['read_only'] = 0;
-                    $table_columns[$field->field]['can_read'] = $settings[$slug]['perms'][$field->field]['read'] || \Auth::user()->is_admin ? 1 : 0;
-                    $table_columns[$field->field]['can_edit'] = $field->only_read || !$settings[$slug]['perms'][$field->field]['write'] && !\Auth::user()->is_admin ? 0 : 1;
+                    $table_columns[$field->field]['can_read'] = !isset($settings[$slug]['perms'][$field->field]['read']) || $settings[$slug]['perms'][$field->field]['read'] || \Auth::user()->is_admin ? 1 : 0;
+                    $table_columns[$field->field]['can_edit'] = $field->only_read || (isset($settings[$slug]['perms'][$field->field]['write']) && !$settings[$slug]['perms'][$field->field]['write']) && !\Auth::user()->is_admin ? 0 : 1;
                     $table_columns[$field->field]['set_color'] = $field->set_color;
-                    $table_columns[$field->field]['color'] = $field->label_color;//$field_colors[$field->field];
+                    $table_columns[$field->field]['color'] = $field->label_color;
                     $table_columns[$field->field]['is_plural'] = $field->is_plural;
                     $table_columns[$field->field]['is_hidden'] = $field->hide;
                     $table_columns[$field->field]['visible_always'] = $field->visible_always;
@@ -378,7 +398,7 @@ class Table
                             $table_columns[$field->field]['can_create'] = $details['can_create'] ? 1 : 0;
                         }
                     }
-                    
+
                     if($field->type == 'relation') {
                         $table_columns[$field->field]['related_table'] = json_decode($field->details, true)['table'];
                         // if($field->field == 'category_id')
@@ -421,12 +441,12 @@ class Table
                     $table_columns[$field->field]['read_only'] = $field->only_read || (isset($settings[$slug]['perms'][$field->field]['write']) && !$settings[$slug]['perms'][$field->field]['write']) || (isset($permissions['update_p']) && $permissions['update_p'] == 'N')? 1 : 0;
 
 
-                    if(\Auth::user()->is_admin && !$field->only_read) 
+                    if(\Auth::user()->is_admin && !$field->only_read)
                         $table_columns[$field->field]['read_only'] = 0;
-                    $table_columns[$field->field]['can_read'] = $settings[$slug]['perms'][$field->field]['read'] || \Auth::user()->is_admin ? 1 : 0;
-                    $table_columns[$field->field]['can_edit'] = $field->only_read || !$settings[$slug]['perms'][$field->field]['write'] && !\Auth::user()->is_admin ? 0 : 1;
+                    $table_columns[$field->field]['can_read'] = !isset($settings[$slug]['perms'][$field->field]['read']) || $settings[$slug]['perms'][$field->field]['read'] || \Auth::user()->is_admin ? 1 : 0;
+                    $table_columns[$field->field]['can_edit'] = $field->only_read || (isset($settings[$slug]['perms'][$field->field]['write']) && !$settings[$slug]['perms'][$field->field]['write']) && !\Auth::user()->is_admin ? 0 : 1;
                     $table_columns[$field->field]['set_color'] = $field->set_color;
-                    $table_columns[$field->field]['color'] = $field->label_color;//$field_colors[$field->field];
+                    $table_columns[$field->field]['color'] = $field->label_color;
                     $table_columns[$field->field]['is_plural'] = $field->is_plural;
                     $table_columns[$field->field]['is_hidden'] = $field->hide;
                     $table_columns[$field->field]['visible_always'] = $field->visible_always;
@@ -439,9 +459,6 @@ class Table
                     }
                     if($field->type == 'relation') {
                         $table_columns[$field->field]['related_table'] = json_decode($field->details, true)['table'];
-                        // if($field->field == 'category_id')
-                        //     $table_columns[$field->field]['can_create'] = 0;
-                        // else
                         $table_columns[$field->field]['can_create'] = 1;
                         if(isset($permissions_all[$settings['models'][$field->relation_table]->id]['create_p']) && !\Auth::user()->is_admin)
                             $table_columns[$field->field]['can_create'] = $permissions_all[$settings['models'][$field->relation_table]->id]['create_p'] == 'N' ? 0 : 1;
@@ -539,41 +556,14 @@ class Table
                     );
                     $table_columns[$field->field]['type'] = $field->type;
 
-                    if(!$permissions) {
-                        $data_types = \DB::table('data_types')->where('enable', 1)->where('hidden', 0)->get()->keyBy('id')->toArray();
-                        //$permissions = $role->permissions_tables();
-                        $permissions = array();
-                        $res = \App\Models\Permission::whereNotNull('entity_id')->where('role_id', \Auth::user()->role_id)->get()->keyBy('entity_id')->toArray();
-
-                        $new_permissions_exist = false;
-                        foreach($data_types as $entity_id => $entity) {
-                            if(!array_key_exists($entity_id, $res)) {
-                                \DB::table('permissions')->insert([['entity_id' => $entity_id, 'role_id' => \Auth::user()->role_id]]);
-                                $new_permissions_exist = true;
-                            }
-                        }
-                        $permissions = \Auth::user()->role->permissions()->select([
-                            'read_p',
-                            'create_p',
-                            'update_p',
-                            'delete_p',
-                            'export_p',
-                            'import_p'
-                        ])->where('entity_id', $entity->id)->first();
-                    }
-
-                    $table_columns[$field->field]['read_only'] = $field->only_read || !$settings[$slug]['perms'][$field->field]['write'] || $permissions['update_p'] == 'N' ? 1 : 0;
-                    if(\Auth::user()->is_admin && !$field->only_read) 
+                    $table_columns[$field->field]['read_only'] = $field->only_read || (isset($settings[$slug]['perms'][$field->field]['write']) && !$settings[$slug]['perms'][$field->field]['write']) || (isset($permissions['update_p']) && $permissions['update_p'] == 'N') ? 1 : 0;
+                    if(\Auth::user()->is_admin && !$field->only_read)
                         $table_columns[$field->field]['read_only'] = 0;
-                    
 
-
-
-
-                    $table_columns[$field->field]['can_read'] = $settings[$slug]['perms'][$field->field]['read'] || \Auth::user()->is_admin ? 1 : 0;
-                    $table_columns[$field->field]['can_edit'] = $field->only_read || !$settings[$slug]['perms'][$field->field]['write'] && !\Auth::user()->is_admin ? 0 : 1;
+                    $table_columns[$field->field]['can_read'] = !isset($settings[$slug]['perms'][$field->field]['read']) || $settings[$slug]['perms'][$field->field]['read'] || \Auth::user()->is_admin ? 1 : 0;
+                    $table_columns[$field->field]['can_edit'] = $field->only_read || (isset($settings[$slug]['perms'][$field->field]['write']) && !$settings[$slug]['perms'][$field->field]['write']) && !\Auth::user()->is_admin ? 0 : 1;
                     $table_columns[$field->field]['set_color'] = $field->set_color;
-                    $table_columns[$field->field]['color'] = $field->label_color;//$field_colors[$field->field];
+                    $table_columns[$field->field]['color'] = $field->label_color;
                     $table_columns[$field->field]['is_plural'] = $field->is_plural;
                     $table_columns[$field->field]['is_hidden'] = $field->hide;
                     $table_columns[$field->field]['visible_always'] = $field->visible_always;
@@ -586,12 +576,7 @@ class Table
                     }
                     if($field->type == 'relation') {
                         $table_columns[$field->field]['related_table'] = json_decode($field->details, true)['table'];
-                        // if($field->field == 'category_id')
-                        //     $table_columns[$field->field]['can_create'] = 0;
-                        // else
                         $table_columns[$field->field]['can_create'] = 1;
-                        info($field->id);
-                        info($field->relation_table);
                         if(isset($permissions_all[$settings['models'][$field->relation_table]->id]['create_p']) && !\Auth::user()->is_admin)
                             $table_columns[$field->field]['can_create'] = $permissions_all[$settings['models'][$field->relation_table]->id]['create_p'] == 'N' ? 0 : 1;
                         if(isset($permissions_all[$settings['models'][$field->relation_table]->id]['update_p']) && !\Auth::user()->is_admin) {
@@ -1163,7 +1148,7 @@ class Table
                     ],
                     [
                         'value' => 'A',
-                        'label' => 'Есть доступ',
+                        'label' => 'Полный доступ',
                         'color' => '#3C7C2B',
                         'sort' => 3
                     ]
@@ -1206,7 +1191,7 @@ class Table
                     // ],
                     [
                         'value' => 'A',
-                        'label' => 'Есть доступ',
+                        'label' => 'Полный доступ',
                         'color' => '#3C7C2B',
                         'sort' => 2
                     ]
@@ -1256,7 +1241,7 @@ class Table
                     ],
                     [
                         'value' => 'A',
-                        'label' => 'Есть доступ',
+                        'label' => 'Полный доступ',
                         'color' => '#3C7C2B',
                         'sort' => 3
                     ]
@@ -1300,7 +1285,7 @@ class Table
                     ],
                     [
                         'value' => 'A',
-                        'label' => 'Есть доступ',
+                        'label' => 'Полный доступ',
                         'color' => '#3C7C2B',
                         'sort' => 2
                     ]
@@ -1343,7 +1328,7 @@ class Table
                     // ],
                     [
                         'value' => 'A',
-                        'label' => 'Есть доступ',
+                        'label' => 'Полный доступ',
                         'color' => '#3C7C2B',
                         'sort' => 2
                     ]
@@ -1387,7 +1372,7 @@ class Table
                     ],
                     [
                         'value' => 'A',
-                        'label' => 'Есть доступ',
+                        'label' => 'Полный доступ',
                         'color' => '#3C7C2B',
                         'sort' => 2
                     ]
