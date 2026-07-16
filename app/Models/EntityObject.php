@@ -352,10 +352,6 @@ class EntityObject
                     ? json_decode($val, true)
                     : $val;
 
-                if ($slug == 'logistic_tasks' && $field->field == 'products' && method_exists($current, 'getHtmlProducts')) {
-                    $field_value = $current->getHtmlProducts();
-                }
-
                 if ($field->type == 'relation' && $field->is_plural && $field->relation_table) {
                     $relation_table = $field->relation_table;
                     info($relation_table);
