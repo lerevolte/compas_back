@@ -621,7 +621,7 @@ class Table
             $tables = json_decode($tables, true);
         $settings = app('settings');//get_settings();
         $options = array();
-        $items = Product::orderBy('choosed_at', 'DESC')->orderBy('name', 'ASC')->whereNull('deleted_at')->limit(20)->get();
+        $items = Product::orderBy('choosed_at', 'DESC')->orderBy('name', 'ASC')->whereNull('deleted_at')->limit(10)->get();
         foreach($items as $item) {
             $photo = isset($item->photo) ? $item->photo : '';
             $name = $item->name;

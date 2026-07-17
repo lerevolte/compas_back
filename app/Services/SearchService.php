@@ -137,11 +137,15 @@ class SearchService
                               ->orWhere('id', (int)$params['q']);
                     })->whereNull('deleted_at')->limit(20)->get();
                 } else {
-                    $items = $entity_class::where(function($query) use ($field_name, $q, $params) {
+                    $query = $entity_class::where(function($query) use ($field_name, $q, $params) {
                         $query->where($field_name, 'LIKE', $q)
                               ->orWhere("{$field_name}->value", 'LIKE', $q)
                               ->orWhere('id', (int)$params['q']);
-                    })->whereNull('deleted_at')->limit(20)->get();
+                    })->whereNull('deleted_at');
+                    if($params['entity'] == 'products') {
+                        $query = $query->orderBy('choosed_at', 'DESC')->orderBy('name', 'ASC');
+                    }
+                    $items = $query->limit(20)->get();
                 }
                 if(!$items) {
 
@@ -155,7 +159,13 @@ class SearchService
                 return array_values($data);
                 
             } elseif(isset($params['entity'])) {
-                $items = $entity_class::whereNull('deleted_at')->limit(20)->get();
+                $query = $entity_class::whereNull('deleted_at');
+                if($params['entity'] == 'products') {
+                    $query = $query->orderBy('choosed_at', 'DESC')->orderBy('name', 'ASC')->limit(10);
+                } else {
+                    $query = $query->limit(20);
+                }
+                $items = $query->get();
             }
         }
         // Для задач логистики: какие из привязанных маршрутов ещё живы.

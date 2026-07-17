@@ -400,6 +400,10 @@ class AnalyticsService
             "unit" => "руб."
         ];
 
+        if ($type === 'logistics-arrival-percent') {
+            $sumCol['unit'] = '%';
+        }
+
         $options = $meta['color_options'] ?? [];
 
         if ($isGrouped) {
@@ -1151,7 +1155,9 @@ class AnalyticsService
         
         $tableRows = null;
 
-        if ($groupBy === 'all') {
+        if (count($oldResult['legend']) > 1) {
+            $tableRows = null;
+        } elseif ($groupBy === 'all') {
             $totalSum = 0;
             foreach ($oldResult['legend'] as $item) {
                 $totalSum += $item['sum'] ?? 0;
@@ -1260,37 +1266,55 @@ class AnalyticsService
         $periodEnd = $request->period['end'] ?? now()->format('Y-m-d');
 
         $routes = DB::table('routes')
-            ->select('date', 'delivery_price', 'reserve_for_delivery')
+            ->select('date', 'delivery_price', 'reserve_for_delivery', 'company_id')
             ->whereBetween('date', [$periodStart, $periodEnd])
             ->orderBy('date')
             ->get();
 
-        $grouped = $routes->groupBy(function ($item) {
-            return Carbon::parse($item->date)->format('Y-m-d H:i');
-        });
+        $companyNames = DB::table('companies')->whereNull('deleted_at')->pluck('name', 'id');
 
-        $legendData = [];
-        $sum = 0;
-        foreach ($grouped as $date => $items) {
-            $reserve = $items->sum('reserve_for_delivery');
-            $price = $items->sum('delivery_price');
-            // Прибыль = (заложено − фактическая цена) / заложено. Плюс, когда
-            // потратили меньше, чем заложили на доставку (8587).
-            $percent = $reserve > 0 ? round(($reserve - $price) / $reserve * 100, 1) : 0;
-            $legendData[] = [$date, $percent];
-            $sum += $percent;
+        $allDates = $routes
+            ->map(fn ($item) => Carbon::parse($item->date)->format('Y-m-d H:i'))
+            ->unique()
+            ->sort()
+            ->values();
+
+        $buildSeries = function ($items, $name, $id) use ($allDates) {
+            $grouped = $items->groupBy(function ($item) {
+                return Carbon::parse($item->date)->format('Y-m-d H:i');
+            });
+
+            $legendData = [];
+            $sum = 0;
+            foreach ($allDates as $date) {
+                if (!isset($grouped[$date])) {
+                    $legendData[] = [$date, null];
+                    continue;
+                }
+                $reserve = $grouped[$date]->sum('reserve_for_delivery');
+                $price = $grouped[$date]->sum('delivery_price');
+                $percent = $reserve > 0 ? round(($reserve - $price) / $reserve * 100, 1) : 0;
+                $legendData[] = [$date, $percent];
+                $sum += $percent;
+            }
+
+            return [
+                'name' => $name,
+                'data' => $legendData,
+                'sum' => round($sum, 1),
+                'id' => $id
+            ];
+        };
+
+        $legend = [$buildSeries($routes, 'Все', 1)];
+
+        $byCompany = $routes->groupBy(fn ($item) => (int) $item->company_id);
+        foreach ($byCompany->sortKeys() as $companyId => $items) {
+            $name = $companyId ? ($companyNames[$companyId] ?? 'Компания #' . $companyId) : 'Без компании';
+            $legend[] = $buildSeries($items, $name, $companyId + 2);
         }
 
-        return [
-            'legend' => [
-                [
-                    'name' => 'Процент прибыли',
-                    'data' => $legendData,
-                    'sum' => $sum,
-                    'id' => 1
-                ]
-            ]
-        ];
+        return ['legend' => $legend];
     }
 
     protected function formatLogisticsResponse($title, $groupedData, $valueField)

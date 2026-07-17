@@ -366,7 +366,7 @@ class TableController extends Controller
             if (isset($settings['list_values'][$field->id])) {
                 $vals = $settings['list_values'][$field->id];
                 if ($field->type == 'relation') {
-                    $vals = array_slice($vals, 0, 19, true);
+                    $vals = array_slice($vals, 0, 10, true);
                 }
                 $columns[$field->field]['options'] = $vals;
             }
@@ -410,7 +410,7 @@ class TableController extends Controller
             if (isset($settings['list_values'][$field->id])) {
                 $fieldValues = $settings['list_values'][$field->id];
                 if ($field->type == 'relation') {
-                    $fieldValues = array_slice($fieldValues, 0, 19, true);
+                    $fieldValues = array_slice($fieldValues, 0, 10, true);
                 }
             }
 

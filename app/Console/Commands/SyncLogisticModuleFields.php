@@ -182,13 +182,15 @@ class SyncLogisticModuleFields extends Command
                 }
             }
 
+            $detached = $this->detachExtras($db, $sectionId, $orderedIds);
+
             $this->syncSectionSort($db, $sectionId, $orderedIds);
 
             $this->syncMenu($db, $slug);
 
             $db->table('local_cache')->where('url', "fields/{$slug}")->update(['updated_at' => $now]);
 
-            $this->line("    [{$label}] {$slug}: привязано новых полей — {$attached}");
+            $this->line("    [{$label}] {$slug}: привязано новых полей — {$attached}, отвязано лишних — {$detached}");
         }
 
         if (class_exists(\App\Models\Settings::class)) {
@@ -240,24 +242,51 @@ class SyncLogisticModuleFields extends Command
         return $changed;
     }
 
+    private function detachExtras(ConnectionInterface $db, int $sectionId, array $orderedIds): int
+    {
+        $extras = $db->table('data_rows')
+            ->whereJsonContains('module_section_id', $sectionId)
+            ->whereNotIn('id', $orderedIds ?: [0])
+            ->get(['id', 'module', 'module_section_id']);
+
+        $logisticSectionIds = $db->table('field_sections')
+            ->where('module', 'logistic')
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->toArray();
+
+        $detached = 0;
+        foreach ($extras as $row) {
+            $modules = $this->decodeJsonList($row->module);
+            $sections = array_map('intval', $this->decodeJsonList($row->module_section_id));
+
+            $sections = array_values(array_filter($sections, fn ($s) => $s !== $sectionId));
+
+            $stillLogistic = (bool) array_intersect($sections, $logisticSectionIds);
+            if (!$stillLogistic) {
+                $modules = array_values(array_filter($modules, fn ($m) => $m !== 'logistic'));
+            }
+
+            $db->table('data_rows')->where('id', $row->id)->update([
+                'module' => $modules ? json_encode($modules) : null,
+                'module_section_id' => $sections ? json_encode($sections) : null,
+            ]);
+            $detached++;
+        }
+
+        return $detached;
+    }
+
     private function syncSectionSort(ConnectionInterface $db, int $sectionId, array $orderedIds): void
     {
         if (!$orderedIds) {
             return;
         }
 
-        $extras = $db->table('data_rows')
-            ->whereJsonContains('module_section_id', $sectionId)
-            ->where('is_remove', 0)
-            ->whereNotIn('id', $orderedIds)
-            ->orderBy('sort')
-            ->pluck('id')
-            ->toArray();
-
         $db->table('section_fields_sort')->where('section_id', $sectionId)->delete();
 
         $insert = [];
-        foreach (array_merge($orderedIds, $extras) as $i => $fieldId) {
+        foreach ($orderedIds as $i => $fieldId) {
             $insert[] = ['section_id' => $sectionId, 'field_id' => $fieldId, 'sort' => $i];
         }
         $db->table('section_fields_sort')->insert($insert);

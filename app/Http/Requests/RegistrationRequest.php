@@ -31,6 +31,8 @@ class RegistrationRequest extends FormRequest
             'domain' => 'string|max:12|regex:/^[A-Za-z0-9]+$/i',
             'email' => 'required|email',
             'password' => 'required|min:8|confirmed',
+            'owner_type' => 'nullable|integer|in:1,2,3',
+            'phone' => 'nullable|string|max:30',
         ];
     }
 
@@ -45,7 +47,9 @@ class RegistrationRequest extends FormRequest
             'email.email' => 'Неверный формат email',
             'password.required' => 'Пароль обязателен',
             'password.min' => 'Пароль не может быть короче 8 символов',
-            'password.confirmed' => 'Пароли не совпадают'
+            'password.confirmed' => 'Пароли не совпадают',
+            'owner_type.in' => 'Некорректное значение поля «Кем вы являетесь»',
+            'phone.max' => 'Телефон не может быть длиннее 30 символов'
         ];
 
     }

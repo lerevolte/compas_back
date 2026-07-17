@@ -74,7 +74,7 @@ class TenantService
 
         $gibdd_queries = \DB::table('gibdd_queries')->where('email', $data['email'])->get();
 
-        tenancy()->central(function () use ($tenant) {
+        tenancy()->central(function () use ($tenant, $data) {
             \App\Models\Settings::clear_cache();
             $tariff_name = 'Бесплатный - 0 руб';
             if(isset($data['tariff']) && $t = \DB::table('tariffs')->where('id', $data['tariff'])->first()) {
@@ -89,6 +89,12 @@ class TenantService
             ]]);
             $account = \App\Models\Account::find($result['id']);
             $account->tenant_id = $tenant->id;
+            if(isset($data['owner_type']) && \Schema::hasColumn('accounts', 'owner_type')) {
+                $account->owner_type = $data['owner_type'];
+            }
+            if(isset($data['phone']) && \Schema::hasColumn('accounts', 'phone')) {
+                $account->phone = $data['phone'];
+            }
             $account->saveQuietly();
         });
 

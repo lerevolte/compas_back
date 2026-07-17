@@ -486,7 +486,7 @@ class EntityObject
                 if(isset($settings['list_values'][$field->id])) {
                     $values = array();
                     if($field->type == 'relation') {
-                        $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true);
+                        $field_values = array_slice($settings['list_values'][$field->id], 0, 10, true);
                         if($field->is_plural && isset($fields_data[$field->field]['value']['value'])) {
                             foreach($fields_data[$field->field]['value']['value'] as $field_val) {
                                 // У удалённого объекта value может содержать ID
@@ -939,7 +939,7 @@ class EntityObject
                 if(isset($settings['list_values'][$field->id])) {
                     $values = array();
                     if($field->type == 'relation') {
-                        $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true);
+                        $field_values = array_slice($settings['list_values'][$field->id], 0, 10, true);
                         if($field->is_plural && isset($fields_data[$field->field]['value']['value'])) {
                             foreach($fields_data[$field->field]['value']['value'] as $field_val) {
                                 $field_values[$field_val] = $settings['list_values'][$field->id][$field_val];
