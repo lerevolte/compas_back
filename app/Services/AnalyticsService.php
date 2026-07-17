@@ -1285,7 +1285,6 @@ class AnalyticsService
             });
 
             $legendData = [];
-            $sum = 0;
             foreach ($allDates as $date) {
                 if (!isset($grouped[$date])) {
                     $legendData[] = [$date, null];
@@ -1295,23 +1294,26 @@ class AnalyticsService
                 $price = $grouped[$date]->sum('delivery_price');
                 $percent = $reserve > 0 ? round(($reserve - $price) / $reserve * 100, 1) : 0;
                 $legendData[] = [$date, $percent];
-                $sum += $percent;
             }
+
+            $totalReserve = $items->sum('reserve_for_delivery');
+            $totalPrice = $items->sum('delivery_price');
+            $totalPercent = $totalReserve > 0 ? round(($totalReserve - $totalPrice) / $totalReserve * 100, 1) : 0;
 
             return [
                 'name' => $name,
                 'data' => $legendData,
-                'sum' => round($sum, 1),
+                'sum' => $totalPercent,
                 'id' => $id
             ];
         };
 
         $legend = [$buildSeries($routes, 'Все', 1)];
 
-        $byCompany = $routes->groupBy(fn ($item) => (int) $item->company_id);
+        $byCompany = $routes->filter(fn ($item) => (int) $item->company_id)->groupBy(fn ($item) => (int) $item->company_id);
         foreach ($byCompany->sortKeys() as $companyId => $items) {
-            $name = $companyId ? ($companyNames[$companyId] ?? 'Компания #' . $companyId) : 'Без компании';
-            $legend[] = $buildSeries($items, $name, $companyId + 2);
+            $name = $companyNames[$companyId] ?? 'Компания #' . $companyId;
+            $legend[] = $buildSeries($items, $name, $companyId + 1);
         }
 
         return ['legend' => $legend];
