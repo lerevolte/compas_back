@@ -114,8 +114,7 @@ class Employee extends Model
             $ids[] = (int) $user->employee_id;
         }
 
-        $column = static::userLinkColumn();
-        if ($column) {
+        foreach (static::userLinkColumns() as $column) {
             $rows = \DB::table('employees')
                 ->whereNull('deleted_at')
                 ->whereNotNull($column)
@@ -131,22 +130,30 @@ class Employee extends Model
         return $cache[$user->id] = array_values(array_unique($ids));
     }
 
-    protected static function userLinkColumn(): ?string
+    public static function userLinkColumns(): array
     {
-        $fields = \DB::table('data_rows')
+        $columns = [];
+        $rows = \DB::table('data_rows')
             ->join('data_types', 'data_types.id', '=', 'data_rows.data_type_id')
             ->where('data_types.slug', 'employees')
-            ->where('data_rows.type', 'relation')
-            ->where('data_rows.relation_table', 'users')
+            ->whereIn('data_rows.type', ['relation', 'select_dropdown'])
             ->where('data_rows.is_remove', 0)
-            ->pluck('data_rows.field');
-        foreach ($fields as $field) {
-            if (\Schema::hasColumn('employees', $field)) {
-                return $field;
+            ->get(['data_rows.field', 'data_rows.relation_table', 'data_rows.details']);
+        foreach ($rows as $row) {
+            $table = $row->relation_table;
+            if (!$table && $row->details) {
+                $decoded = json_decode($row->details, true);
+                $table = is_array($decoded) ? ($decoded['table'] ?? null) : null;
+            }
+            if ($table === 'users' && $row->field !== 'user_id' && \Schema::hasColumn('employees', $row->field)) {
+                $columns[] = $row->field;
             }
         }
+        if (\Schema::hasColumn('employees', 'related_user_id')) {
+            $columns[] = 'related_user_id';
+        }
 
-        return \Schema::hasColumn('employees', 'related_user_id') ? 'related_user_id' : null;
+        return array_values(array_unique($columns));
     }
 
     protected static function parseIdValue($raw): array

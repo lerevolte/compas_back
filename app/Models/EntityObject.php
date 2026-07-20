@@ -363,7 +363,7 @@ class EntityObject
                     }
                     $field_value = $relation_query->get()->pluck('id')->toArray();
                 }
-                if ($slug == 'routes' && $field->field == 'task_id' && $field->is_plural) {
+                if ($slug == 'routes' && $field->field == 'task_id' && $field->type == 'relation') {
                     $tasks_query = $current->tasks();
                     if ($isTrashedCurrent) {
                         $tasks_query = $tasks_query->withTrashed();
@@ -838,7 +838,7 @@ class EntityObject
                     $relation_table = $field->relation_table;
                     $field_value = $current->{$relation_table}->pluck('id')->toArray();
                 }
-                if($slug == 'routes' && $field->field == 'task_id' && $field->is_plural) {
+                if($slug == 'routes' && $field->field == 'task_id' && $field->type == 'relation') {
                     $field_value = $current->tasks()->get()->pluck('id')->toArray();
                 }
 
