@@ -64,7 +64,8 @@ class ObjectController extends Controller
         }
         if (isset($permissions['read_p']) && $permissions['read_p'] === 'E' && !$user->is_admin
             && $this->hasEmployeeBinding($slug)) {
-            $request->merge(['filter' => array_merge($request->input('filter', []), ['employee_id' => $user->employee_id ?: -1])]);
+            $employeeIds = \App\Models\Employee::idsForUser($user);
+            $request->merge(['filter' => array_merge($request->input('filter', []), ['employee_id' => $employeeIds ?: -1])]);
         }
 
         // 4. Получение списка объектов
@@ -646,15 +647,15 @@ class ObjectController extends Controller
 
     private function isUserEmployeeObject($slug, $id, $user): bool
     {
-        $userEmployeeId = (int) ($user->employee_id ?: 0);
-        if (!$userEmployeeId || !$id) {
+        $employeeIds = \App\Models\Employee::idsForUser($user);
+        if (!$employeeIds || !$id) {
             return false;
         }
         $pivot = self::$employeePivots[$slug] ?? null;
         if ($pivot && \Schema::hasTable($pivot['table'])) {
             $linked = DB::table($pivot['table'])
                 ->where($pivot['fk'], $id)
-                ->where('employee_id', $userEmployeeId)
+                ->whereIn('employee_id', $employeeIds)
                 ->exists();
             if ($linked) {
                 return true;
@@ -668,7 +669,7 @@ class ObjectController extends Controller
             return false;
         }
         if (is_numeric($raw)) {
-            return (int) $raw === $userEmployeeId;
+            return in_array((int) $raw, $employeeIds, true);
         }
         $decoded = json_decode((string) $raw, true);
         if (!is_array($decoded)) {
@@ -678,7 +679,7 @@ class ObjectController extends Controller
             $decoded = is_array($decoded['value']) ? $decoded['value'] : [$decoded['value']];
         }
         foreach ($decoded as $v) {
-            if (is_numeric($v) && (int) $v === $userEmployeeId) {
+            if (is_numeric($v) && in_array((int) $v, $employeeIds, true)) {
                 return true;
             }
         }

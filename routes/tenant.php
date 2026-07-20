@@ -448,8 +448,12 @@ Route::middleware([
             Route::get('/logistics-route-duration', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_route_duration']);
             Route::get('/logistics-reserve-for-delivery', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_reserve_for_delivery']);
             Route::get('/logistics-delivery-price', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_delivery_price']);
+            Route::get('/logistics-delivery-compare', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_delivery_compare']);
             Route::get('/logistics-total-weight', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_total_weight']);
             Route::get('/logistics-arrival-percent', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_arrival_percent']);
+            Route::get('/logistics-car-arrival-percent', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_car_arrival_percent']);
+            Route::get('/logistics-company-profit', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_company_profit']);
+            Route::get('/logistics-car-profit', [App\Http\Controllers\Api\AnalyticsController::class, 'logistics_car_profit']);
             Route::get('/logistics-all', [App\Http\Controllers\Api\AnalyticsController::class, 'get_all_logistics_analytics']);
             Route::get('logistics-day-summary', [App\Http\Controllers\Api\AnalyticsController::class, 'logisticsDaySummary']);
         });

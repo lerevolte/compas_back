@@ -136,13 +136,16 @@ class EntityObject
     public static function currentEmployeeMatch($current): bool
     {
         $user = \Auth::user();
-        if (!$user || !$user->employee_id || !$current) {
+        if (!$user || !$current) {
             return false;
         }
-        $userEmployeeId = (int) $user->employee_id;
+        $employeeIds = \App\Models\Employee::idsForUser($user);
+        if (!$employeeIds) {
+            return false;
+        }
         if (is_object($current) && method_exists($current, 'employees')) {
             try {
-                if ($current->employees()->where('employees.id', $userEmployeeId)->exists()) {
+                if ($current->employees()->whereIn('employees.id', $employeeIds)->exists()) {
                     return true;
                 }
             } catch (\Throwable $e) {}
@@ -152,7 +155,7 @@ class EntityObject
             return false;
         }
         if (is_numeric($raw)) {
-            return (int) $raw === $userEmployeeId;
+            return in_array((int) $raw, $employeeIds, true);
         }
         $decoded = json_decode((string) $raw, true);
         if (!is_array($decoded)) {
@@ -162,7 +165,7 @@ class EntityObject
             $decoded = is_array($decoded['value']) ? $decoded['value'] : [$decoded['value']];
         }
         foreach ($decoded as $v) {
-            if (is_numeric($v) && (int) $v === $userEmployeeId) {
+            if (is_numeric($v) && in_array((int) $v, $employeeIds, true)) {
                 return true;
             }
         }
@@ -354,14 +357,18 @@ class EntityObject
 
                 if ($field->type == 'relation' && $field->is_plural && $field->relation_table) {
                     $relation_table = $field->relation_table;
-                    info($relation_table);
                     $relation_query = $current->{$relation_table}();
                     if ($isTrashedCurrent && in_array(SoftDeletes::class, class_uses_recursive($relation_query->getRelated()))) {
                         $relation_query = $relation_query->withTrashed();
                     }
-                    // get()->pluck: pluck('id') на уровне запроса для
-                    // belongsToMany даёт неоднозначный column id (join с pivot)
                     $field_value = $relation_query->get()->pluck('id')->toArray();
+                }
+                if ($slug == 'routes' && $field->field == 'task_id' && $field->is_plural) {
+                    $tasks_query = $current->tasks();
+                    if ($isTrashedCurrent) {
+                        $tasks_query = $tasks_query->withTrashed();
+                    }
+                    $field_value = $tasks_query->get()->pluck('id')->toArray();
                 }
 
                 $fields_data[$field->field] = $settings[$slug]['field_data'][$field->field];
@@ -830,6 +837,9 @@ class EntityObject
                 if($field->type == 'relation' && $field->is_plural && $field->relation_table) {
                     $relation_table = $field->relation_table;
                     $field_value = $current->{$relation_table}->pluck('id')->toArray();
+                }
+                if($slug == 'routes' && $field->field == 'task_id' && $field->is_plural) {
+                    $field_value = $current->tasks()->get()->pluck('id')->toArray();
                 }
 
                 $fields_data[$field->field] = $settings[$slug]['field_data'][$field->field];//Field::getData($field);
@@ -1558,7 +1568,11 @@ class EntityObject
                     if(isset($settings[$slug]['fields'][$field]) && $settings[$slug]['fields'][$field]->is_plural) {
                         if($settings[$slug]['fields'][$field]->type == 'relation' && $settings[$slug]['fields'][$field]->relation_table) {
                             $paginator = $paginator->whereHas($settings[$slug]['fields'][$field]->relation_table, function($q) use($val) {
-                                $q->where('id', '=', (int)$val);
+                                if (is_array($val)) {
+                                    $q->whereIn('id', array_map('intval', $val));
+                                } else {
+                                    $q->where('id', '=', (int)$val);
+                                }
                             });
 
                             //$paginator = $paginator->whereJsonContains($field, (int)$val);

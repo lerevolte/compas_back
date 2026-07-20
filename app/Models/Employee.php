@@ -98,6 +98,82 @@ class Employee extends Model
         return $this->hasMany(User::class, 'employee_id');
     }
 
+    public static function idsForUser($user): array
+    {
+        if (!$user || !$user->id) {
+            return [];
+        }
+
+        static $cache = [];
+        if (isset($cache[$user->id])) {
+            return $cache[$user->id];
+        }
+
+        $ids = [];
+        if ((int) ($user->employee_id ?: 0)) {
+            $ids[] = (int) $user->employee_id;
+        }
+
+        $column = static::userLinkColumn();
+        if ($column) {
+            $rows = \DB::table('employees')
+                ->whereNull('deleted_at')
+                ->whereNotNull($column)
+                ->where($column, '!=', '')
+                ->pluck($column, 'id');
+            foreach ($rows as $employeeId => $raw) {
+                if (in_array((int) $user->id, static::parseIdValue($raw), true)) {
+                    $ids[] = (int) $employeeId;
+                }
+            }
+        }
+
+        return $cache[$user->id] = array_values(array_unique($ids));
+    }
+
+    protected static function userLinkColumn(): ?string
+    {
+        $fields = \DB::table('data_rows')
+            ->join('data_types', 'data_types.id', '=', 'data_rows.data_type_id')
+            ->where('data_types.slug', 'employees')
+            ->where('data_rows.type', 'relation')
+            ->where('data_rows.relation_table', 'users')
+            ->where('data_rows.is_remove', 0)
+            ->pluck('data_rows.field');
+        foreach ($fields as $field) {
+            if (\Schema::hasColumn('employees', $field)) {
+                return $field;
+            }
+        }
+
+        return \Schema::hasColumn('employees', 'related_user_id') ? 'related_user_id' : null;
+    }
+
+    protected static function parseIdValue($raw): array
+    {
+        if (is_numeric($raw)) {
+            return (int) $raw ? [(int) $raw] : [];
+        }
+        if (!is_string($raw) || $raw === '') {
+            return [];
+        }
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+        if (array_key_exists('value', $decoded)) {
+            $decoded = is_array($decoded['value']) ? $decoded['value'] : [$decoded['value']];
+        }
+        $ids = [];
+        foreach ($decoded as $v) {
+            if (is_numeric($v) && (int) $v) {
+                $ids[] = (int) $v;
+            }
+        }
+
+        return $ids;
+    }
+
     public function salaries()
     {
         return $this->hasMany(Salary::class, 'car_id')->orderBy('id', 'asc');

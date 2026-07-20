@@ -94,6 +94,12 @@ class AnalyticsController extends Controller
         return response()->json($data);
     }
 
+    public function logistics_delivery_compare(Request $request)
+    {
+        $data = $this->analyticsService->logisticsDeliveryCompare($request);
+        return response()->json($data);
+    }
+
     public function logistics_total_weight(Request $request)
     {
         $data = $this->analyticsService->logisticsTotalWeight($request);
@@ -103,6 +109,24 @@ class AnalyticsController extends Controller
     public function logistics_arrival_percent(Request $request)
     {
         $data = $this->analyticsService->logisticsArrivalPercent($request);
+        return response()->json($data);
+    }
+
+    public function logistics_car_arrival_percent(Request $request)
+    {
+        $data = $this->analyticsService->logisticsCarArrivalPercent($request);
+        return response()->json($data);
+    }
+
+    public function logistics_company_profit(Request $request)
+    {
+        $data = $this->analyticsService->logisticsCompanyProfit($request);
+        return response()->json($data);
+    }
+
+    public function logistics_car_profit(Request $request)
+    {
+        $data = $this->analyticsService->logisticsCarProfit($request);
         return response()->json($data);
     }
 
