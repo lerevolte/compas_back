@@ -142,6 +142,7 @@ class AnalyticsController extends Controller
         
         $routes = \DB::table('routes')
             ->where('date', $date)
+            ->whereNull('deleted_at')
             ->get();
         
         if ($routes->isEmpty()) {
@@ -156,6 +157,7 @@ class AnalyticsController extends Controller
         // Task statistics
         $tasks = \DB::table('logistic_tasks')
             ->whereIn('route_id', $routeIds)
+            ->whereNull('deleted_at')
             ->get();
         
         // Замените блок с $statusField на:

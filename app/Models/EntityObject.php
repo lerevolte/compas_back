@@ -589,6 +589,13 @@ class EntityObject
                             $subfield_data = $settings[$slug]['field_data'][$subfield->field];
                         }
 
+                        if (!isset($subfield_data['options'])
+                            && in_array($subfield->type, ['status', 'select_dropdown'])
+                            && isset($settings['list_values'][$subfield->id])) {
+                            $subfield_data['options'] = array_values(
+                                $settings[$slug]['options'][$subfield->field] ?? $settings['list_values'][$subfield->id]
+                            );
+                        }
                         $subfield_data['can_read'] = $settings[$slug]['perms'][$subfield->field]['read'] || $isAdmin ? 1 : 0;
                         $subfield_data['can_edit'] = $subfield->only_read || !$settings[$slug]['perms'][$subfield->field]['write'] && !$isAdmin ? 0 : 1;
                         if(!$id && $permissions['create_p'] == 'Y' && $field->field == 'user_id' && !$isAdmin) {
@@ -1049,6 +1056,13 @@ class EntityObject
                     $fields_data[$field->field]['options'] = $values;
                     foreach($subfields as $subfield) {
                         $subfield_data = $settings[$slug]['field_data'][$subfield->field];
+                        if (!isset($subfield_data['options'])
+                            && in_array($subfield->type, ['status', 'select_dropdown'])
+                            && isset($settings['list_values'][$subfield->id])) {
+                            $subfield_data['options'] = array_values(
+                                $settings[$slug]['options'][$subfield->field] ?? $settings['list_values'][$subfield->id]
+                            );
+                        }
                         $subfield_data['can_read'] = $settings[$slug]['perms'][$subfield->field]['read'] || \Auth::user()->is_admin ? 1 : 0;
                         $subfield_data['can_edit'] = $subfield->only_read || !$settings[$slug]['perms'][$subfield->field]['write'] && !\Auth::user()->is_admin ? 0 : 1;
                         if(!$id && $permissions['create_p'] == 'Y' && $field->field == 'user_id' && !\Auth::user()->is_admin) {

@@ -241,6 +241,13 @@ class AnalyticsService
                  $tableRows = array_map(function($item) {
                      if (is_array($item)) {
                          if(isset($item['data'])) unset($item['data']);
+                         if (!empty($item['link']) && isset($item['name'])) {
+                             $item['name'] = [
+                                 'value' => $item['name'],
+                                 'external_link' => $item['link']
+                             ];
+                         }
+                         unset($item['link']);
                      }
                      return $item;
                  }, $legendData);
@@ -279,6 +286,22 @@ class AnalyticsService
         // Передаем $isGroupAll в getDefaultTableColumns
         $defaultColumns = $this->getDefaultTableColumns($type, $isGroupedTable, $isGroupAll);
         $tableConfig = $this->getTableConfig($type, $defaultColumns);
+
+        $hasNameLinks = false;
+        foreach ($paginatedItems as $row) {
+            if (is_array($row) && is_array($row['name'] ?? null) && !empty($row['name']['external_link'])) {
+                $hasNameLinks = true;
+                break;
+            }
+        }
+        if ($hasNameLinks) {
+            foreach ($tableConfig as &$column) {
+                if (($column['key'] ?? null) === 'name') {
+                    $column['is_external_link'] = 1;
+                }
+            }
+            unset($column);
+        }
 
         // 6. Обновление записи
         $this->updateAnalyticRecord($type, Auth::id(), [
@@ -1220,6 +1243,7 @@ class AnalyticsService
 
         $routes = DB::table('routes')
             ->select($dateField)
+            ->whereNull('deleted_at')
             ->whereBetween($dateField, [$periodStart, $periodEnd])
             ->orderBy($dateField)
             ->get();
@@ -1239,6 +1263,8 @@ class AnalyticsService
         $tasks = DB::table('logistic_tasks')
             ->join('routes', 'routes.id', '=', 'logistic_tasks.route_id')
             ->select('routes.date as delivery_date')
+            ->whereNull('routes.deleted_at')
+            ->whereNull('logistic_tasks.deleted_at')
             ->whereBetween('routes.date', [$periodStart, $periodEnd])
             ->orderBy('routes.date')
             ->get();
@@ -1257,6 +1283,7 @@ class AnalyticsService
 
         $routes = DB::table('routes')
             ->select($dateField, $field)
+            ->whereNull('deleted_at')
             ->whereBetween($dateField, [$periodStart, $periodEnd])
             ->orderBy($dateField)
             ->get();
@@ -1278,6 +1305,7 @@ class AnalyticsService
 
         $routes = DB::table('routes')
             ->select('date', 'reserve_for_delivery', 'delivery_price')
+            ->whereNull('deleted_at')
             ->whereBetween('date', [$periodStart, $periodEnd])
             ->orderBy('date')
             ->get();
@@ -1325,13 +1353,16 @@ class AnalyticsService
 
         $routes = DB::table('routes')
             ->select('date', 'delivery_price', 'reserve_for_delivery', $groupField)
+            ->whereNull('deleted_at')
+            ->whereNotNull($groupField)
+            ->where($groupField, '>', 0)
             ->whereBetween('date', [$periodStart, $periodEnd])
             ->orderBy('date')
             ->get();
 
         $namesTable = $groupField === 'car_id' ? 'cars' : 'companies';
         $fallbackTitle = $groupField === 'car_id' ? 'Машина #' : 'Компания #';
-        $names = DB::table($namesTable)->whereNull('deleted_at')->pluck('name', 'id');
+        $names = DB::table($namesTable)->pluck('name', 'id');
 
         $allDates = $routes
             ->map(fn ($item) => Carbon::parse($item->date)->format('Y-m-d H:i'))
@@ -1385,7 +1416,9 @@ class AnalyticsService
                 $decoded = json_decode($name, true);
                 $name = $decoded['value'] ?? $name;
             }
-            $legend[] = $buildSeries($items, $name ?: $fallbackTitle . $groupId, $groupId + 1);
+            $series = $buildSeries($items, $name ?: $fallbackTitle . $groupId, $groupId + 1);
+            $series['link'] = '/objects/' . $namesTable . '/' . $groupId;
+            $legend[] = $series;
         }
 
         return ['legend' => $legend];
