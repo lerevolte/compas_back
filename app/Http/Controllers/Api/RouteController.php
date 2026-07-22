@@ -557,6 +557,15 @@ class RouteController extends Controller
             $new_tasks = Task::whereIntegerInRaw('id', $request->ids)->orderByRaw(\DB::raw("FIELD(id, ".implode(",",$request->ids).")"))->get();
         }
 
+        $currentTaskIds = $old_tasks->pluck('id')->map(fn ($v) => (int) $v)->values()->toArray();
+        $requestedTaskIds = array_values(array_map('intval', (array) $request->ids));
+        if ($currentTaskIds !== $requestedTaskIds) {
+            \App\Models\History::saveForObject('routes', [[
+                'id' => $route->id,
+                'task_id' => $requestedTaskIds,
+            ]]);
+        }
+
         foreach($old_tasks as $task) {
             if(!in_array($task->id, $request->ids)) {
                 $task->route_id = null;

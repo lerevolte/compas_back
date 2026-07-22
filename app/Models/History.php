@@ -663,7 +663,10 @@ class History extends Model
                     $changed_fields[] = $field->id;
                 if($field->field == 'id' || $field->field == 'password' || $field->field == 'created_at' || $field->field == 'updated_at')
                     continue;
-                if(isset($objects[$row['id']]) && array_key_exists($field->field, $row) && array_key_exists($field->field, $objects[$row['id']]) && $objects[$row['id']][$field->field] !== $row[$field->field]) {
+                $isNewRow = $new_object && $row['id'] == $new_object->id;
+                $isFilledOnCreate = $isNewRow && array_key_exists($field->field, $row)
+                    && $row[$field->field] !== null && $row[$field->field] !== '' && $row[$field->field] !== '[]';
+                if(isset($objects[$row['id']]) && array_key_exists($field->field, $row) && array_key_exists($field->field, $objects[$row['id']]) && ($objects[$row['id']][$field->field] !== $row[$field->field] || $isFilledOnCreate)) {
 
 
                     $changed_fields[] = $field->id;

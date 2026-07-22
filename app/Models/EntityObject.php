@@ -690,6 +690,12 @@ class EntityObject
                             continue;
                         }
                         if (isset($fields_data[$field->field]) && $field->data_type_id == $entity->id) {
+                            if (!$isAuthenticated
+                                && !$field->visible_always
+                                && !in_array($field->type, ['text_group', 'route_map', 'route_statuses'])
+                                && static::isEmptyFieldValue($fields_data[$field->field]['value'] ?? null)) {
+                                continue;
+                            }
                             $section_data['fields'][$field->id] = $fields_data[$field->field];
                         }
                     }
@@ -714,6 +720,12 @@ class EntityObject
                                     continue;
                                 }
                                 if (isset($fields_data[$subfield->field])) {
+                                    if (!$isAuthenticated
+                                        && !$subfield->visible_always
+                                        && !in_array($subfield->type, ['text_group', 'route_map', 'route_statuses'])
+                                        && static::isEmptyFieldValue($fields_data[$subfield->field]['value'] ?? null)) {
+                                        continue;
+                                    }
                                     $subsection_data['fields'][] = $fields_data[$subfield->field];
                                 }
                             }

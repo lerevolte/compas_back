@@ -47,6 +47,22 @@ class Task extends Model
                 if ($route && $route->date) {
                     $model->delivery_date = $route->date;
                 }
+                if ($route) {
+                    $routeEmployees = $route->employeeIds();
+                    if (count($routeEmployees)) {
+                        $model->employee_id = json_encode($routeEmployees);
+                    }
+                }
+            }
+       });
+
+       static::saved(function($model) {
+            if ($model->isDirty('route_id') && $model->route_id && \Schema::hasTable('logistic_task_employee')) {
+                $route = Route::find($model->route_id);
+                $routeEmployees = $route ? $route->employeeIds() : [];
+                if (count($routeEmployees)) {
+                    $model->employees()->sync($routeEmployees);
+                }
             }
        });
 
