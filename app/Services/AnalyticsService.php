@@ -239,15 +239,8 @@ class AnalyticsService
             if ($isGroupedContext) {
                  // Берем легенду, убираем вложенный data
                  $tableRows = array_map(function($item) {
-                     if (is_array($item)) {
-                         if(isset($item['data'])) unset($item['data']);
-                         if (!empty($item['link']) && isset($item['name'])) {
-                             $item['name'] = [
-                                 'value' => $item['name'],
-                                 'external_link' => $item['link']
-                             ];
-                         }
-                         unset($item['link']);
+                     if (is_array($item) && isset($item['data'])) {
+                         unset($item['data']);
                      }
                      return $item;
                  }, $legendData);
@@ -289,7 +282,7 @@ class AnalyticsService
 
         $hasNameLinks = false;
         foreach ($paginatedItems as $row) {
-            if (is_array($row) && is_array($row['name'] ?? null) && !empty($row['name']['external_link'])) {
+            if (is_array($row) && !empty($row['link']['slug']) && !empty($row['link']['id'])) {
                 $hasNameLinks = true;
                 break;
             }
@@ -297,7 +290,7 @@ class AnalyticsService
         if ($hasNameLinks) {
             foreach ($tableConfig as &$column) {
                 if (($column['key'] ?? null) === 'name') {
-                    $column['is_external_link'] = 1;
+                    $column['is_entity_link'] = 1;
                 }
             }
             unset($column);
@@ -1184,6 +1177,18 @@ class AnalyticsService
     public function logisticsCompanyProfit(Request $request) { return $this->wrapLogistics('Прибыль по компаниям за период', $request, 'logistics-company-profit', fn($r) => $this->logisticsProfitLogic($r, 'company_id', 'profit')); }
     public function logisticsCarProfit(Request $request) { return $this->wrapLogistics('Прибыль по автопарку за период', $request, 'logistics-car-profit', fn($r) => $this->logisticsProfitLogic($r, 'car_id', 'profit')); }
 
+    protected function normalizeDay($value, $default)
+    {
+        if ($value === null || $value === '') {
+            return $default->format('Y-m-d');
+        }
+        try {
+            return Carbon::parse($value)->format('Y-m-d');
+        } catch (\Throwable $e) {
+            return $default->format('Y-m-d');
+        }
+    }
+
     protected function wrapLogistics($title, Request $request, $key, $callback)
     {
         $oldResult = $callback($request);
@@ -1238,13 +1243,13 @@ class AnalyticsService
     protected function logisticsCarCountLogic(Request $request)
     {
         $dateField = 'date';
-        $periodStart = $request->period['start'] ?? now()->subMonth()->format('Y-m-d');
-        $periodEnd = $request->period['end'] ?? now()->format('Y-m-d');
+        $periodStart = $this->normalizeDay($request->period['start'] ?? null, now()->subMonth());
+        $periodEnd = $this->normalizeDay($request->period['end'] ?? null, now());
 
         $routes = DB::table('routes')
             ->select($dateField)
             ->whereNull('deleted_at')
-            ->whereBetween($dateField, [$periodStart, $periodEnd])
+            ->whereRaw('DATE(`' . $dateField . '`) BETWEEN ? AND ?', [$periodStart, $periodEnd])
             ->orderBy($dateField)
             ->get();
 
@@ -1257,15 +1262,15 @@ class AnalyticsService
 
     protected function logisticsOrderStatsLogic(Request $request)
     {
-        $periodStart = $request->period['start'] ?? now()->subMonth()->format('Y-m-d');
-        $periodEnd = $request->period['end'] ?? now()->format('Y-m-d');
+        $periodStart = $this->normalizeDay($request->period['start'] ?? null, now()->subMonth());
+        $periodEnd = $this->normalizeDay($request->period['end'] ?? null, now());
 
         $tasks = DB::table('logistic_tasks')
             ->join('routes', 'routes.id', '=', 'logistic_tasks.route_id')
             ->select('routes.date as delivery_date')
             ->whereNull('routes.deleted_at')
             ->whereNull('logistic_tasks.deleted_at')
-            ->whereBetween('routes.date', [$periodStart, $periodEnd])
+            ->whereRaw('DATE(`routes`.`date`) BETWEEN ? AND ?', [$periodStart, $periodEnd])
             ->orderBy('routes.date')
             ->get();
 
@@ -1278,13 +1283,13 @@ class AnalyticsService
 
     protected function logisticsRouteMetricLogic(Request $request, $field, $title, $dateField)
     {
-        $periodStart = $request->period['start'] ?? now()->subMonth()->format('Y-m-d');
-        $periodEnd = $request->period['end'] ?? now()->format('Y-m-d');
+        $periodStart = $this->normalizeDay($request->period['start'] ?? null, now()->subMonth());
+        $periodEnd = $this->normalizeDay($request->period['end'] ?? null, now());
 
         $routes = DB::table('routes')
             ->select($dateField, $field)
             ->whereNull('deleted_at')
-            ->whereBetween($dateField, [$periodStart, $periodEnd])
+            ->whereRaw('DATE(`' . $dateField . '`) BETWEEN ? AND ?', [$periodStart, $periodEnd])
             ->orderBy($dateField)
             ->get();
 
@@ -1300,13 +1305,13 @@ class AnalyticsService
 
     protected function logisticsDeliveryCompareLogic(Request $request)
     {
-        $periodStart = $request->period['start'] ?? now()->subMonth()->format('Y-m-d');
-        $periodEnd = $request->period['end'] ?? now()->format('Y-m-d');
+        $periodStart = $this->normalizeDay($request->period['start'] ?? null, now()->subMonth());
+        $periodEnd = $this->normalizeDay($request->period['end'] ?? null, now());
 
         $routes = DB::table('routes')
             ->select('date', 'reserve_for_delivery', 'delivery_price')
             ->whereNull('deleted_at')
-            ->whereBetween('date', [$periodStart, $periodEnd])
+            ->whereRaw('DATE(`date`) BETWEEN ? AND ?', [$periodStart, $periodEnd])
             ->orderBy('date')
             ->get();
 
@@ -1348,15 +1353,15 @@ class AnalyticsService
 
     protected function logisticsProfitLogic(Request $request, string $groupField, string $mode)
     {
-        $periodStart = $request->period['start'] ?? now()->subMonth()->format('Y-m-d');
-        $periodEnd = $request->period['end'] ?? now()->format('Y-m-d');
+        $periodStart = $this->normalizeDay($request->period['start'] ?? null, now()->subMonth());
+        $periodEnd = $this->normalizeDay($request->period['end'] ?? null, now());
 
         $routes = DB::table('routes')
             ->select('date', 'delivery_price', 'reserve_for_delivery', $groupField)
             ->whereNull('deleted_at')
             ->whereNotNull($groupField)
             ->where($groupField, '>', 0)
-            ->whereBetween('date', [$periodStart, $periodEnd])
+            ->whereRaw('DATE(`date`) BETWEEN ? AND ?', [$periodStart, $periodEnd])
             ->orderBy('date')
             ->get();
 
@@ -1417,7 +1422,7 @@ class AnalyticsService
                 $name = $decoded['value'] ?? $name;
             }
             $series = $buildSeries($items, $name ?: $fallbackTitle . $groupId, $groupId + 1);
-            $series['link'] = '/objects/' . $namesTable . '/' . $groupId;
+            $series['link'] = ['slug' => $namesTable, 'id' => $groupId];
             $legend[] = $series;
         }
 

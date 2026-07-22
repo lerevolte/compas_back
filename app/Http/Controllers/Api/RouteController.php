@@ -542,6 +542,63 @@ class RouteController extends Controller
         ]);
     }
 
+    /**
+     * История маршрута по task_id при привязке/отвязке задач через
+     * PUT /routes/{id}/tasks. Через History::saveForObject это не проходит:
+     * там сравнивается колонка routes.task_id, которая при работе с
+     * логистикой не обновляется (связь живёт в logistic_tasks.route_id).
+     */
+    private function writeRouteTasksHistory($route, array $oldIds, array $newIds)
+    {
+        $settings = get_settings();
+        $field = collect($settings['routes']['fields'] ?? [])->firstWhere('field', 'task_id');
+        if (!$field) {
+            return;
+        }
+
+        $old = \App\Models\Field::getHumanValue($field, $oldIds);
+        $new = \App\Models\Field::getHumanValue($field, $newIds);
+        if ($old['res'] == $new['res']) {
+            return;
+        }
+
+        $base = [
+            'entity' => 'routes',
+            'entity_id' => $route->id,
+            'user_id' => \Auth::user() ? \Auth::user()->id : 1,
+            'field' => 'task_id',
+            'old_value' => implode(', ', $old['values']),
+            'new_value' => implode(', ', $new['values']),
+            'is_relation' => 1,
+        ];
+
+        $history = new \App\Models\History($base + [
+            'text' => $field->title . ': ' . $old['res'] . ' -> ' . $new['res'],
+            'event' => 'FIELD_UPDATED',
+        ]);
+        $history->saveQuietly();
+
+        $removed = array_diff($old['arr_res'], $new['arr_res']);
+        if (count($removed)) {
+            $history = new \App\Models\History($base + [
+                'text' => $field->title . ', удалена связь: ' . implode(', ', $removed),
+                'event' => 'RELATION_DELETED',
+                'color' => '#C74822',
+            ]);
+            $history->saveQuietly();
+        }
+
+        $added = array_diff($new['arr_res'], $old['arr_res']);
+        if (count($added)) {
+            $history = new \App\Models\History($base + [
+                'text' => $field->title . ', добавлена связь: ' . implode(', ', $added),
+                'event' => 'RELATION_ADDED',
+                'color' => '#23704B',
+            ]);
+            $history->saveQuietly();
+        }
+    }
+
     public function update_tasks($id, Request $request)
     {
         $route = Route::find($id);
@@ -560,10 +617,7 @@ class RouteController extends Controller
         $currentTaskIds = $old_tasks->pluck('id')->map(fn ($v) => (int) $v)->values()->toArray();
         $requestedTaskIds = array_values(array_map('intval', (array) $request->ids));
         if ($currentTaskIds !== $requestedTaskIds) {
-            \App\Models\History::saveForObject('routes', [[
-                'id' => $route->id,
-                'task_id' => $requestedTaskIds,
-            ]]);
+            $this->writeRouteTasksHistory($route, $currentTaskIds, $requestedTaskIds);
         }
 
         foreach($old_tasks as $task) {

@@ -126,6 +126,16 @@ class Route extends Model
 
         static::saving(function($model)
         {
+            // date хранится строкой: календарь присылает ISO
+            // ('2026-07-14T00:00:00.000000Z'), кнопки — 'Y-m-d'. Разные формы в
+            // одной колонке ломали выборки по дню (8771) — приводим к 'Y-m-d'.
+            $rawDate = $model->date;
+            if (is_string($rawDate) && $rawDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $rawDate)) {
+                try {
+                    $model->date = \Carbon\Carbon::parse($rawDate)->format('Y-m-d');
+                } catch (\Throwable $e) {
+                }
+            }
             if (is_array($model->employee_id)) {
                 $ids = array_values(array_map('intval', array_filter($model->employee_id, 'is_numeric')));
                 $model->employee_id = json_encode($ids);
