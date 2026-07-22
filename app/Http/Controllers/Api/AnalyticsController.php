@@ -145,10 +145,6 @@ class AnalyticsController extends Controller
             $date = now()->format('Y-m-d');
         }
 
-        // date у маршрута — строка, и она бывает как 'Y-m-d', так и ISO
-        // ('2026-07-14T00:00:00.000000Z'). Точное сравнение теряло такие
-        // маршруты, и статистика дня не сходилась с таблицей маршрутов,
-        // которая фильтрует через whereDate (8771).
         $routes = \DB::table('routes')
             ->whereDate('date', $date)
             ->whereNull('deleted_at')

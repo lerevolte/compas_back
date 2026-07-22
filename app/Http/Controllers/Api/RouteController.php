@@ -542,12 +542,6 @@ class RouteController extends Controller
         ]);
     }
 
-    /**
-     * История маршрута по task_id при привязке/отвязке задач через
-     * PUT /routes/{id}/tasks. Через History::saveForObject это не проходит:
-     * там сравнивается колонка routes.task_id, которая при работе с
-     * логистикой не обновляется (связь живёт в logistic_tasks.route_id).
-     */
     private function writeRouteTasksHistory($route, array $oldIds, array $newIds)
     {
         $settings = get_settings();
