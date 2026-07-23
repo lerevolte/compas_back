@@ -54,6 +54,9 @@ class Route extends Model
                     if (!$emp) $emp = $extractId($request->input('employee_id'));
                     if ($emp) $model->employee_id = json_encode([(int) $emp]);
                 }
+                if (!$model->name && $row && isset($row['name']) && is_string($row['name']) && $row['name'] !== '') {
+                    $model->name = $row['name'];
+                }
             }
 
             if (!$model->company_id) {

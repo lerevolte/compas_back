@@ -214,6 +214,8 @@ class CrudService
             }
         }
         foreach($new_relations as $id => $change_relations) {
+            if($slug == 'routes' && in_array($change_relations['field'], ['car_id', 'employee_id']))
+                continue;
             foreach($change_relations['entities'] as $relation_table => $relations) {
                 $related_key = $model_fields[$change_relations['field']]->related_field;
 
@@ -383,8 +385,9 @@ class CrudService
                     foreach($new as $n_item) {
                         $related_rows[] = array('id' => $n_item, $model_fields[$field]->related_field => $ob->id);
                     }
-                    
-                    $h = \App\Models\History::saveForObject($relation_table, $related_rows);//for companies delete
+
+                    if(!($slug == 'routes' && in_array($field, ['car_id', 'employee_id'])))
+                        $h = \App\Models\History::saveForObject($relation_table, $related_rows);//for companies delete
                     if($slug == 'companies')
                         \DB::table($relation_table)->whereIntegerInRaw('id', $old_values)->update([$model_fields[$field]->related_field => null/*, 'choosed_at' => null*/]);
 
@@ -434,7 +437,8 @@ class CrudService
                         $new_el_relations[] = $ob->id;
                         $related_rows[] = array('id' => $value, $model_fields[$field]->related_field => $new_el_relations);
                     }
-                    $h = \App\Models\History::saveForObject($relation_table, $related_rows);
+                    if(!($slug == 'routes' && in_array($field, ['car_id', 'employee_id'])))
+                        $h = \App\Models\History::saveForObject($relation_table, $related_rows);
                 }
 
 

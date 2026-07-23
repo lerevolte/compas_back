@@ -17,7 +17,8 @@ class RouteController extends Controller
 {
     public function __construct()
     {
-        $this->middleware('logistic.read');
+        $this->middleware('logistic.read')->except(['tasks', 'map_data', 'task_filter', 'tasks_view_fields']);
+        $this->middleware('logistic.read:routes')->only(['tasks', 'map_data', 'task_filter', 'tasks_view_fields']);
     }
 
     /**
@@ -628,6 +629,63 @@ class RouteController extends Controller
         return $ids;
     }
 
+    private function writeTaskEmployeeHistory($taskId, array $oldIds, array $newIds)
+    {
+        sort($oldIds);
+        sort($newIds);
+        if ($oldIds === $newIds) {
+            return;
+        }
+        $settings = get_settings();
+        $field = collect($settings['logistic_tasks']['fields'] ?? [])->firstWhere('field', 'employee_id');
+        if (!$field) {
+            return;
+        }
+
+        $old = \App\Models\Field::getHumanValue($field, $oldIds);
+        $new = \App\Models\Field::getHumanValue($field, $newIds);
+        if ($old['res'] == $new['res']) {
+            return;
+        }
+
+        $user_id = \Auth::user() ? \Auth::user()->id : 1;
+        $base = [
+            'entity' => 'logistic_tasks',
+            'entity_id' => $taskId,
+            'user_id' => $user_id,
+            'field' => 'employee_id',
+            'old_value' => implode(', ', $old['values']),
+            'new_value' => implode(', ', $new['values']),
+            'is_relation' => 1,
+        ];
+
+        $history = new \App\Models\History($base + [
+            'text' => $field->title.': '.$old['res'].' -> '.$new['res'],
+            'event' => 'FIELD_UPDATED',
+        ]);
+        $history->saveQuietly();
+
+        $removed = array_diff($old['arr_res'], $new['arr_res']);
+        if (count($removed)) {
+            $history = new \App\Models\History($base + [
+                'text' => $field->title.', удалена связь: '.implode(', ', $removed),
+                'event' => 'RELATION_DELETED',
+                'color' => '#C74822',
+            ]);
+            $history->saveQuietly();
+        }
+
+        $added = array_diff($new['arr_res'], $old['arr_res']);
+        if (count($added)) {
+            $history = new \App\Models\History($base + [
+                'text' => $field->title.', добавлена связь: '.implode(', ', $added),
+                'event' => 'RELATION_ADDED',
+                'color' => '#23704B',
+            ]);
+            $history->saveQuietly();
+        }
+    }
+
     private function writeTaskRouteHistory(array $taskIds, $route, bool $added)
     {
         if (!count($taskIds)) {
@@ -693,15 +751,17 @@ class RouteController extends Controller
 
         foreach($old_tasks as $task) {
             if(!in_array($task->id, $request->ids)) {
+                $oldEmployeeIds = $this->taskEmployeeIds($task);
                 $task->route_id = null;
                 if (count($routeEmployeeIds)) {
-                    $rest = array_values(array_diff($this->taskEmployeeIds($task), $routeEmployeeIds));
+                    $rest = array_values(array_diff($oldEmployeeIds, $routeEmployeeIds));
                     $task->employee_id = count($rest) ? $rest : null;
                 }
                 $task->save();
                 if (count($routeEmployeeIds) && \Schema::hasTable('logistic_task_employee')) {
                     $task->employees()->detach($routeEmployeeIds);
                 }
+                $this->writeTaskEmployeeHistory($task->id, $oldEmployeeIds, $this->taskEmployeeIds($task));
                 $detachedTaskIds[] = $task->id;
             }
         }
@@ -712,9 +772,11 @@ class RouteController extends Controller
                 $task->sort = $i;
                 $task->saveQuietly();
             } else {
+                $oldEmployeeIds = $this->taskEmployeeIds($task);
                 $task->route_id = $id;
                 $task->sort = $i;
                 $task->save();
+                $this->writeTaskEmployeeHistory($task->id, $oldEmployeeIds, $this->taskEmployeeIds($task));
                 $attachedTaskIds[] = $task->id;
             }
 

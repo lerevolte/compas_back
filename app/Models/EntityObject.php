@@ -582,6 +582,9 @@ class EntityObject
                             && !in_array(trim((string) $subfield->roles_read), ['', '[]', '0'], true)) {
                             continue;
                         }
+                        if (!($settings[$slug]['perms'][$subfield->field]['read'] ?? 1) && !$isAdmin) {
+                            continue;
+                        }
                         if (isset($fields_data[$subfield->field])) {
                             $subfield_data = $fields_data[$subfield->field];
                             //$subsection_data['fields'][] = $fields_data[$subfield->field];
@@ -1067,6 +1070,9 @@ class EntityObject
                     };
                     $fields_data[$field->field]['options'] = $values;
                     foreach($subfields as $subfield) {
+                        if (!($settings[$slug]['perms'][$subfield->field]['read'] ?? 1) && !\Auth::user()->is_admin) {
+                            continue;
+                        }
                         $subfield_data = $settings[$slug]['field_data'][$subfield->field];
                         if (!isset($subfield_data['options'])
                             && in_array($subfield->type, ['status', 'select_dropdown'])

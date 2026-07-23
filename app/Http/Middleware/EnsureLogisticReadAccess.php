@@ -7,11 +7,11 @@ use Illuminate\Http\Request;
 
 class EnsureLogisticReadAccess
 {
-    public function handle(Request $request, Closure $next)
+    public function handle(Request $request, Closure $next, $slug = 'logistic')
     {
         $user = \Auth::user();
         if ($user && !$user->isAdmin() && $user->role_id) {
-            $dataTypeId = \DB::table('data_types')->where('slug', 'logistic')->value('id');
+            $dataTypeId = \DB::table('data_types')->where('slug', $slug)->value('id');
             if ($dataTypeId && $user->role) {
                 $permission = $user->role->permissions()
                     ->where('entity_id', $dataTypeId)
