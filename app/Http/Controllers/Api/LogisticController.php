@@ -14,6 +14,11 @@ use App\Models\EntityObject;
 
 class LogisticController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('logistic.read');
+    }
+
     public function get_sections(Request $request)
     {
         $tenant = tenant('id');

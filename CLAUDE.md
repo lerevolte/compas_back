@@ -218,3 +218,122 @@ auth, logistic, roles, profile, settings, analytics, tariffs, trash, users, exte
 
 При добавлении нового SPA-раздела на фронте — обновляется и deploy.sh,
 и, возможно, Route::fallback здесь.
+
+## Динамическая система сущностей (ядро приложения)
+
+Почти все бизнес-сущности (routes, logistic_tasks, cars, employees, companies,
+accounts и т.д.) описаны ДАННЫМИ, а не кодом:
+
+- `data_types` — сущности (slug, model_name, title_singular/plural, enable)
+- `data_rows` — поля сущностей (field, type, title, is_plural, roles_read/roles_write,
+  relation_table, related_field, details JSON и т.д.)
+- `field_values` — варианты статусов/палитры (привязаны к data_rows.id)
+- `field_sections` — разделы полей в деталке (page = slug сущности)
+- `settings` — пер-пользовательские настройки (меню, колонки таблиц, секции логистики)
+
+ВАЖНО: у поля из data_rows должна существовать физическая колонка в таблице
+сущности (`Schema::hasColumn`) — иначе поле выпадает из настроек и не рендерится.
+Новые поля добавляются и в data_rows, и колонкой (обычно `text nullable`).
+
+Универсальный CRUD-поток:
+- `ObjectController::compose_list/compose_show` — выдача таблицы/деталки
+  (внутри `Table::get` и `EntityObject`); здесь же проверка прав (403 Forbidden)
+- `CrudService::batch($slug, $rows)` — универсальное создание/обновление
+  с автозаписью истории и синхронизацией relation-полей в обе стороны
+- Кастомные контроллеры поверх этого: RouteController (страница /logistic),
+  LogisticController (секции), AnalyticsController
+
+### Кэш настроек (критично)
+
+`get_settings()` / `Settings::get()` — пер-пользовательский слепок всех полей,
+опций, прав; кэшируется в memcached (`{tenant}:settings-{userId}`, gzcompress).
+После ЛЮБОЙ мутации data_rows / field_values / ролей обязателен
+`Settings::clear_cache()` — иначе пользователи видят стейл (поля, опции, права).
+
+### Права
+
+- Ролевые: таблица `permissions` (role_id + entity_id из data_types,
+  колонки read_p/create_p/update_p/delete_p/export_p/import_p со значениями
+  N/Y/A/E). Строки автосоздаются при обращении. Паттерн проверки —
+  `ObjectController::getPermissions()` (admin → всё 'A').
+- Страница «Логистика» гейтится middleware-алиасом `logistic.read`
+  (EnsureLogisticReadAccess, entity slug `logistic`) — подключён в
+  RouteController, LogisticController и logistics_*-методах AnalyticsController.
+- Полевые: data_rows.roles_read/roles_write (JSON-массив ID ролей, allow-list).
+  Вычисляются в Settings::get → `$settings[slug]['perms'][field]['read'|'write']`
+  (0/1, учитывается только первичная role_id). Table/EntityObject/RouteController
+  фильтруют выдачу по ним. НЕ фильтровать `$settings[slug]['fields']` по ролям —
+  на этом списке держится страница настроек полей.
+
+## История и лента событий
+
+Одна таблица `histories` (entity, entity_id, event, text, field,
+old_value/new_value, is_relation, color). События: OBJECT_CREATED/COPIED/
+DELETED/RESTORED, FIELD_UPDATED, RELATION_ADDED/DELETED/CHANGED.
+- «История изменений» = event NULL или FIELD_UPDATED; «Лента событий» =
+  остальные (History::list, параметр filter=events).
+- Центральная точка автозаписи — `History::saveForObject($slug, $rows)`:
+  сравнивает с текущими значениями в БД, поэтому вызывать ДО mass-update.
+- Конвенция: история связей пишется В ОБЕ стороны (и владельцу, и связанному
+  объекту). Для маршрутов зеркало реализовано в Route::boot (saved) и
+  RouteController::update_tasks; в текстах связей использовать
+  `<span data-slug='{slug}' data-id='{id}'>{name}</span>` — фронт делает ссылку.
+- «Дата изменения» (updated_at) должна меняться только вместе с записью в
+  историю: технические пересчёты (Route::recalculateTotals, деривативные поля)
+  идут через saveQuietly()/`$model->timestamps = false`.
+
+## Логистика (страница /logistic)
+
+- Кастомные эндпоинты RouteController: GET/PUT `routes/{id}/tasks`,
+  `map_data`, `task_filter`, `route-tasks-view/fields` (общий конфиг вкладки
+  «Маршрут списком», user_id=null — виден и во внешней ссылке).
+- Пробег/время маршрута считает OSRM (http://compas-osrm.ru:5000) с
+  поправкой TRAFFIC_COEFFICIENT; время прибытия пишется в task.plan_time.
+- Геокодинг адресов — DaData (`MapController::geocode`, ключи захардкожены);
+  обратный геокодинг подставляет адрес только при точности до дома
+  (data.house), иначе координаты.
+- Сотрудники: у маршрута и задачи это JSON-колонка employee_id (массив ID) +
+  pivot-таблицы route_employee / logistic_task_employee. При привязке задачи
+  к маршруту сотрудники маршрута копируются в задачу (Task::boot), при
+  откреплении — снимаются (update_tasks).
+
+## Создание портала
+
+`RegistrationController` → `TenantService::create`: создаёт Tenant + домен
+`{id}.compas.pro`, клонирует справочники из БД-шаблона (connection `seeds`,
+БД admin_seeds), создаёт админа (user id=1) в тенантской БД и запись в
+central-таблице `accounts` (name, tariff, tenant_id, owner_type, phone, email),
+шлёт письмо AccountRegistered. Central админ-портал — admin_compas_main.
+
+Каталоги миграций помимо основных: `database/migrations/tenant_updates{,2}` —
+точечные догоняющие миграции (гонятся TenantService::syncDatabase),
+`tenant_delete` — архив, не применяется.
+
+## Realtime
+
+Изменения объектов/истории пушатся через event `\App\Events\ObjectUpdated`
+(ObjectCreated/ObjectUpdated/ObjectDeleted/HistoryUpdated) — фронт слушает
+сокеты и показывает плашки обновления таблиц.
+
+## Прикладные artisan-команды
+
+- `statuses:backfill {seeds|all-tenants|<tenant>}` — дефолт вместо NULL у статусов
+- `accounts:backfill-email {--force}` — заполнить accounts.email из тенантов
+- `logistic:sync-module-fields {target}` — поля вкладки «Модули → Логистика»
+- `seeds:migrate {--pretend}` — тенантские миграции на БД-шаблоне admin_seeds
+- `seeds:sync-permanent-fields {--dry-run}` — синк постоянных полей в seeds
+- `entity:install-addresses / entity:install-warehouses {--recreate-table}` —
+  установка сущностей «Библиотека задач» / «Быстрые задачи»
+- `files:fix-orientation {--dry-run}`, `import:rebuild-file-fields`,
+  `gibdd:update`, `gps:fetch`, `bitrix24:sync-payment`, `yandex:route-stats`
+
+## Локальная среда (важно)
+
+Локально НЕТ vendor/ и НЕТ БД: artisan и тесты не запустить. Проверка кода —
+`php -l`, логика проверяется на сервере после деплоя. tests/ фактически пустые
+(ExampleTest) — на прогон тестов не рассчитывать.
+
+## Соглашение по комментариям
+
+Новые комментарии в код НЕ добавлять (существующие исторические не трогать
+массово). Пояснения — в коммит/PR, не в код.

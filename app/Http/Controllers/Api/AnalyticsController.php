@@ -18,8 +18,25 @@ class AnalyticsController extends Controller
     public function __construct()
     {
         $tenantId = tenant('id');
-        
+
         $this->analyticsService = new AnalyticsService($tenantId);
+
+        $this->middleware('logistic.read')->only([
+            'logistics_car_count',
+            'logistics_order_stats',
+            'logistics_route_mileage',
+            'logistics_route_duration',
+            'logistics_reserve_for_delivery',
+            'logistics_delivery_price',
+            'logistics_delivery_compare',
+            'logistics_total_weight',
+            'logistics_arrival_percent',
+            'logistics_car_arrival_percent',
+            'logistics_company_profit',
+            'logistics_car_profit',
+            'get_all_logistics_analytics',
+            'logisticsDaySummary',
+        ]);
     }
 
     public function gibdd(Request $request)

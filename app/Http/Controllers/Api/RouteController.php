@@ -15,6 +15,11 @@ use App\Models\Task;
 
 class RouteController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('logistic.read');
+    }
+
     /**
      * Поправочный коэффициент на пробки. Время в пути, которое отдаёт OSRM
      * (расчёт по свободной дороге), умножаем на него, чтобы время прибытия на
@@ -49,6 +54,7 @@ class RouteController extends Controller
             'read' => array(),
             'write' => array(),
         );
+        $field_perms = isset($settings['routes']['perms']) ? $settings['routes']['perms'] : array();
 
         if($sort_field == 'id')
             $paginator = $entity_class::orderByRaw("CAST($sort_field AS DECIMAL) $sort_order");
@@ -71,6 +77,8 @@ class RouteController extends Controller
                 'id' => $item->id
             );
             foreach($model_fields as $field) {
+                if(isset($field_perms[$field->field]) && empty($field_perms[$field->field]['read']))
+                    continue;
                 if(!array_key_exists($field->field, $data) && $field->type != 'text_group' && $field->type != 'password') {
                     $value = $item->{$field->field};
                     $data[$field->field] = $value;
@@ -93,7 +101,7 @@ class RouteController extends Controller
                     };
                 }
             }
-            
+
             $objects[] = $data;
         }
         $res = array(
@@ -440,15 +448,18 @@ class RouteController extends Controller
             'read' => array(),
             'write' => array(),
         );
-        
+        $field_perms = isset($settings['logistic_tasks']['perms']) ? $settings['logistic_tasks']['perms'] : array();
+
         $objects = array();
         $field_values = array();
-        
+
         foreach ($tasks as $item) {
             $data = array(
                 'id' => $item->id
             );
             foreach($model_fields as $field) {
+                if(isset($field_perms[$field->field]) && empty($field_perms[$field->field]['read']))
+                    continue;
                 if(!array_key_exists($field->field, $data) && $field->type != 'text_group' && $field->type != 'password') {
                     $value = $item->{$field->field};
                     $data[$field->field] = $value;
@@ -593,6 +604,68 @@ class RouteController extends Controller
         }
     }
 
+    private function taskEmployeeIds($task): array
+    {
+        $raw = $task->employee_id;
+        if (is_array($raw)) {
+            $decoded = $raw;
+        } elseif (is_numeric($raw)) {
+            return (int) $raw ? [(int) $raw] : [];
+        } elseif (is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (!is_array($decoded)) {
+                return [];
+            }
+        } else {
+            return [];
+        }
+        $ids = [];
+        foreach ($decoded as $v) {
+            if (is_numeric($v) && (int) $v) {
+                $ids[] = (int) $v;
+            }
+        }
+        return $ids;
+    }
+
+    private function writeTaskRouteHistory(array $taskIds, $route, bool $added)
+    {
+        if (!count($taskIds)) {
+            return;
+        }
+        $settings = get_settings();
+        $field = collect($settings['logistic_tasks']['fields'] ?? [])->firstWhere('field', 'route_id');
+        $title = $field->title ?? 'Маршрут';
+        $user_id = \Auth::user() ? \Auth::user()->id : 1;
+        $name = $route->name ?: 'Маршрут #'.$route->id;
+        $link = "<span data-slug='routes' data-id='{$route->id}'>{$name}</span>";
+
+        foreach ($taskIds as $taskId) {
+            $base = [
+                'entity' => 'logistic_tasks',
+                'entity_id' => $taskId,
+                'user_id' => $user_id,
+                'field' => 'route_id',
+                'old_value' => $added ? '' : $name,
+                'new_value' => $added ? $name : '',
+                'is_relation' => 1,
+            ];
+
+            $history = new \App\Models\History($base + [
+                'text' => $title.': '.($added ? '' : $link).' -> '.($added ? $link : ''),
+                'event' => 'FIELD_UPDATED',
+            ]);
+            $history->saveQuietly();
+
+            $history = new \App\Models\History($base + [
+                'text' => $title.', '.($added ? 'добавлена связь: ' : 'удалена связь: ').$link,
+                'event' => $added ? 'RELATION_ADDED' : 'RELATION_DELETED',
+                'color' => $added ? '#23704B' : '#C74822',
+            ]);
+            $history->saveQuietly();
+        }
+    }
+
     public function update_tasks($id, Request $request)
     {
         $route = Route::find($id);
@@ -614,10 +687,22 @@ class RouteController extends Controller
             $this->writeRouteTasksHistory($route, $currentTaskIds, $requestedTaskIds);
         }
 
+        $routeEmployeeIds = $route->employeeIds();
+        $detachedTaskIds = [];
+        $attachedTaskIds = [];
+
         foreach($old_tasks as $task) {
             if(!in_array($task->id, $request->ids)) {
                 $task->route_id = null;
+                if (count($routeEmployeeIds)) {
+                    $rest = array_values(array_diff($this->taskEmployeeIds($task), $routeEmployeeIds));
+                    $task->employee_id = count($rest) ? $rest : null;
+                }
                 $task->save();
+                if (count($routeEmployeeIds) && \Schema::hasTable('logistic_task_employee')) {
+                    $task->employees()->detach($routeEmployeeIds);
+                }
+                $detachedTaskIds[] = $task->id;
             }
         }
 
@@ -630,10 +715,14 @@ class RouteController extends Controller
                 $task->route_id = $id;
                 $task->sort = $i;
                 $task->save();
+                $attachedTaskIds[] = $task->id;
             }
 
             $i++;
         }
+
+        $this->writeTaskRouteHistory($detachedTaskIds, $route, false);
+        $this->writeTaskRouteHistory($attachedTaskIds, $route, true);
 
         $settings = get_settings();
         $tenant = tenant('id');
@@ -655,15 +744,18 @@ class RouteController extends Controller
             'read' => array(),
             'write' => array(),
         );
-        
+        $field_perms = isset($settings['logistic_tasks']['perms']) ? $settings['logistic_tasks']['perms'] : array();
+
         $objects = array();
         $field_values = array();
-        
+
         foreach ($new_tasks as $item) {
             $data = array(
                 'id' => $item->id
             );
             foreach($model_fields as $field) {
+                if(isset($field_perms[$field->field]) && empty($field_perms[$field->field]['read']))
+                    continue;
                 if(!array_key_exists($field->field, $data) && $field->type != 'text_group' && $field->type != 'password') {
                     $value = $item->{$field->field};
                     $data[$field->field] = $value;
@@ -800,7 +892,11 @@ class RouteController extends Controller
             }
         }
 
+        if ($currentTaskIds === $requestedTaskIds) {
+            $route->timestamps = false;
+        }
         $route->save();
+        $route->timestamps = true;
 
         return response()->json($res);
     }

@@ -111,11 +111,11 @@ class MapController extends Controller
             $lon = floatval($matches[2]);
             
             $result = $dadata->geolocate($lat, $lon, 5);
-            
+
             if (isset($result['suggestions'])) {
                 foreach ($result['suggestions'] as $item) {
                     $data[] = array(
-                        'text' => $item['value'],
+                        'text' => !empty($item['data']['house']) ? $item['value'] : $lat.', '.$lon,
                         'coords' => array(
                             $item['data']['geo_lat'],
                             $item['data']['geo_lon']

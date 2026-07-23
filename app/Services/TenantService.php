@@ -95,6 +95,9 @@ class TenantService
             if(isset($data['phone']) && \Schema::hasColumn('accounts', 'phone')) {
                 $account->phone = $data['phone'];
             }
+            if(isset($data['email']) && \Schema::hasColumn('accounts', 'email')) {
+                $account->email = $data['email'];
+            }
             $account->saveQuietly();
         });
 

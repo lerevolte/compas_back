@@ -145,6 +145,87 @@ class Route extends Model
                 $model->mileage_cost = $model->computeMileageCost();
             }
         });
+
+        static::saved(function($model)
+        {
+            if ($model->isDirty('employee_id')) {
+                $old = static::parseIdList($model->getOriginal('employee_id'));
+                $new = $model->employeeIds();
+                foreach (array_diff($new, $old) as $employeeId) {
+                    $model->writeLinkHistoryFor('employees', $employeeId, true);
+                }
+                foreach (array_diff($old, $new) as $employeeId) {
+                    $model->writeLinkHistoryFor('employees', $employeeId, false);
+                }
+            }
+
+            if ($model->isDirty('car_id')) {
+                $old = static::parseIdList($model->getOriginal('car_id'));
+                $new = static::parseIdList($model->car_id);
+                foreach (array_diff($new, $old) as $carId) {
+                    $model->writeLinkHistoryFor('cars', $carId, true);
+                }
+                foreach (array_diff($old, $new) as $carId) {
+                    $model->writeLinkHistoryFor('cars', $carId, false);
+                }
+            }
+        });
+    }
+
+    public static function parseIdList($raw): array
+    {
+        if (is_array($raw)) {
+            $decoded = $raw;
+        } elseif (is_numeric($raw)) {
+            return (int) $raw ? [(int) $raw] : [];
+        } elseif (is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (!is_array($decoded)) {
+                return [];
+            }
+            if (array_key_exists('value', $decoded)) {
+                $decoded = is_array($decoded['value']) ? $decoded['value'] : [$decoded['value']];
+            }
+        } else {
+            return [];
+        }
+        $ids = [];
+        foreach ($decoded as $v) {
+            if (is_numeric($v) && (int) $v) {
+                $ids[] = (int) $v;
+            }
+        }
+        return $ids;
+    }
+
+    public function writeLinkHistoryFor(string $entitySlug, int $entityId, bool $added)
+    {
+        $user_id = \Auth::user() ? \Auth::user()->id : 1;
+        $name = $this->name ?: 'Маршрут #'.$this->id;
+        $link = "<span data-slug='routes' data-id='{$this->id}'>{$name}</span>";
+
+        $base = [
+            'entity' => $entitySlug,
+            'entity_id' => $entityId,
+            'user_id' => $user_id,
+            'field' => 'route_id',
+            'old_value' => $added ? '' : $name,
+            'new_value' => $added ? $name : '',
+            'is_relation' => 1,
+        ];
+
+        $history = new History($base + [
+            'text' => 'Маршрут: '.($added ? '' : $link).' -> '.($added ? $link : ''),
+            'event' => 'FIELD_UPDATED',
+        ]);
+        $history->saveQuietly();
+
+        $history = new History($base + [
+            'text' => 'Маршрут, '.($added ? 'добавлена связь: ' : 'удалена связь: ').$link,
+            'event' => $added ? 'RELATION_ADDED' : 'RELATION_DELETED',
+            'color' => $added ? '#23704B' : '#C74822',
+        ]);
+        $history->saveQuietly();
     }
 
     public function employeeIds(): array
@@ -299,11 +380,13 @@ class Route extends Model
         // (фактическая цена доставки).
         $totalReserve = $this->tasks()->sum('delivery_price');
 
+        $this->timestamps = false;
         $this->update([
             'weight' => $totalWeight,
             'volume' => $totalVolume,
             'reserve_for_delivery' => $totalReserve,
         ]);
+        $this->timestamps = true;
     }
     
 
