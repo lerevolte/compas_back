@@ -155,6 +155,7 @@ class SpaController extends Controller
             "https://compas.pro/guides-category",
             "https://compas.pro/articles",
             "https://compas.pro/articles-category",
+            "https://compas.pro/cases",
             "https://compas.pro/questions",
             "https://compas.pro/questions-category",
             "https://compas.pro/knowledge",
@@ -176,6 +177,7 @@ class SpaController extends Controller
                 'guides-category'    => ['table' => 'guide_categories',     'active' => false],
                 'questions'          => ['table' => 'faq',                  'active' => true],
                 'articles'           => ['table' => 'articles',             'active' => true],
+                'cases'              => ['table' => 'cases',                'active' => true],
                 'knowledge'          => ['table' => 'knowledge',            'active' => true],
                 'guides'             => ['table' => 'guides',               'active' => true],
             ];
@@ -183,6 +185,10 @@ class SpaController extends Controller
             $urls = [];
 
             foreach ($sections as $prefix => $section) {
+                if (!\Schema::hasTable($section['table'])) {
+                    continue;
+                }
+
                 $query = \DB::table($section['table'])->whereNull('deleted_at');
 
                 if ($section['active']) {

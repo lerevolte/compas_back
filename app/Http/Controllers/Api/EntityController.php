@@ -372,10 +372,13 @@ class EntityController extends Controller
 
     public function last_modified()
     {
-        $tables = ['articles', 'faq', 'knowledge', 'guides'];
+        $tables = ['articles', 'faq', 'knowledge', 'guides', 'cases'];
         $last_modified = [];
 
         foreach ($tables as $table) {
+            if (!\Schema::hasTable($table)) {
+                continue;
+            }
             $record = DB::table($table)
                 ->select('updated_at')
                 ->orderBy('updated_at', 'DESC')

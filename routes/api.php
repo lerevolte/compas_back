@@ -89,8 +89,20 @@ Route::middleware([
         [App\Http\Controllers\Api\GuideController::class, 'search']
     );
     Route::get(
-        'blog/{slug}', 
+        'cases',
+        [App\Http\Controllers\Api\CaseController::class, 'list']
+    );
+    Route::get(
+        'cases/search',
+        [App\Http\Controllers\Api\CaseController::class, 'search']
+    );
+    Route::get(
+        'blog/{slug}',
         [App\Http\Controllers\Api\BlogController::class, 'detail']
+    );
+    Route::get(
+        'cases/{slug}',
+        [App\Http\Controllers\Api\CaseController::class, 'detail']
     );
     Route::get(
         'knowledge/{slug}', 
