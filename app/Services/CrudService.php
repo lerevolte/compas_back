@@ -16,7 +16,8 @@ class CrudService
     {
 
         $settings = \App\Models\Settings::get();
-        $user_id = \Auth::user() ? \Auth::user()->id : 1;
+        $auth_user = \Auth::user();
+        $user_id = $auth_user ? ($auth_user->exists ? $auth_user->id : null) : 1;
 
         if(!isset($settings['models'][$slug]) || !$settings['models'][$slug]->enable) {
 

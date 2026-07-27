@@ -583,7 +583,7 @@ class History extends Model
     {
         if(!count($settings))
             $settings = \App\Models\Settings::get();//\App\Models\Settings::get();
-        $user_id = \Auth::user() ? \Auth::user()->id : 1;
+        $user_id = \Auth::user() ? (\Auth::user()->exists ? \Auth::user()->id : null) : 1;
         $model_fields = $settings[$slug]['fields'];
         $entity = $settings['models'][$slug];
         if(!$entity || !$entity->enable) {
@@ -1012,7 +1012,7 @@ class History extends Model
     public static function createObject($slug, $object)
     {
         $settings = app('settings');//get_settings();
-        $user_id = \Auth::user() ? \Auth::user()->id : 1;
+        $user_id = \Auth::user() ? (\Auth::user()->exists ? \Auth::user()->id : null) : 1;
         $model_fields = $settings[$slug]['fields'];
         $entity = $settings['models'][$slug];
         if(!$entity || !$entity->enable) {
@@ -1170,7 +1170,7 @@ class History extends Model
 
     public static function deleteObject($slug, $object)
     {
-        $user_id = \Auth::user() ? \Auth::user()->id : 1;
+        $user_id = \Auth::user() ? (\Auth::user()->exists ? \Auth::user()->id : null) : 1;
         $history_text = 'Удалена запись: '.$object->id;
         $history = new \App\Models\History(['entity' => $slug, 'event' => 'OBJECT_DELETED', 'entity_id' => $object->id, 'user_id' => $user_id, 'text' => $history_text]);
         $history->save();

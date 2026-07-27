@@ -789,6 +789,7 @@ class Settings extends Model
 			cache()->getMemcached()->delete(tenant('id').':sidebarmenu-'.$user->id);
 
 		}
+		cache()->getMemcached()->delete(tenant('id').':settings-0');
 
 		// Сбрасываем кэш полей моделей (ModelActions::getFields, ключ
 		// "{tenant}:{table}-fields"). Без этого после добавления/изменения поля

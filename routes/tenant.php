@@ -118,6 +118,13 @@ Route::get('/api/external/{token}/route-map', [App\Http\Controllers\Api\External
         PreventAccessFromCentralDomains::class,
         'tenantkeeper'
     ]);
+Route::post('/api/external/{token}/batch', [App\Http\Controllers\Api\ExternalLinkController::class, 'batch'])
+    ->name('external.batch')
+    ->middleware([
+        InitializeTenancyByDomain::class,
+        PreventAccessFromCentralDomains::class,
+        'tenantkeeper'
+    ]);
 Route::middleware([
     'api',
     InitializeTenancyByDomain::class,

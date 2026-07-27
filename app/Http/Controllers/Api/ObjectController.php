@@ -118,7 +118,7 @@ class ObjectController extends Controller
         if ($user && $user->role_id) {
             $permissions = $this->getPermissions($user, $slug, $entity->id);
         } elseif ($isExternalAccess) {
-            $permissions = ['read_p' => 'A'];
+            $permissions = $this->externalLinkPermissions($entity->id) ?? ['read_p' => 'A'];
         }
 
         // Специфичная логика для Users
@@ -214,7 +214,36 @@ class ObjectController extends Controller
             }
         }
 
-        if ($isExternalAccess) {
+        if ($isExternalAccess && $this->isExternalRoleUser()) {
+            if (($permissions['update_p'] ?? 'N') !== 'A') {
+                $detail['readonly'] = true;
+                if (isset($detail['columns']) && is_array($detail['columns'])) {
+                    foreach ($detail['columns'] as $ck => $col) {
+                        foreach ($col as $si => $section) {
+                            if (!empty($section['fields'])) {
+                                foreach ($section['fields'] as $fi => $f) {
+                                    $detail['columns'][$ck][$si]['fields'][$fi]['can_edit'] = 0;
+                                    if (is_array($f) && ($f['type'] ?? null) == 'text_group' && !empty($f['fields'])) {
+                                        foreach ($f['fields'] as $gi => $gf) {
+                                            $detail['columns'][$ck][$si]['fields'][$fi]['fields'][$gi]['can_edit'] = 0;
+                                        }
+                                    }
+                                }
+                            }
+                            if (!empty($section['children']) && is_array($section['children'])) {
+                                foreach ($section['children'] as $ci => $child) {
+                                    if (!empty($child['fields'])) {
+                                        foreach ($child['fields'] as $fi => $f) {
+                                            $detail['columns'][$ck][$si]['children'][$ci]['fields'][$fi]['can_edit'] = 0;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } elseif ($isExternalAccess) {
             $detail['readonly'] = true;
             $restricted = DB::table('data_rows')
                 ->where('data_type_id', $entity->id)
@@ -723,6 +752,45 @@ class ObjectController extends Controller
         }
         
         return $permissions ? $permissions->toArray() : [];
+    }
+
+    private function isExternalRoleUser(): bool
+    {
+        $authUser = Auth::user();
+        return $authUser && !$authUser->exists && $authUser->role_id;
+    }
+
+    private function externalLinkPermissions($entityId): ?array
+    {
+        if (!$this->isExternalRoleUser()) {
+            return null;
+        }
+        $roleId = Auth::user()->role_id;
+        $perm = DB::table('permissions')
+            ->where('role_id', $roleId)
+            ->where('entity_id', $entityId)
+            ->first();
+        if (!$perm) {
+            DB::table('permissions')->insert([
+                'entity_id' => $entityId,
+                'role_id' => $roleId,
+                'read_p' => 'A',
+                'create_p' => 'N',
+                'update_p' => 'N',
+                'delete_p' => 'N',
+                'export_p' => 'N',
+                'import_p' => 'N',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            $perm = DB::table('permissions')
+                ->where('role_id', $roleId)
+                ->where('entity_id', $entityId)
+                ->first();
+        }
+        return $perm
+            ? collect((array) $perm)->only(['read_p', 'create_p', 'update_p', 'delete_p', 'export_p', 'import_p'])->all()
+            : null;
     }
 
     /**

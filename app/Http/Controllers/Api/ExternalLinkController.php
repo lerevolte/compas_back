@@ -48,7 +48,48 @@ class ExternalLinkController extends Controller
 
         $link->incrementVisits();
 
+        $this->actAsExternalUser();
+
         return $objectController->compose_show($link->model_slug, $link->model_id, new Request());
+    }
+
+    public function batch($token, Request $request)
+    {
+        $link = ExternalLink::where('token', $token)->firstOrFail();
+        if (!$link->isValid()) {
+            abort(404, 'Link is expired or no longer available');
+        }
+
+        $role = $this->externalRole();
+        if (!$role) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $entity = DB::table('data_types')->where('slug', $link->model_slug)->first();
+        $perm = $entity
+            ? DB::table('permissions')->where('role_id', $role->id)->where('entity_id', $entity->id)->first()
+            : null;
+        if (!$perm || $perm->update_p !== 'A') {
+            return response()->json(['message' => 'Нет прав на редактирование'], 403);
+        }
+
+        $rows = [];
+        foreach ((array) $request->rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            unset($row['copy']);
+            $row['id'] = (int) $link->model_id;
+            $rows[] = $row;
+        }
+        if (!count($rows)) {
+            return response()->json(['message' => 'Нет данных'], 422);
+        }
+
+        $this->actAsExternalUser();
+
+        $result = app(\App\Services\CrudService::class)->batch($link->model_slug, $rows);
+        return response()->json($result, $result['status'] ?? 200);
     }
 
     /**
@@ -64,6 +105,8 @@ class ExternalLinkController extends Controller
         if (!$link->isValid()) {
             abort(404, 'Link is expired or no longer available');
         }
+
+        $this->actAsExternalUser(true);
 
         $settings = app('settings');
         $parentSlug = $link->model_slug;
@@ -83,6 +126,11 @@ class ExternalLinkController extends Controller
             abort(404, 'Tab is not available for this link');
         }
 
+        $tabPermissions = $this->externalPermissions($slug);
+        if (($tabPermissions['read_p'] ?? 'A') === 'N') {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
         // 2. Серверный scoping: id связанных строк родителя.
         $allowedIds = $this->relatedIds($settings, $parentSlug, $parentId, $slug);
 
@@ -98,11 +146,6 @@ class ExternalLinkController extends Controller
 
         if ($request->page)     $scoped->merge(['page' => $request->page]);
         if ($request->per_page) $scoped->merge(['per_page' => $request->per_page]);
-
-        // 3. Внутренние методы (Table::get/Field::list/EntityObject::list) требуют
-        //    \Auth::user(). Назначаем системного админа на время запроса — объём
-        //    данных уже ограничен whitelist'ом id, права админа на это не влияют.
-        $this->actAsSystemUser();
 
         $list = EntityObject::list($slug, $scoped);
         if (isset($list['error'])) {
@@ -160,7 +203,7 @@ class ExternalLinkController extends Controller
             'entities'    => DB::table('data_types')->select(['slug', 'title_singular', 'title_plural', 'color'])->get(),
             'filters'     => Filter::list($slug),
             'categories'  => [],
-            'permissions' => ['read_p' => 'A'],
+            'permissions' => $this->externalPermissions($slug),
             'tabs'        => [],
             // Настройки полей «Маршрут списком» — те же, что внутри портала,
             // чтобы внешняя ссылка показывала идентичный набор/порядок колонок (8579).
@@ -176,7 +219,7 @@ class ExternalLinkController extends Controller
     public function routeTasks($token, RouteController $routeController, Request $request)
     {
         $link = $this->validRouteLink($token);
-        $this->actAsSystemUser();
+        $this->actAsExternalUser(true);
         return $routeController->tasks($link->model_id, $request);
     }
 
@@ -187,7 +230,7 @@ class ExternalLinkController extends Controller
     public function routeMapData($token, RouteController $routeController, Request $request)
     {
         $link = $this->validRouteLink($token);
-        $this->actAsSystemUser();
+        $this->actAsExternalUser(true);
         return $routeController->map_data($link->model_id, $request);
     }
 
@@ -205,7 +248,8 @@ class ExternalLinkController extends Controller
 
     /**
      * Имена полей сущности с непустым roles_read (ограничение видимости по
-     * ролям). Во внешней ссылке такие поля не отдаём.
+     * ролям). Во внешней ссылке отдаём только поля, разрешённые роли
+     * «Внешняя ссылка»; если роли нет — не отдаём никакие ролевые поля.
      */
     private function restrictedFields(string $slug): array
     {
@@ -216,14 +260,63 @@ class ExternalLinkController extends Controller
             return [];
         }
 
+        $roleId = $this->externalRole()?->id;
+
         return DB::table('data_rows')
             ->where('data_type_id', $type->id)
             ->whereNotNull('roles_read')
             ->whereNotIn('roles_read', ['', '[]', '0'])
+            ->get()
+            ->filter(function ($row) use ($roleId) {
+                if (!$roleId) {
+                    return true;
+                }
+                $roles = json_decode($row->roles_read, true);
+                return !is_array($roles) || !in_array((int) $roleId, array_map('intval', $roles), true);
+            })
             ->pluck('field')
             ->filter()
             ->values()
             ->all();
+    }
+
+    private function externalRole()
+    {
+        return DB::table('roles')->where('name', 'external_link')->whereNull('deleted_at')->first();
+    }
+
+    private function externalPermissions(string $slug): array
+    {
+        $role = $this->externalRole();
+        if (!$role) {
+            return ['read_p' => 'A'];
+        }
+        $entityId = DB::table('data_types')->where('slug', $slug)->value('id');
+        $perm = $entityId
+            ? DB::table('permissions')->where('role_id', $role->id)->where('entity_id', $entityId)->first()
+            : null;
+        return $perm
+            ? collect((array) $perm)->only(['read_p', 'create_p', 'update_p', 'delete_p', 'export_p', 'import_p'])->all()
+            : ['read_p' => 'A'];
+    }
+
+    private function actAsExternalUser(bool $fallbackToSystem = false): void
+    {
+        $role = $this->externalRole();
+        if (!$role) {
+            if ($fallbackToSystem) {
+                $this->actAsSystemUser();
+            }
+            return;
+        }
+
+        $user = new \App\Models\User();
+        $user->id = 0;
+        $user->role_id = $role->id;
+        $user->is_admin = 0;
+        $user->tables = $role->tables;
+        Auth::setUser($user);
+        app()->forgetInstance('settings');
     }
 
     /**

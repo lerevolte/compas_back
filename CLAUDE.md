@@ -324,6 +324,9 @@ central-таблице `accounts` (name, tariff, tenant_id, owner_type, phone, e
 - `seeds:sync-permanent-fields {--dry-run}` — синк постоянных полей в seeds
 - `entity:install-addresses / entity:install-warehouses {--recreate-table}` —
   установка сущностей «Библиотека задач» / «Быстрые задачи»
+- `products-tab:sync-columns {all-tenants|<tenant>} {--dry-run}` — столбцы
+  вкладки «Товары и услуги» (order_products) 1:1 с seeds, кастомные поля
+  товара сохраняются
 - `files:fix-orientation {--dry-run}`, `import:rebuild-file-fields`,
   `gibdd:update`, `gps:fetch`, `bitrix24:sync-payment`, `yandex:route-stats`
 
