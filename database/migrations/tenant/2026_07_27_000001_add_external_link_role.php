@@ -21,6 +21,13 @@ return new class extends Migration
             return;
         }
 
+        if ($schema->hasColumn('roles', 'tables')) {
+            try {
+                $db->statement('ALTER TABLE `roles` MODIFY `tables` LONGTEXT NULL');
+            } catch (\Throwable $e) {
+            }
+        }
+
         $now = \Carbon\Carbon::now();
         $role = $db->table('roles')->where('name', 'external_link')->whereNull('deleted_at')->first();
 
