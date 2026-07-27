@@ -35,7 +35,7 @@ class Role extends \TCG\Voyager\Models\Role
     {
         $data = array();
 
-        $items = Role::orderBy('display_name', 'asc')->get();
+        $items = Role::orderByRaw("(id = 1) desc, (name = 'external_link') desc")->orderBy('display_name', 'asc')->get();
         foreach($items as $item) {
             $data[] = array(
                 'id' => $item->id,
