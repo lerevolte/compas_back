@@ -115,11 +115,50 @@ class TabController extends Controller
 
         return response()->json($request->menu);
         // $tab = Tab::findOrFail($id);
-        
+
         // $tab->roles()->sync($request->roles_read);
         // $tab->has_roles_read = $request->has('has_roles_read') ? $request->has_roles_read : $tab->has_roles_read;
         // $tab->save();
 
         // return response()->json($tab);
+    }
+
+    public function events_visibility($slug, Request $request)
+    {
+        $user = Auth::user();
+        if (!$user || !$user->is_admin) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $roles = array_values(array_map('intval', (array) $request->input('roles_read', [])));
+        $hasRoles = (bool) $request->input('has_roles_read') && count($roles) > 0;
+
+        $value = json_encode([
+            'has_roles_read' => $hasRoles,
+            'roles_read' => $hasRoles ? $roles : [],
+        ]);
+
+        $exists = \DB::table('settings')
+            ->where(['type' => 'events_visibility', 'entity' => $slug])
+            ->whereNull('user_id')
+            ->first();
+
+        if ($exists) {
+            \DB::table('settings')->where('id', $exists->id)->update(['value' => $value]);
+        } else {
+            \DB::table('settings')->insert([
+                'key' => "events_visibility_{$slug}",
+                'display_name' => 'События',
+                'value' => $value,
+                'entity' => $slug,
+                'type' => 'events_visibility',
+                'user_id' => null,
+            ]);
+        }
+
+        return response()->json([
+            'has_roles_read' => $hasRoles,
+            'roles_read' => $hasRoles ? $roles : [],
+        ]);
     }
 }

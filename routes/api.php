@@ -430,6 +430,7 @@ Route::middleware([
         Route::get('tabs/trash', [App\Http\Controllers\Api\TabController::class, 'trash']);
         Route::get('tabs/{entity}', [App\Http\Controllers\Api\TabController::class, 'get']);
         Route::put('tabs/{slug}/permissions', [App\Http\Controllers\Api\TabController::class, 'permissions']);
+        Route::put('tabs/{slug}/events-visibility', [App\Http\Controllers\Api\TabController::class, 'events_visibility']);
 
 
         

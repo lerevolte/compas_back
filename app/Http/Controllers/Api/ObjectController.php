@@ -332,12 +332,17 @@ class ObjectController extends Controller
             }
         }
 
+        $eventsVisibility = self::eventsVisibilitySettings($slug);
+        $eventsVisible = $this->eventsVisibleFor($user, $eventsVisibility);
+
         $history_events = [];
         $history_fields = [];
 
         if ($id && !$request->is_copy) {
             // Оптимизация: запрос истории только если это не копирование и есть ID
-            $history_events = History::list($slug, $id, null, new Request(['filter' => 'events']));
+            if ($eventsVisible) {
+                $history_events = History::list($slug, $id, null, new Request(['filter' => 'events']));
+            }
             $history_fields = History::list($slug, $id, null);
         }
 
@@ -350,8 +355,40 @@ class ObjectController extends Controller
             'history_events' => $history_events,
             'history_fields' => $history_fields,
             'tabs'           => Menu::get($slug),
+            'events_visibility' => $eventsVisibility + ['visible' => $eventsVisible],
             'permissions'    => $permissions
         ]);
+    }
+
+    public static function eventsVisibilitySettings($slug): array
+    {
+        $row = DB::table('settings')
+            ->where(['type' => 'events_visibility', 'entity' => $slug])
+            ->whereNull('user_id')
+            ->first();
+        $value = $row && $row->value ? json_decode($row->value, true) : [];
+        $roles = array_values(array_map('intval', (array) ($value['roles_read'] ?? [])));
+
+        return [
+            'has_roles_read' => (bool) ($value['has_roles_read'] ?? false) && count($roles) > 0,
+            'roles_read' => $roles,
+        ];
+    }
+
+    private function eventsVisibleFor($user, array $settings): bool
+    {
+        if (!$settings['has_roles_read']) {
+            return true;
+        }
+        if ($user) {
+            if ($user->is_admin) {
+                return true;
+            }
+            return in_array((int) $user->role_id, $settings['roles_read'], true);
+        }
+        $roleId = DB::table('roles')->where('name', 'external_link')->whereNull('deleted_at')->value('id');
+
+        return $roleId ? in_array((int) $roleId, $settings['roles_read'], true) : false;
     }
 
     public function compose_show_module($slug, $id, $module, Request $request): JsonResponse
@@ -391,13 +428,17 @@ class ObjectController extends Controller
         // Связанные сущности модуля
         $moduleModel = Module::where('slug', $module)->firstOrFail();
 
+        $eventsVisibility = self::eventsVisibilitySettings($slug);
+        $eventsVisible = $this->eventsVisibleFor($user, $eventsVisibility);
+
         return response()->json([
             'detail'           => $detail,
             'products'         => $products,
             'table'            => $tableKeys,
-            'history_events'   => History::list($slug, $id, $module, new Request(['filter' => 'events'])),
+            'history_events'   => $eventsVisible ? History::list($slug, $id, $module, new Request(['filter' => 'events'])) : [],
             'history_fields'   => History::list($slug, $id, $module),
             'menu'             => Menu::get($slug),
+            'events_visibility' => $eventsVisibility + ['visible' => $eventsVisible],
             'related_entities' => $moduleModel->statusesEntities($slug, $id),
             'permissions'      => $permissions
         ]);

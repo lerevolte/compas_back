@@ -53,6 +53,19 @@ class ExternalLinkController extends Controller
         return $objectController->compose_show($link->model_slug, $link->model_id, new Request());
     }
 
+    public function showModule($token, $module, ObjectController $objectController)
+    {
+        $link = ExternalLink::where('token', $token)->firstOrFail();
+
+        if (!$link->isValid()) {
+            abort(404, 'Link is expired or no longer available');
+        }
+
+        $this->actAsExternalUser();
+
+        return $objectController->compose_show_module($link->model_slug, $link->model_id, $module, new Request());
+    }
+
     public function batch($token, Request $request)
     {
         $link = ExternalLink::where('token', $token)->firstOrFail();

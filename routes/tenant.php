@@ -93,6 +93,13 @@ Route::get('/api/external/{token}', [App\Http\Controllers\Api\ExternalLinkContro
         'tenantkeeper'
     ]);
 // Таблица привязанной сущности по внешней ссылке (без auth, scoping на сервере).
+Route::get('/api/external/{token}/module/{module}', [App\Http\Controllers\Api\ExternalLinkController::class, 'showModule'])
+    ->name('external.module')
+    ->middleware([
+        InitializeTenancyByDomain::class,
+        PreventAccessFromCentralDomains::class,
+        'tenantkeeper'
+    ]);
 Route::get('/api/external/{token}/table/{slug}', [App\Http\Controllers\Api\ExternalLinkController::class, 'table'])
     ->name('external.table')
     ->middleware([
