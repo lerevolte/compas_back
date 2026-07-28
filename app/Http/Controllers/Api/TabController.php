@@ -101,7 +101,7 @@ class TabController extends Controller
                         $menu_items[$k] = $new_menu_item;
                         $menu_items[$k]['sort'] = $sort;
                         info($new_menu_item);
-                        if(isset($new_menu_item['has_roles_read']) && !$new_menu_item['roles_read'] || !isset($new_menu_item['has_roles_read'])) {
+                        if(empty($new_menu_item['has_roles_read']) || empty($new_menu_item['roles_read'])) {
                             $menu_items[$k]['roles_read'] = null;
                         }
                     }
