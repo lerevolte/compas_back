@@ -901,6 +901,7 @@ class RouteController extends Controller
                 $route->time = $totalServiceTime;
             }
         } else {
+            $route->mileage = 0;
             $route->time = $totalServiceTime;
         }
 
