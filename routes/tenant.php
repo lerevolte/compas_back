@@ -138,9 +138,12 @@ Route::middleware([
     PreventAccessFromCentralDomains::class,
     ])->prefix('api')->group(function () {
         Route::post(
-            'auth', 
+            'auth',
             [App\Http\Controllers\Api\AuthController::class, 'login']
         );
+        Route::get('auth', function () {
+            return redirect('/auth');
+        });
         Route::post(
             'auth1', 
             [App\Http\Controllers\Api\AuthController::class, 'login1']

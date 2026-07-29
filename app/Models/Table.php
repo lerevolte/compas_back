@@ -844,12 +844,13 @@ class Table
             // Старая колонка iconDelete заменена на полноценную колонку «Действие» (actions)
             // с двумя пунктами — Посмотреть и Удалить, как в остальных таблицах.
             unset($table_columns['iconDelete']);
+            $savedActions = isset($table_columns['actions']) && is_array($table_columns['actions']) ? $table_columns['actions'] : null;
             $table_columns['actions'] = array(
                 "id" => 2,
                 "title" => "Действие",
                 "key" => "actions",
                 "width" => "57px",
-                "enabled" => 1,
+                "enabled" => $savedActions !== null && array_key_exists('enabled', $savedActions) ? ($savedActions['enabled'] ? 1 : 0) : 1,
                 "hover" => false,
                 "sort_order" => null,
                 "type" => "actions",
