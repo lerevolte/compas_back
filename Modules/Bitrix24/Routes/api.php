@@ -50,3 +50,21 @@ Route::middleware([
     Route::get('config',  [Bitrix24WebController::class, 'getConfig']);
     Route::post('config', [Bitrix24WebController::class, 'setConfig']);
 });
+
+// Синхронизация сущностей deals/contacts/companies (политика avixo: код общий,
+// включается наличием сущностей в тенанте — см. B24EntitySync::ready).
+Route::middleware([
+    InitializeTenancyByDomain::class,
+    PreventAccessFromCentralDomains::class
+])->prefix('bitrix24')->group(function () {
+    Route::any('entity-hook', [\Modules\Bitrix24\Http\Controllers\B24EntityController::class, 'entityHook']);
+});
+
+Route::middleware([
+    'auth:api',
+    InitializeTenancyByDomain::class,
+    PreventAccessFromCentralDomains::class
+])->prefix('bitrix24')->group(function () {
+    Route::get('deal-stages', [\Modules\Bitrix24\Http\Controllers\B24EntityController::class, 'stages']);
+    Route::post('deals/{id}/stage', [\Modules\Bitrix24\Http\Controllers\B24EntityController::class, 'changeStage']);
+});

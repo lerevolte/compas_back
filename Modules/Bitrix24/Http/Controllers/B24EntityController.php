@@ -1,0 +1,117 @@
+<?php
+
+namespace Modules\Bitrix24\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Modules\Bitrix24\Services\B24EntitySync;
+
+class B24EntityController extends Controller
+{
+    /**
+     * Вебхук Bitrix24 по событиям сделок/контактов/компаний (ONCRMDEAL*,
+     * ONCRMCONTACT*, ONCRMCOMPANY*). Без auth — тенант по домену.
+     * URL: /api/bitrix24/entity-hook
+     * Ручной вызов: /api/bitrix24/entity-hook?type=deal&id=123
+     */
+    public function entityHook(Request $request)
+    {
+        Log::channel('bitrix24')->info('entity-hook: hit', [
+            'host'  => $request->getHost(),
+            'event' => $request->input('event'),
+            'input' => $request->all(),
+        ]);
+
+        $svc = B24EntitySync::make();
+        if (!$svc) {
+            return response('entity sync is not configured', 200);
+        }
+
+        $event = strtoupper((string) $request->input('event', ''));
+        $id = data_get($request->input('data'), 'FIELDS.ID') ?: $request->input('id');
+        $type = $request->input('type');
+        if (!$type) {
+            if (str_contains($event, 'DEAL')) {
+                $type = 'deal';
+            } elseif (str_contains($event, 'CONTACT')) {
+                $type = 'contact';
+            } elseif (str_contains($event, 'COMPANY')) {
+                $type = 'company';
+            }
+        }
+        if (!$type || !$id) {
+            return response('no type or id', 200);
+        }
+
+        try {
+            $isDelete = str_ends_with($event, 'DELETE');
+            switch ($type) {
+                case 'deal':
+                    if ($isDelete) {
+                        \App\Models\Deal::where('b24_id', (string) $id)->first()?->delete();
+                    } else {
+                        $svc->pullDealById($id);
+                    }
+                    break;
+                case 'contact':
+                    if ($isDelete) {
+                        \App\Models\Contact::where('b24_id', (string) $id)->first()?->delete();
+                    } else {
+                        $svc->pullContactById($id);
+                    }
+                    break;
+                case 'company':
+                    if (!$isDelete) {
+                        $svc->pullCompanyById($id);
+                    }
+                    break;
+            }
+        } catch (\Throwable $e) {
+            Log::channel('bitrix24')->error('entity-hook: failed', [
+                'type' => $type, 'id' => $id, 'error' => $e->getMessage(),
+            ]);
+            return response('sync error', 200);
+        }
+
+        return response()->json(['status' => 'ok', 'type' => $type, 'id' => $id]);
+    }
+
+    /**
+     * Список стадий сделок (value/label/color) для шкалы в карточке.
+     */
+    public function stages()
+    {
+        $svc = B24EntitySync::make();
+        return response()->json($svc ? $svc->stageOptions() : []);
+    }
+
+    /**
+     * Смена стадии сделки: улетает в Bitrix24, локально пишется история событий.
+     */
+    public function changeStage($id, Request $request)
+    {
+        $request->validate(['stage' => 'required|string']);
+
+        $svc = B24EntitySync::make();
+        if (!$svc) {
+            return response()->json(['message' => 'Синхронизация Bitrix24 не настроена'], 422);
+        }
+
+        $deal = \App\Models\Deal::findOrFail($id);
+
+        try {
+            $stage = $svc->changeStage($deal, $request->input('stage'), Auth::user()?->id);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            Log::channel('bitrix24')->error('change-stage: failed', [
+                'deal_id' => $id, 'error' => $e->getMessage(),
+            ]);
+            return response()->json(['message' => 'Не удалось изменить стадию в Bitrix24'], 502);
+        }
+
+        return response()->json(['status' => 'ok', 'stage' => $stage]);
+    }
+}

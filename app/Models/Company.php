@@ -29,6 +29,22 @@ class Company extends Model
                 $model->user_id = $user->id;
         });
 
+        static::saved(function($model)
+        {
+            if (!isset($model->getChanges()['name']) || !$model->b24_id) {
+                return;
+            }
+            if (!class_exists(\Modules\Bitrix24\Services\B24EntitySync::class)
+                || \Modules\Bitrix24\Services\B24EntitySync::$muted) {
+                return;
+            }
+            try {
+                \Modules\Bitrix24\Services\B24EntitySync::make()?->pushCompany($model, ['name']);
+            } catch (\Throwable $e) {
+                \Log::channel('bitrix24')->warning('company push failed', ['company_id' => $model->id, 'error' => $e->getMessage()]);
+            }
+        });
+
         static::updating(function($model)
         {   
             // if($model->getOriginal('car_id') != $model->car_id) {
@@ -110,6 +126,16 @@ class Company extends Model
     public function fines_gibdd()
     {
         return $this->hasMany(GibddFine::class, 'company_id');
+    }
+
+    public function contacts()
+    {
+        return $this->belongsToMany(Contact::class, 'company_contact');
+    }
+
+    public function deals()
+    {
+        return $this->belongsToMany(Deal::class, 'company_deal');
     }
 
     public function sync_history($field, $new_value)
