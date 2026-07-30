@@ -16,13 +16,20 @@ class TaskController extends Controller
 {
     public function set_products($id, Request $request)
     {
-        info('set produts');
-        info($id);
-        info($request->products);
+        return $this->saveProductsFor('logistic_tasks', Task::class, $id, $request);
+    }
+
+    public function set_deal_products($id, Request $request)
+    {
+        return $this->saveProductsFor('deals', \App\Models\Deal::class, $id, $request);
+    }
+
+    private function saveProductsFor($slug, $class, $id, Request $request)
+    {
         $user = Auth::user();
         if (!$user || !$user->is_admin) {
             $settings = app('settings');
-            $perms = $settings['logistic_tasks']['perms']['products'] ?? null;
+            $perms = $settings[$slug]['perms']['products'] ?? null;
             if (!$user || ($perms && (!$perms['read'] || !$perms['write']))) {
                 return response()->json(['message' => 'Нет прав на изменение состава'], 403);
             }
@@ -39,11 +46,11 @@ class TaskController extends Controller
                 'sum' => $product['product_sum'],
             );
         }
-        $task = Task::find($id);
-        if(!$task) {
+        $object = $class::find($id);
+        if(!$object) {
             return response()->json(['error' => 404, 'text' => 'Задача не найдена']);
         }
-        $task->setProducts($products);
+        $object->setProducts($products);
 
         return response()->json(['success' => true]);
     }

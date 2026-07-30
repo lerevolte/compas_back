@@ -442,8 +442,13 @@ Route::middleware([
         Route::get('product-stats/tasks', [App\Http\Controllers\Api\ProductStatsController::class, 'tasks'])->name('product_stats.tasks');
 
         Route::put(
-            'logistic_tasks/{id}/set_products', 
+            'logistic_tasks/{id}/set_products',
             [App\Http\Controllers\Api\TaskController::class, 'set_products']
+        );
+
+        Route::put(
+            'deals/{id}/set_products',
+            [App\Http\Controllers\Api\TaskController::class, 'set_deal_products']
         );
 
         Route::get(

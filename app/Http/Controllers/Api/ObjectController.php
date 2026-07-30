@@ -322,8 +322,8 @@ class ObjectController extends Controller
         $products = [];
         $tableKeys = [];
 
-        if ($slug === 'logistic_tasks') {
-            $productsPerms = $this->getProductsFieldPerms($user, $entity->id, $isExternalAccess);
+        if (in_array($slug, ['logistic_tasks', 'deals'], true)) {
+            $productsPerms = $this->getProductsFieldPerms($user, $entity->id, $isExternalAccess, $slug);
             if ($productsPerms['read']) {
                 $tableKeys = Table::get_order_products();
                 if (!$productsPerms['write']) {
@@ -333,7 +333,7 @@ class ObjectController extends Controller
                     }
                 }
                 if ($id) {
-                    $products = EntityObject::list('products', new Request(['order_id' => $id]));
+                    $products = EntityObject::list('products', new Request(['order_id' => $id, 'order_entity' => $slug]));
                 }
             }
         }
@@ -687,7 +687,7 @@ class ObjectController extends Controller
     /**
      * Получает права доступа пользователя к сущности
      */
-    private function getProductsFieldPerms($user, $entityId, $isExternalAccess = false): array
+    private function getProductsFieldPerms($user, $entityId, $isExternalAccess = false, $slug = 'logistic_tasks'): array
     {
         if ($user && $user->is_admin) {
             return ['read' => true, 'write' => true];
@@ -701,7 +701,7 @@ class ObjectController extends Controller
             return ['read' => !$restricted, 'write' => false];
         }
         $settings = app('settings');
-        $perms = $settings['logistic_tasks']['perms']['products'] ?? null;
+        $perms = $settings[$slug]['perms']['products'] ?? null;
         if (!$perms) {
             return ['read' => true, 'write' => true];
         }

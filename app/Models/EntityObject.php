@@ -1784,7 +1784,8 @@ class EntityObject
 
         if($request->order_id && $slug == 'products') {
 
-            $order = \App\Models\Task::withTrashed()->where(['id' => $request->order_id])->first();
+            $order_class = $request->order_entity == 'deals' ? \App\Models\Deal::class : \App\Models\Task::class;
+            $order = $order_class::withTrashed()->where(['id' => $request->order_id])->first();
 
             if($order) {
                 $products = json_decode($order->products, true);

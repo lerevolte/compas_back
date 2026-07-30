@@ -143,7 +143,8 @@ class InstallDealsEntity extends Command
             'key' => 'menu', 'display_name' => null,
             'value' => json_encode([
                 ['title' => 'Общие', 'tab' => 'order', 'sort' => 0, 'enabled' => 1, 'id' => 0],
-                ['title' => 'История изменений', 'tab' => 'history', 'sort' => 1, 'enabled' => true, 'id' => 1, 'has_roles_read' => false, 'roles_read' => null],
+                ['title' => 'Товары и услуги', 'tab' => 'products', 'sort' => 1, 'enabled' => 1, 'id' => 1],
+                ['title' => 'История изменений', 'tab' => 'history', 'sort' => 2, 'enabled' => true, 'id' => 2, 'has_roles_read' => false, 'roles_read' => null],
             ], JSON_UNESCAPED_SLASHES),
             'type' => 'menu', 'entity' => 'deals', 'user_id' => null,
         ]);

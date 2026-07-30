@@ -455,6 +455,11 @@ Route::middleware([
             [App\Http\Controllers\Api\TaskController::class, 'set_products']
         );
 
+        Route::put(
+            'deals/{id}/set_products',
+            [App\Http\Controllers\Api\TaskController::class, 'set_deal_products']
+        );
+
         Route::get('cache_changes', function(Request $request){
             if($request->time)
                 $time = date('Y-m-d H:i:s', (int)$request->time);

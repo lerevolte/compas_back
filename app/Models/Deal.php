@@ -56,6 +56,37 @@ class Deal extends Model
         });
     }
 
+    public function setProducts(array $products)
+    {
+        $this->products = json_encode($products);
+        $totalWeight = 0;
+        $totalVolume = 0;
+        foreach ($products as $product) {
+            $count = isset($product['count']) ? (float) $product['count'] : 0;
+            $w = isset($product['weight']) ? (float) $product['weight'] : 0;
+            $v = isset($product['volume']) ? (float) $product['volume'] : 0;
+            $totalWeight += $count * $w;
+            $totalVolume += $count * $v;
+        }
+        $this->weight = $totalWeight;
+        $this->volume = $totalVolume;
+
+        $objects = History::saveForObject(
+            $this->getTable(),
+            array(
+                array(
+                    'id' => $this->id,
+                    'products' => $this->products,
+                    'weight' => $this->weight,
+                    'volume' => $this->volume,
+                )
+            )
+        );
+        $this->save();
+        $data = $this->getData($objects['changed_fields']);
+        \App\Events\ObjectUpdated::dispatch('ObjectUpdated', $data);
+    }
+
     public function getHtmlProducts()
     {
         $html = '';
