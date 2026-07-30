@@ -71,6 +71,8 @@ class RoleController extends Controller
         if($new_permissions_exist)
             $res = \App\Models\Permission::whereNotNull('entity_id')->where('role_id', $id)->get()->keyBy('entity_id')->toArray();
         foreach($res as $entity => $entity_permission) {
+            if($role && $role->name == 'external_link' && in_array($data_types[$entity]->slug ?? null, ['logistic', 'analytics']))
+                continue;
             if(isset($data_types[$entity]))
                 $permissions[] = array(
                     'id' => $entity_permission['id'],
