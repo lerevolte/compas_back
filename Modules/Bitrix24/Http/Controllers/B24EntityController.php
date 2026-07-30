@@ -18,6 +18,8 @@ class B24EntityController extends Controller
      */
     public function entityHook(Request $request)
     {
+        return response('entity sync is paused', 200);
+
         Log::channel('bitrix24')->info('entity-hook: hit', [
             'host'  => $request->getHost(),
             'event' => $request->input('event'),

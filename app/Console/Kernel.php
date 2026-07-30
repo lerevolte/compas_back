@@ -23,7 +23,7 @@ class Kernel extends ConsoleKernel
     {
         $schedule->command('gps:fetch')->everyMinute();
         //$schedule->command('gibdd:update')->everyMinute();
-        $schedule->command('bitrix24:sync-entities all-tenants')->everyTenMinutes()->withoutOverlapping();
+        //$schedule->command('bitrix24:sync-entities all-tenants')->everyTenMinutes()->withoutOverlapping();
         $tenants = \App\Models\Tenant::get();
         //info('SCHEDULER');
         foreach ($tenants as $tenant) {
