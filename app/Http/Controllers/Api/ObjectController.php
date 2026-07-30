@@ -83,6 +83,10 @@ class ObjectController extends Controller
             }
         }
 
+        $permissions['external_link_read_p'] = $this->externalLinkRoleReadP(
+            DB::table('data_types')->where('slug', $slug)->value('id')
+        );
+
         // 5. Загрузка категорий (Замена if/else на маппинг)
         $categories = $this->getCategoriesForSlug($slug);
 
@@ -308,8 +312,10 @@ class ObjectController extends Controller
         }
         if (is_array($permissions)) {
             $permissions['can_delete'] = $canDelete;
+            $permissions['external_link_read_p'] = $this->externalLinkRoleReadP($entity->id);
         } elseif (is_object($permissions)) {
             $permissions->can_delete = $canDelete;
+            $permissions->external_link_read_p = $this->externalLinkRoleReadP($entity->id);
         }
 
         // 4. Дополнительные данные (продукты, история)
@@ -793,6 +799,23 @@ class ObjectController extends Controller
         }
         
         return $permissions ? $permissions->toArray() : [];
+    }
+
+    private function externalLinkRoleReadP($entityId): string
+    {
+        if (!$entityId) {
+            return 'A';
+        }
+        $roleId = DB::table('roles')->where('name', 'external_link')->whereNull('deleted_at')->value('id');
+        if (!$roleId) {
+            return 'A';
+        }
+        $readP = DB::table('permissions')
+            ->where('role_id', $roleId)
+            ->where('entity_id', $entityId)
+            ->value('read_p');
+
+        return $readP ?? 'A';
     }
 
     private function isExternalRoleUser(): bool

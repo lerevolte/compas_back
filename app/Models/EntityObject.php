@@ -207,6 +207,7 @@ class EntityObject
         $user = $isAuthenticated ? auth()->user() : null;
         $isAdmin = $isAuthenticated && $user->is_admin;
         $role = $isAuthenticated ? $user->role : null;
+        $isExternalViewer = !$isAuthenticated || !$user->exists;
 
         $entity_class = $entity->model_name;
         $model_fields = $settings[$slug]['fields'];
@@ -650,13 +651,13 @@ class EntityObject
                             );
                         }
 
-                        if (!$isAuthenticated && !$subfield->visible_always && static::isEmptyFieldValue($subfield_data['value'] ?? null)) {
+                        if ($isExternalViewer && !$subfield->visible_always && static::isEmptyFieldValue($subfield_data['value'] ?? null)) {
                             continue;
                         }
                         $fields_data[$field->field]['fields'][] = $subfield_data;
                     }
 
-                    if (!$isAuthenticated && !count($fields_data[$field->field]['fields'])) {
+                    if ($isExternalViewer && !count($fields_data[$field->field]['fields'])) {
                         unset($fields_data[$field->field]);
                         continue;
                     }
@@ -693,7 +694,7 @@ class EntityObject
                             continue;
                         }
                         if (isset($fields_data[$field->field]) && $field->data_type_id == $entity->id) {
-                            if (!$isAuthenticated
+                            if ($isExternalViewer
                                 && !$field->visible_always
                                 && !in_array($field->type, ['text_group', 'route_map', 'route_statuses'])
                                 && static::isEmptyFieldValue($fields_data[$field->field]['value'] ?? null)) {
@@ -723,7 +724,7 @@ class EntityObject
                                     continue;
                                 }
                                 if (isset($fields_data[$subfield->field])) {
-                                    if (!$isAuthenticated
+                                    if ($isExternalViewer
                                         && !$subfield->visible_always
                                         && !in_array($subfield->type, ['text_group', 'route_map', 'route_statuses'])
                                         && static::isEmptyFieldValue($fields_data[$subfield->field]['value'] ?? null)) {
