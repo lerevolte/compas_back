@@ -220,15 +220,18 @@ class EntityObject
             'export_p' => 'A',
             'import_p' => 'A'
         ];
-        if($isAuthenticated)
-            $permissions = \Auth::user()->role->permissions()->select([
+        if($isAuthenticated) {
+            $permissions_row = \Auth::user()->role->permissions()->select([
                 'read_p',
                 'create_p',
                 'update_p',
                 'delete_p',
                 'export_p',
                 'import_p'
-            ])->where('entity_id', $entity->id)->first()->toArray();
+            ])->where('entity_id', $entity->id)->first();
+            if($permissions_row)
+                $permissions = $permissions_row->toArray();
+        }
         // Получение текущего объекта
         if ($id) {
             $current = $entity_class::withTrashed()->where(['id' => $id])->first();
@@ -789,14 +792,22 @@ class EntityObject
             ];
         }
         $entity_class = $entity->model_name;
-        $permissions = \Auth::user()->role->permissions()->select([
+        $permissions_row = \Auth::user()->role->permissions()->select([
                 'read_p',
                 'create_p',
                 'update_p',
                 'delete_p',
                 'export_p',
                 'import_p'
-            ])->where('entity_id', $entity->id)->first()->toArray();
+            ])->where('entity_id', $entity->id)->first();
+        $permissions = $permissions_row ? $permissions_row->toArray() : [
+            'read_p' => 'A',
+            'create_p' => 'A',
+            'update_p' => 'A',
+            'delete_p' => 'A',
+            'export_p' => 'A',
+            'import_p' => 'A'
+        ];
         $entity_fields = $settings[$slug]['fields'];
         $model_fields = $entity_class::getFieldsByModule($module);
         $fields_data = array();

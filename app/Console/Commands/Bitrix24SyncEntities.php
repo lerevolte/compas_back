@@ -42,18 +42,34 @@ class Bitrix24SyncEntities extends Command
                         return;
                     }
                     $svc = B24EntitySync::make();
-                    $since = null;
-                    if (!$this->option('full')) {
-                        $since = \DB::table('settings')
-                            ->where('type', 'b24_entities_synced_at')
-                            ->value('value');
-                    }
                     $startedAt = now()->format('Y-m-d\TH:i:sP');
-                    $result = $svc->fullSync($since ?: null);
-                    \DB::table('settings')->updateOrInsert(
-                        ['type' => 'b24_entities_synced_at', 'entity' => null, 'user_id' => null],
-                        ['key' => 'b24_entities_synced_at', 'value' => $startedAt]
-                    );
+                    $saveMark = function () use ($startedAt) {
+                        \DB::table('settings')->updateOrInsert(
+                            ['type' => 'b24_entities_synced_at', 'entity' => null, 'user_id' => null],
+                            ['key' => 'b24_entities_synced_at', 'value' => $startedAt]
+                        );
+                    };
+
+                    if ($this->option('full')) {
+                        $result = $svc->fullSync(null);
+                        $saveMark();
+                        $this->info("  ✓ {$tenant->id} (full): deals={$result['deals']}, contacts={$result['contacts']}, stages={$result['stages']}");
+                        return;
+                    }
+
+                    $since = \DB::table('settings')
+                        ->where('type', 'b24_entities_synced_at')
+                        ->value('value');
+
+                    if (!$since) {
+                        $stages = $svc->syncStages();
+                        $saveMark();
+                        $this->info("  ✓ {$tenant->id} (init): stages=" . count($stages) . '; сделки/контакты дальше пойдут инкрементально (вебхук + крон), полная выгрузка — только с --full');
+                        return;
+                    }
+
+                    $result = $svc->fullSync($since);
+                    $saveMark();
                     $this->info("  ✓ {$tenant->id}: deals={$result['deals']}, contacts={$result['contacts']}, stages={$result['stages']}");
                 });
             } catch (\Throwable $e) {
