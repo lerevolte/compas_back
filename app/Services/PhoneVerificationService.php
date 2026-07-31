@@ -112,26 +112,29 @@ class PhoneVerificationService
         return ['status' => 'delivered', 'verification_token' => $token];
     }
 
-    public function consume(?string $rawPhone, ?string $token): bool
+    public function check(?string $rawPhone, ?string $token): bool
     {
         $phone = self::normalizePhone($rawPhone);
         if (!$phone || !$token) {
             return false;
         }
-        $row = DB::table('phone_verifications')
+        return DB::table('phone_verifications')
             ->where('token', $token)
             ->where('phone', $phone)
             ->where('status', 'confirmed')
             ->where('confirmed_at', '>=', now()->subHours(self::TOKEN_TTL_HOURS))
-            ->first();
-        if (!$row) {
-            return false;
+            ->exists();
+    }
+
+    public function markUsed(?string $token): void
+    {
+        if (!$token) {
+            return;
         }
-        DB::table('phone_verifications')->where('id', $row->id)->update([
+        DB::table('phone_verifications')->where('token', $token)->update([
             'status' => 'used',
             'updated_at' => now(),
         ]);
-        return true;
     }
 
     private function call(string $url, array $data): ?array

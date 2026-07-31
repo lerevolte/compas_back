@@ -40,7 +40,7 @@ class RegistrationController extends Controller
             if (empty($data['phone'])) {
                 $this->fail(['phone' => ['Укажите номер телефона']]);
             }
-            if (!$this->phoneVerification->consume($data['phone'], $data['verification_token'] ?? null)) {
+            if (!$this->phoneVerification->check($data['phone'], $data['verification_token'] ?? null)) {
                 $this->fail(['phone' => ['Подтвердите номер телефона']]);
             }
         }
@@ -49,6 +49,7 @@ class RegistrationController extends Controller
 
         info('beforecreate');
         $res = $this->tenantService->create($data);
+        $this->phoneVerification->markUsed($data['verification_token'] ?? null);
         info('aftercreate');
         $res['user_id'] = 1;
         $res['account_id'] = tenant('id');
