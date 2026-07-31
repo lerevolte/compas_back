@@ -2,11 +2,10 @@
 
 namespace Modules\Products\Http\Controllers\Api;
 
+use App\Models\Category;
 use Illuminate\Contracts\Support\Renderable;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
-use Modules\Products\Entities\Category;
-use Modules\Products\Entities\Product;
 
 class CategoryController extends Controller
 {
@@ -28,11 +27,15 @@ class CategoryController extends Controller
      */
     public function store(Request $request)
     {
-        $data = Category::create($request->all());
+        if (!$this->canManage()) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        $fields = $this->validated($request);
+
+        $data = Category::create($fields);
         $data = Category::where('id', $data->id)->with('children')->first();
         Category::fixTree();
         \App\Models\Settings::clear_cache();
-        info($data);
 
         return response()->json($data);
     }
@@ -46,13 +49,20 @@ class CategoryController extends Controller
      */
     public function update(Request $request, $id)
     {
+        if (!$this->canManage()) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
         $data = Category::find($id);
         if(!$data) {
             return response()->json([
                 'status' => 404,
             ]);
         }
-        $data->update($request->all());
+        $fields = $this->validated($request);
+        if (isset($fields['parent_id']) && (int) $fields['parent_id'] === (int) $id) {
+            unset($fields['parent_id']);
+        }
+        $data->update($fields);
         Category::fixTree();
         \App\Models\Settings::clear_cache();
 
@@ -66,19 +76,58 @@ class CategoryController extends Controller
      */
     public function destroy($id)
     {
+        if (!$this->canManage()) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
         $data = Category::find($id);
         if(!$data) {
             return response()->json([
                 'status' => 404,
             ]);
         }
-        $data->delete();
+        $ids = Category::descendantsAndSelf($data->id)->pluck('id')->toArray();
+        Category::whereIntegerInRaw('id', $ids)->get()->each->delete();
+        if (\Schema::hasColumn('products', 'category_id')) {
+            \DB::table('products')->whereIntegerInRaw('category_id', $ids)->update(['category_id' => null]);
+        }
         Category::fixTree();
-        cache()->flush();
+        \App\Models\Settings::clear_cache();
 
         return response()->json([
             'status' => 200,
             'success' => true
         ]);
+    }
+
+    private function validated(Request $request): array
+    {
+        $fields = $request->validate([
+            'name' => 'required|string|max:255',
+            'parent_id' => 'nullable|integer|exists:categories,id',
+        ]);
+        if (array_key_exists('parent_id', $fields) && !$fields['parent_id']) {
+            $fields['parent_id'] = null;
+        }
+        return $fields;
+    }
+
+    private function canManage(): bool
+    {
+        $user = \Auth::user();
+        if (!$user) {
+            return false;
+        }
+        if ($user->is_admin) {
+            return true;
+        }
+        $entityId = \DB::table('data_types')->where('slug', 'products')->value('id');
+        if (!$entityId) {
+            return false;
+        }
+        $perm = \DB::table('permissions')
+            ->where('role_id', $user->role_id)
+            ->where('entity_id', $entityId)
+            ->first();
+        return !$perm || $perm->update_p != 'N';
     }
 }

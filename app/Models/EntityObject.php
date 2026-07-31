@@ -1642,13 +1642,17 @@ class EntityObject
                         if($field == 'category_id' && !$request->exclude_childs) {
                             foreach($model_fields as $f) {
                                 if($f->field == $field) {
-                                    $related_table = $field->relation_table;//json_decode($f->details, true)['table'];
-                                    $dt = \DB::table('data_types')->where('name', $related_table)->first();
-                                    $descendants = $dt->model_name::descendantsAndSelf($val)->pluck('id')->toArray();
+                                    $related_table = $f->relation_table ?: (json_decode($f->details ?? '', true)['table'] ?? null);
+                                    $dt = $related_table ? \DB::table('data_types')->where('name', $related_table)->first() : null;
+                                    if($dt && $dt->model_name && class_exists($dt->model_name)) {
+                                        $descendants = $dt->model_name::descendantsAndSelf($val)->pluck('id')->toArray();
+                                    }
                                 }
                             }
                             if(isset($descendants) && is_array($descendants)) {
                                 $paginator = $paginator->whereIntegerInRaw($field, $descendants);
+                            } else {
+                                $paginator = $paginator->where($field, $val);
                             }
 
                         } else {

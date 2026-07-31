@@ -92,11 +92,20 @@ SQL);
             UNIQUE KEY `company_contact_unique` (`company_id`, `contact_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
 
+        $contactsIndexes = collect($db->select('SHOW INDEX FROM `contacts`'))->pluck('Key_name');
+        if (!$contactsIndexes->contains('contacts_b24_id_index')) {
+            $db->statement('ALTER TABLE `contacts` ADD INDEX `contacts_b24_id_index` (`b24_id`)');
+        }
+
         if ($sb->hasTable('companies')) {
             foreach (['contact_id' => 'TEXT NULL', 'b24_id' => 'VARCHAR(32) NULL', 'deal_id' => 'INT NULL'] as $col => $ddl) {
                 if (!$sb->hasColumn('companies', $col)) {
                     $db->statement("ALTER TABLE `companies` ADD COLUMN `{$col}` {$ddl}");
                 }
+            }
+            $companiesIndexes = collect($db->select('SHOW INDEX FROM `companies`'))->pluck('Key_name');
+            if (!$companiesIndexes->contains('companies_b24_id_index')) {
+                $db->statement('ALTER TABLE `companies` ADD INDEX `companies_b24_id_index` (`b24_id`)');
             }
         }
 

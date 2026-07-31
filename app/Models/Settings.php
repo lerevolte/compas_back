@@ -9,7 +9,13 @@ use App\Helpers\ValueHelper;
 class Settings extends Model
 {
 	public $timestamps = false;
-	
+
+	const LAZY_LIST_THRESHOLD = 500;
+	const LAZY_LIST_PRELOAD = 30;
+
+	protected static $lazy_resolved = array();
+	protected static $palette_colors = null;
+
 	private static function getUser() {
 	    $user = \Auth::user();
 
@@ -465,6 +471,7 @@ class Settings extends Model
             	$settings = array();
 		        $settings['is_admin'] = $user->isAdmin();
 		        $settings['field_values'] = array();
+		        $settings['lazy_relations'] = array();
 		        $modules = \DB::table('modules')->select('id', 'name', 'slug', 'enabled')->get()->keyBy('slug')->toArray();
 		        $modules_config = \Nwidart\Modules\Facades\Module::all();
 		        $data_types = \DB::table('data_types')->get();
@@ -494,6 +501,7 @@ class Settings extends Model
 		        $field_values = array();
 
 		        $table_objects = array();
+		        $relation_counts = array();
 		        $user_roles = [$user->role_id];//$user->roles_all()->pluck('id')->toArray();
 		        $permissions = array();
 
@@ -534,15 +542,25 @@ class Settings extends Model
 	                            // тенантских таблиц вроде routes — пустой набор вместо
 	                            // ошибки "Base table or view not found".
 	                            $table_objects = collect();
-	                        } elseif($type) {
-                                info($field->id.' '.$field->field);
-                                info($type->model_name);
-	                        	if($details['table'] == 'cars' || $details['table'] == 'employees' || $details['table'] == 'clients')
-	                        		$table_objects = isset($table_objects[$details['table']]) ? $table_objects[$details['table']] :$type->model_name::orderBy('choosed_at', 'DESC')->orderBy('name', 'ASC')->whereNull('deleted_at')->get();
-	                        	else
-	                            	$table_objects = isset($table_objects[$details['table']]) ? $table_objects[$details['table']] :$type->model_name::orderBy('choosed_at', 'DESC')->orderBy('name', 'ASC')->whereNull('deleted_at')->get();
 	                        } else {
-	                            $table_objects = isset($table_objects[$details['table']]) ? $table_objects[$details['table']] :\DB::table($details['table'])->orderBy('choosed_at', 'DESC')->orderBy('name', 'ASC')->whereNull('deleted_at')->get();
+	                            if(!array_key_exists($details['table'], $relation_counts)) {
+	                                $count_query = \DB::table($details['table']);
+	                                if(\Schema::hasColumn($details['table'], 'deleted_at'))
+	                                    $count_query->whereNull('deleted_at');
+	                                $relation_counts[$details['table']] = $count_query->count();
+	                            }
+	                            if($relation_counts[$details['table']] > self::LAZY_LIST_THRESHOLD)
+	                                $settings['lazy_relations'][$field->id] = $details['table'];
+	                            if(isset($table_objects[$details['table']])) {
+	                                $table_objects = $table_objects[$details['table']];
+	                            } else {
+	                                $list_query = $type
+	                                    ? $type->model_name::orderBy('choosed_at', 'DESC')->orderBy('name', 'ASC')->whereNull('deleted_at')
+	                                    : \DB::table($details['table'])->orderBy('choosed_at', 'DESC')->orderBy('name', 'ASC')->whereNull('deleted_at');
+	                                if(isset($settings['lazy_relations'][$field->id]))
+	                                    $list_query->limit(self::LAZY_LIST_PRELOAD);
+	                                $table_objects = $list_query->get();
+	                            }
 	                        }
 		                    $table_objects[$details['table']] = $table_objects;
 		                    $i = 0;
@@ -763,6 +781,159 @@ class Settings extends Model
 	        }
 	    }
 	}
+
+    public static function lazy_table($settings, $field_id)
+    {
+        return isset($settings['lazy_relations'][$field_id]) ? $settings['lazy_relations'][$field_id] : null;
+    }
+
+    public static function resolve_list_values($settings, $field_id, $values)
+    {
+        $result = array();
+        if(!is_array($values))
+            $values = array($values);
+        $ids = array();
+        foreach($values as $v) {
+            if($v === null || $v === '' || is_array($v) || !is_numeric($v))
+                continue;
+            $ids[] = (int) $v;
+        }
+        $ids = array_unique($ids);
+        if(!count($ids))
+            return $result;
+        foreach($ids as $id) {
+            if(isset($settings['list_values'][$field_id][$id]))
+                $result[$id] = $settings['list_values'][$field_id][$id];
+        }
+        $table = self::lazy_table($settings, $field_id);
+        if(!$table)
+            return $result;
+        $missing = array();
+        foreach($ids as $id) {
+            if(isset($result[$id]))
+                continue;
+            $memo_key = $field_id.':'.$id;
+            if(array_key_exists($memo_key, self::$lazy_resolved)) {
+                if(self::$lazy_resolved[$memo_key])
+                    $result[$id] = self::$lazy_resolved[$memo_key];
+            } else {
+                $missing[] = $id;
+            }
+        }
+        if(count($missing)) {
+            $objects = \DB::table($table)->whereIn('id', $missing)->get()->keyBy('id');
+            foreach($missing as $id) {
+                $option = isset($objects[$id]) ? self::option_from_object($objects[$id], $field_id, $table) : null;
+                self::$lazy_resolved[$field_id.':'.$id] = $option;
+                if($option)
+                    $result[$id] = $option;
+            }
+        }
+        return $result;
+    }
+
+    public static function list_option($settings, $field_id, $value)
+    {
+        $options = self::resolve_list_values($settings, $field_id, array($value));
+        return count($options) ? current($options) : null;
+    }
+
+    public static function search_list_values($settings, $field_id, $q = '', $limit = 20)
+    {
+        $table = self::lazy_table($settings, $field_id);
+        if(!$table || !\Schema::hasTable($table))
+            return array();
+        $name_column = null;
+        foreach(array('name', 'display_name', 'title') as $column) {
+            if(\Schema::hasColumn($table, $column)) {
+                $name_column = $column;
+                break;
+            }
+        }
+        $query = \DB::table($table);
+        if(\Schema::hasColumn($table, 'deleted_at'))
+            $query->whereNull('deleted_at');
+        if($q !== null && $q !== '' && $name_column) {
+            $like = '%'.str_replace(' ', '%', $q).'%';
+            $query->where(function($sub) use ($name_column, $like, $q) {
+                $sub->where($name_column, 'LIKE', $like)
+                    ->orWhere($name_column.'->value', 'LIKE', $like);
+                if(is_numeric($q))
+                    $sub->orWhere('id', (int) $q);
+            });
+        }
+        if(\Schema::hasColumn($table, 'choosed_at'))
+            $query->orderBy('choosed_at', 'DESC');
+        if($name_column)
+            $query->orderBy($name_column, 'ASC');
+        $result = array();
+        $sort = 0;
+        foreach($query->limit($limit)->get() as $object) {
+            $result[$object->id] = self::option_from_object($object, $field_id, $table, $sort);
+            $sort++;
+        }
+        return $result;
+    }
+
+    public static function option_from_object($object, $field_id, $table, $sort = 0)
+    {
+        if(is_array($object))
+            $object = (object) $object;
+        $avatar = isset($object->avatar) ? $object->avatar : (isset($object->photo) ? $object->photo : '');
+        $avatar = isset($object->icon) ? $object->icon : $avatar;
+        if($avatar) {
+            $decoded = json_decode($avatar, true);
+            if(isset($decoded[0]['url']))
+                $avatar = $decoded[0]['url'];
+        }
+        if(isset($object->title)) {
+            $text = $object->title;
+        } elseif(isset($object->display_name)) {
+            $text = $object->display_name;
+        } elseif(isset($object->name)) {
+            $text = $object->name;
+        } else {
+            $text = '#'.$object->id;
+        }
+        if(ValueHelper::isJson($text)) {
+            $decoded = json_decode($text, true);
+            $text = isset($decoded['value']) ? $decoded['value'] : $text;
+        }
+        if($table == 'users' && isset($object->last_name) && $object->last_name) {
+            $last_name = $object->last_name;
+            if(ValueHelper::isJson($last_name)) {
+                $decoded = json_decode($last_name, true);
+                $last_name = isset($decoded['value']) ? $decoded['value'] : '';
+            }
+            $text = trim($text.' '.$last_name);
+        }
+        $color = isset($object->color) ? $object->color : '';
+        if($color !== '' && $color !== null && is_numeric($color)) {
+            if(self::$palette_colors === null)
+                self::$palette_colors = \DB::table('field_values')->pluck('color', 'id')->toArray();
+            $color = isset(self::$palette_colors[(int) $color]) ? self::$palette_colors[(int) $color] : '';
+        }
+        $label = array(
+            'id' => $object->id,
+            'sort' => $sort,
+            'file' => $avatar,
+            'is_hidden' => 0,
+            'field_id' => $field_id,
+            'color' => $color === null ? '' : $color,
+            'text' => $text,
+        );
+        if(isset($object->deleted_at) && $object->deleted_at)
+            $label['deleted'] = 1;
+        if($table === 'products') {
+            if(property_exists($object, 'price')) $label['price'] = $object->price;
+            if(property_exists($object, 'weight')) $label['weight'] = $object->weight;
+            if(property_exists($object, 'quantity')) $label['count'] = $object->quantity;
+        }
+        return array(
+            'label' => $label,
+            'value' => $object->id,
+        );
+    }
 
     public static function hints() {
         $hints = \DB::table('settings')->where([

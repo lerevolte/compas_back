@@ -26,8 +26,7 @@ class B24EntityController extends Controller
             'input' => $request->all(),
         ]);
 
-        $svc = B24EntitySync::make();
-        if (!$svc) {
+        if (!B24EntitySync::ready()) {
             return response('entity sync is not configured', 200);
         }
 
@@ -47,37 +46,14 @@ class B24EntityController extends Controller
             return response('no type or id', 200);
         }
 
-        try {
-            $isDelete = str_ends_with($event, 'DELETE');
-            switch ($type) {
-                case 'deal':
-                    if ($isDelete) {
-                        \App\Models\Deal::where('b24_id', (string) $id)->first()?->delete();
-                    } else {
-                        $svc->pullDealById($id);
-                    }
-                    break;
-                case 'contact':
-                    if ($isDelete) {
-                        \App\Models\Contact::where('b24_id', (string) $id)->first()?->delete();
-                    } else {
-                        $svc->pullContactById($id);
-                    }
-                    break;
-                case 'company':
-                    if (!$isDelete) {
-                        $svc->pullCompanyById($id);
-                    }
-                    break;
-            }
-        } catch (\Throwable $e) {
-            Log::channel('bitrix24')->error('entity-hook: failed', [
-                'type' => $type, 'id' => $id, 'error' => $e->getMessage(),
-            ]);
-            return response('sync error', 200);
-        }
+        \Modules\Bitrix24\Jobs\ProcessEntityHook::dispatch(
+            (string) tenant('id'),
+            $type,
+            (string) $id,
+            str_ends_with($event, 'DELETE')
+        );
 
-        return response()->json(['status' => 'ok', 'type' => $type, 'id' => $id]);
+        return response()->json(['status' => 'queued', 'type' => $type, 'id' => $id]);
     }
 
     /**

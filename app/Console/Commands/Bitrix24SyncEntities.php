@@ -18,13 +18,16 @@ class Bitrix24SyncEntities extends Command
 {
     protected $signature = 'bitrix24:sync-entities
         {target=all-tenants : all-tenants | <tenant_id>}
-        {--full : полная выгрузка (без фильтра по дате изменения)}';
+        {--full : полная выгрузка (без фильтра по дате изменения)}
+        {--chunk=200 : максимум записей на поток (deals/contacts) за прогон}
+        {--queue : поставить обработку в очередь вместо выполнения в процессе}';
 
     protected $description = 'Синхронизировать сделки/контакты/компании с Bitrix24';
 
     public function handle(): int
     {
         $target = $this->argument('target');
+        $chunk = max(1, (int) $this->option('chunk'));
 
         $tenants = $target === 'all-tenants'
             ? Tenant::get()
@@ -37,40 +40,39 @@ class Bitrix24SyncEntities extends Command
 
         foreach ($tenants as $tenant) {
             try {
-                $tenant->run(function () use ($tenant) {
+                $tenant->run(function () use ($tenant, $chunk) {
                     if (!B24EntitySync::ready()) {
                         return;
                     }
+
+                    if ($this->option('queue') && !$this->option('full')) {
+                        \Modules\Bitrix24\Jobs\SyncTenantEntities::dispatch((string) $tenant->id, $chunk);
+                        $this->info("  → {$tenant->id}: поставлено в очередь (chunk={$chunk})");
+                        return;
+                    }
+
                     $svc = B24EntitySync::make();
-                    $startedAt = now()->format('Y-m-d\TH:i:sP');
-                    $saveMark = function () use ($startedAt) {
-                        \DB::table('settings')->updateOrInsert(
-                            ['type' => 'b24_entities_synced_at', 'entity' => null, 'user_id' => null],
-                            ['key' => 'b24_entities_synced_at', 'value' => $startedAt]
-                        );
-                    };
 
                     if ($this->option('full')) {
                         $result = $svc->fullSync(null);
-                        $saveMark();
+                        $startedAt = now()->format('Y-m-d\TH:i:sP');
+                        foreach (['b24_entities_synced_at', 'b24_deals_synced_at', 'b24_contacts_synced_at'] as $type) {
+                            \DB::table('settings')->updateOrInsert(
+                                ['type' => $type, 'entity' => null, 'user_id' => null],
+                                ['key' => $type, 'value' => $startedAt]
+                            );
+                        }
                         $this->info("  ✓ {$tenant->id} (full): deals={$result['deals']}, contacts={$result['contacts']}, stages={$result['stages']}");
                         return;
                     }
 
-                    $since = \DB::table('settings')
-                        ->where('type', 'b24_entities_synced_at')
-                        ->value('value');
-
-                    if (!$since) {
-                        $stages = $svc->syncStages();
-                        $saveMark();
-                        $this->info("  ✓ {$tenant->id} (init): stages=" . count($stages) . '; сделки/контакты дальше пойдут инкрементально (вебхук + крон), полная выгрузка — только с --full');
+                    $result = $svc->runIncremental($chunk);
+                    if ($result['init']) {
+                        $this->info("  ✓ {$tenant->id} (init): stages={$result['stages']}; сделки/контакты дальше пойдут инкрементально чанками по {$chunk}, полная выгрузка — только с --full");
                         return;
                     }
-
-                    $result = $svc->fullSync($since);
-                    $saveMark();
-                    $this->info("  ✓ {$tenant->id}: deals={$result['deals']}, contacts={$result['contacts']}, stages={$result['stages']}");
+                    $more = $result['more'] ? ', есть ещё (доберёт следующий прогон)' : '';
+                    $this->info("  ✓ {$tenant->id}: deals={$result['deals']}, contacts={$result['contacts']}{$more}");
                 });
             } catch (\Throwable $e) {
                 $this->error("  ✗ {$tenant->id}: " . $e->getMessage());

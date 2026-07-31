@@ -469,16 +469,25 @@ class History extends Model
                 }
                 if($item->is_relation && isset($settings[$model]['fields'][$item->field])) {
                     $field_id = $settings[$model]['fields'][$item->field]->id;
+                    $hist_list_values = isset($settings['list_values'][$field_id]) ? $settings['list_values'][$field_id] : array();
+                    if(Settings::lazy_table($settings, $field_id)) {
+                        $hist_ids = array();
+                        if($item->old_value)
+                            $hist_ids = array_merge($hist_ids, explode(', ', $item->old_value));
+                        if($item->new_value)
+                            $hist_ids = array_merge($hist_ids, explode(', ', $item->new_value));
+                        $hist_list_values += Settings::resolve_list_values($settings, $field_id, $hist_ids);
+                    }
                     if($item->old_value) {
                         $old_value = explode(', ', $item->old_value);
-                        if(isset($settings['list_values'][$field_id][$old_value[0]])) {
+                        if(isset($hist_list_values[$old_value[0]])) {
                             $title = $text[0].': ';
                             $names = array();
                             foreach($old_value as $v) {
                                 $rel_table = $settings[$model]['fields'][$item->field]->relation_table;
 
-                                if(isset($settings['list_values'][$field_id][$v])){
-                                    $new_name = $settings['list_values'][$field_id][$v]['label']['text'];
+                                if(isset($hist_list_values[$v])){
+                                    $new_name = $hist_list_values[$v]['label']['text'];
                                     $new_name = $new_name ? $new_name : $v;
                                     if($rel_table == 'roles')
                                         $names[] =  "<span class='history-item__subtitle'>$new_name</span>";
@@ -493,15 +502,15 @@ class History extends Model
                     }
                     if($item->new_value && $item->event != 'RELATION_DELETED') {
                         $new_value = explode(', ', $item->new_value);
-                        if(isset($settings['list_values'][$field_id][$new_value[0]])) {
+                        if(isset($hist_list_values[$new_value[0]])) {
                             $title = $text[0].': ';
                             $names = array();
                             foreach($new_value as $v) {
                                 $rel_table = $settings[$model]['fields'][$item->field]->relation_table;
-                                if(isset($settings['list_values'][$field_id][$v])) {
-                                    $new_name = $settings['list_values'][$field_id][$v]['label']['text'];
+                                if(isset($hist_list_values[$v])) {
+                                    $new_name = $hist_list_values[$v]['label']['text'];
                                     $new_name = $new_name ? $new_name : $v;
-                                    if(isset($settings['list_values'][$field_id][$v])) {
+                                    if(isset($hist_list_values[$v])) {
                                         if($rel_table == 'roles')
                                             $names[] =  "<span class='history-item__subtitle'>$new_name</span>";
                                         else

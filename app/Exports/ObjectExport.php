@@ -222,16 +222,17 @@ class ObjectExport implements FromCollection, WithHeadings, WithMapping
                         $values = $data[$field->field];
                         // if(isset($data[$field->field]['value']))
                         //     $values = $data[$field->field]['value'];
+                        $export_list_values = \App\Models\Settings::resolve_list_values($settings, $field->id, is_array($values) ? $values : array($values));
                         $data[$field->field] = array();
                         if(is_array($values)) {
                             foreach($values as $val) {
-                                if(isset($settings['list_values'][$field->id][$val]))
-                                    $data[$field->field][] = $settings['list_values'][$field->id][$val]['label']['text'];
+                                if(isset($export_list_values[$val]))
+                                    $data[$field->field][] = $export_list_values[$val]['label']['text'];
                             }
                         }
                         $data[$field->field] = implode(', ', $data[$field->field]);
-                    } elseif($field->type == 'relation' && isset($value[0]) && isset($settings['list_values'][$field->id][$value[0]])) {
-                        $data[$field->field] = $settings['list_values'][$field->id][$value[0]]['label']['text'];
+                    } elseif($field->type == 'relation' && isset($value[0]) && ($export_option = \App\Models\Settings::list_option($settings, $field->id, $value[0]))) {
+                        $data[$field->field] = $export_option['label']['text'];
                     } elseif($field->type == 'relation') {
                         $data[$field->field] = null;
                     } elseif($field->type == 'status' && isset($settings['list_values'][$field->id]) && $value) {

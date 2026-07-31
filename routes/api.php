@@ -22,9 +22,13 @@ Route::get('map/geocode', [App\Http\Controllers\Api\MapController::class, 'geoco
 Route::post('map/yandex-log', [App\Http\Controllers\Api\MapController::class, 'logRoute'])
     ->middleware('throttle:120,1');
 Route::post(
-    'registration', 
+    'registration',
     App\Http\Controllers\Api\RegistrationController::class
 );
+Route::post('phone-verification/initiate', [App\Http\Controllers\Api\PhoneVerificationController::class, 'initiate'])
+    ->middleware('throttle:12,1');
+Route::post('phone-verification/status', [App\Http\Controllers\Api\PhoneVerificationController::class, 'status'])
+    ->middleware('throttle:60,1');
 Route::get('test5', function() {
 
 	info('mda');

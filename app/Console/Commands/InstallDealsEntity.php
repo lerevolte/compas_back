@@ -88,6 +88,11 @@ class InstallDealsEntity extends Command
             }
         }
 
+        $dealsIndexes = collect($db->select('SHOW INDEX FROM `deals`'))->pluck('Key_name');
+        if (!$dealsIndexes->contains('deals_b24_id_index')) {
+            $db->statement('ALTER TABLE `deals` ADD INDEX `deals_b24_id_index` (`b24_id`)');
+        }
+
         $db->statement('CREATE TABLE IF NOT EXISTS `contact_deal` (
             `contact_id` INT NOT NULL, `deal_id` INT NOT NULL,
             UNIQUE KEY `contact_deal_unique` (`contact_id`, `deal_id`)

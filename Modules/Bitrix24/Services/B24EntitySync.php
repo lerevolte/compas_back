@@ -71,7 +71,7 @@ class B24EntitySync
         return Http::timeout(20)->post($this->base . $method, $params)->collect();
     }
 
-    private function b24All(string $method, array $params = []): array
+    private function b24All(string $method, array $params = [], int $max = 0): array
     {
         $result = [];
         $start = 0;
@@ -85,9 +85,32 @@ class B24EntitySync
             $result = array_merge($result, $batch);
             $start = $resp['next'] ?? null;
             $guard++;
+            if ($max > 0 && count($result) >= $max) {
+                break;
+            }
         } while ($start !== null && count($batch) && $guard < 200);
 
         return $result;
+    }
+
+    /**
+     * crm.batch: до 50 команд за один HTTP-запрос. Возвращает результаты,
+     * ключи — из $cmd; отсутствующий ключ = команда не выполнилась.
+     */
+    private function b24Batch(array $cmd): array
+    {
+        $out = [];
+        foreach (array_chunk($cmd, 50, true) as $chunk) {
+            try {
+                $resp = $this->b24('batch', ['halt' => 0, 'cmd' => $chunk]);
+                foreach (($resp['result']['result'] ?? []) as $key => $value) {
+                    $out[$key] = $value;
+                }
+            } catch (\Throwable $e) {
+                Log::channel('bitrix24')->warning('entity-sync: batch failed', ['error' => $e->getMessage()]);
+            }
+        }
+        return $out;
     }
 
     private function categoryId(): int
@@ -123,13 +146,15 @@ class B24EntitySync
         $row = $this->stageFieldRow();
         if ($row) {
             $details = json_decode($row->details ?? '', true) ?: [];
-            $details['options'] = $options;
-            DB::table('data_rows')->where('id', $row->id)->update([
-                'details' => json_encode($details, JSON_UNESCAPED_UNICODE),
-            ]);
-            try {
-                \App\Models\Settings::clear_cache();
-            } catch (\Throwable $e) {
+            if (($details['options'] ?? null) != $options) {
+                $details['options'] = $options;
+                DB::table('data_rows')->where('id', $row->id)->update([
+                    'details' => json_encode($details, JSON_UNESCAPED_UNICODE),
+                ]);
+                try {
+                    \App\Models\Settings::clear_cache();
+                } catch (\Throwable $e) {
+                }
             }
         }
 
@@ -210,10 +235,56 @@ class B24EntitySync
         $stages = $this->syncStages();
         $deals = $this->pullDeals($since);
         $contacts = $this->pullContacts($since);
-        return ['stages' => count($stages), 'deals' => $deals, 'contacts' => $contacts];
+        return ['stages' => count($stages), 'deals' => $deals['count'], 'contacts' => $contacts['count']];
     }
 
-    public function pullDeals(?string $since = null): int
+    /**
+     * Инкрементальный прогон для крона/очереди: не больше $chunk записей на
+     * поток за раз. Курсоры — b24_deals_synced_at / b24_contacts_synced_at в
+     * settings (двигаются по DATE_MODIFY обработанных записей, при недоборе
+     * чанка — на время старта прогона). Первый прогон без курсоров — init:
+     * только стадии, метки ставятся на текущий момент.
+     */
+    public function runIncremental(int $chunk = 200): array
+    {
+        $read = fn (string $type) => DB::table('settings')->where('type', $type)->value('value');
+        $write = function (string $type, string $value) {
+            DB::table('settings')->updateOrInsert(
+                ['type' => $type, 'entity' => null, 'user_id' => null],
+                ['key' => $type, 'value' => $value]
+            );
+        };
+
+        $legacy = $read('b24_entities_synced_at');
+        $sinceDeals = $read('b24_deals_synced_at') ?: $legacy;
+        $sinceContacts = $read('b24_contacts_synced_at') ?: $legacy;
+        $started = now()->format('Y-m-d\TH:i:sP');
+
+        if (!$sinceDeals && !$sinceContacts) {
+            $stages = $this->syncStages();
+            $write('b24_entities_synced_at', $started);
+            $write('b24_deals_synced_at', $started);
+            $write('b24_contacts_synced_at', $started);
+            return ['init' => true, 'stages' => count($stages), 'deals' => 0, 'contacts' => 0, 'more' => false];
+        }
+
+        $this->syncStages();
+
+        $deals = $this->pullDeals($sinceDeals, $chunk);
+        $write('b24_deals_synced_at', ($deals['more'] && $deals['last_modify']) ? $deals['last_modify'] : $started);
+
+        $contacts = $this->pullContacts($sinceContacts, $chunk);
+        $write('b24_contacts_synced_at', ($contacts['more'] && $contacts['last_modify']) ? $contacts['last_modify'] : $started);
+
+        return [
+            'init' => false,
+            'deals' => $deals['count'],
+            'contacts' => $contacts['count'],
+            'more' => $deals['more'] || $contacts['more'],
+        ];
+    }
+
+    public function pullDeals(?string $since = null, int $limit = 0): array
     {
         $filter = [
             'CATEGORY_ID' => $this->categoryId(),
@@ -225,25 +296,70 @@ class B24EntitySync
         $deals = $this->b24All('crm.deal.list', [
             'filter' => $filter,
             'select' => ['*', 'UF_*'],
-            'order'  => ['ID' => 'ASC'],
-        ]);
+            'order'  => $since ? ['DATE_MODIFY' => 'ASC'] : ['ID' => 'ASC'],
+        ], $limit);
+        $more = $limit > 0 && count($deals) >= $limit;
+        if ($limit > 0) {
+            $deals = array_slice($deals, 0, $limit);
+        }
 
         $count = 0;
-        foreach ($deals as $deal) {
-            try {
-                $this->upsertDealFromB24($deal);
-                $count++;
-            } catch (\Throwable $e) {
-                Log::channel('bitrix24')->warning('entity-sync: deal upsert failed', [
-                    'deal_id' => $deal['ID'] ?? null,
-                    'error'   => $e->getMessage(),
-                ]);
+        $lastModify = null;
+        foreach (array_chunk($deals, 16) as $chunkDeals) {
+            $pre = $this->prefetchDealData($chunkDeals);
+            foreach ($chunkDeals as $deal) {
+                try {
+                    $this->upsertDealFromB24($deal, $pre[$deal['ID']] ?? null);
+                    $count++;
+                    $lastModify = $deal['DATE_MODIFY'] ?? $lastModify;
+                } catch (\Throwable $e) {
+                    Log::channel('bitrix24')->warning('entity-sync: deal upsert failed', [
+                        'deal_id' => $deal['ID'] ?? null,
+                        'error'   => $e->getMessage(),
+                    ]);
+                }
             }
         }
-        return $count;
+        return ['count' => $count, 'last_modify' => $lastModify, 'more' => $more];
     }
 
-    public function pullContacts(?string $since = null): int
+    /**
+     * Пакетная предзагрузка данных сделок (crm.batch): товары, контакты,
+     * счета — 3 команды на сделку вместо 3 отдельных HTTP-запросов.
+     */
+    private function prefetchDealData(array $deals): array
+    {
+        $cmd = [];
+        foreach ($deals as $deal) {
+            $id = $deal['ID'];
+            $cmd['rows_' . $id] = 'crm.deal.productrows.get?id=' . $id;
+            $cmd['contacts_' . $id] = 'crm.deal.contact.items.get?id=' . $id;
+            $cmd['invoices_' . $id] = 'crm.invoice.list?filter[UF_DEAL_ID]=' . $id;
+        }
+        $res = $this->b24Batch($cmd);
+
+        $pre = [];
+        foreach ($deals as $deal) {
+            $id = $deal['ID'];
+            $item = [
+                'product_rows'  => (isset($res['rows_' . $id]) && is_array($res['rows_' . $id])) ? $res['rows_' . $id] : null,
+                'contact_items' => (isset($res['contacts_' . $id]) && is_array($res['contacts_' . $id])) ? $res['contacts_' . $id] : null,
+            ];
+            if (isset($res['invoices_' . $id]) && is_array($res['invoices_' . $id])) {
+                $invoices = [];
+                foreach ($res['invoices_' . $id] as $invoice) {
+                    if (($invoice['UF_DEAL_ID'] ?? null) == $id) {
+                        $invoices[] = $invoice['ACCOUNT_NUMBER'] ?? $invoice['ID'];
+                    }
+                }
+                $item['invoices'] = $invoices;
+            }
+            $pre[$id] = $item;
+        }
+        return $pre;
+    }
+
+    public function pullContacts(?string $since = null, int $limit = 0): array
     {
         $filter = [];
         if ($since) {
@@ -251,23 +367,39 @@ class B24EntitySync
         }
         $contacts = $this->b24All('crm.contact.list', [
             'filter' => $filter,
-            'select' => ['ID', 'NAME', 'LAST_NAME', 'SECOND_NAME', 'EMAIL', 'PHONE'],
-            'order'  => ['ID' => 'ASC'],
-        ]);
+            'select' => ['ID', 'NAME', 'LAST_NAME', 'SECOND_NAME', 'EMAIL', 'PHONE', 'DATE_MODIFY'],
+            'order'  => $since ? ['DATE_MODIFY' => 'ASC'] : ['ID' => 'ASC'],
+        ], $limit);
+        $more = $limit > 0 && count($contacts) >= $limit;
+        if ($limit > 0) {
+            $contacts = array_slice($contacts, 0, $limit);
+        }
 
         $count = 0;
-        foreach ($contacts as $contact) {
-            try {
-                $this->upsertContactFromB24($contact);
-                $count++;
-            } catch (\Throwable $e) {
-                Log::channel('bitrix24')->warning('entity-sync: contact upsert failed', [
-                    'contact_id' => $contact['ID'] ?? null,
-                    'error'      => $e->getMessage(),
-                ]);
+        $lastModify = null;
+        foreach (array_chunk($contacts, 50) as $chunkContacts) {
+            $cmd = [];
+            foreach ($chunkContacts as $contact) {
+                $cmd['companies_' . $contact['ID']] = 'crm.contact.company.items.get?id=' . $contact['ID'];
+            }
+            $res = $this->b24Batch($cmd);
+            foreach ($chunkContacts as $contact) {
+                try {
+                    $companyItems = (isset($res['companies_' . $contact['ID']]) && is_array($res['companies_' . $contact['ID']]))
+                        ? $res['companies_' . $contact['ID']]
+                        : null;
+                    $this->upsertContactFromB24($contact, $companyItems);
+                    $count++;
+                    $lastModify = $contact['DATE_MODIFY'] ?? $lastModify;
+                } catch (\Throwable $e) {
+                    Log::channel('bitrix24')->warning('entity-sync: contact upsert failed', [
+                        'contact_id' => $contact['ID'] ?? null,
+                        'error'      => $e->getMessage(),
+                    ]);
+                }
             }
         }
-        return $count;
+        return ['count' => $count, 'last_modify' => $lastModify, 'more' => $more];
     }
 
     public function pullDealById($dealId): ?Deal
@@ -300,7 +432,7 @@ class B24EntitySync
 
     // --------------------------------------------------------------- upserts
 
-    public function upsertDealFromB24(array $deal): Deal
+    public function upsertDealFromB24(array $deal, ?array $pre = null): Deal
     {
         $dealId = $deal['ID'];
 
@@ -330,7 +462,7 @@ class B24EntitySync
             }
             $model->address = json_encode(['text' => $addrText, 'coords' => $coords], JSON_UNESCAPED_UNICODE);
 
-            [$products, $deliveryPrice, $allWeight] = $this->fetchDealProducts($dealId);
+            [$products, $deliveryPrice, $allWeight] = $this->fetchDealProducts($dealId, $pre['product_rows'] ?? null);
             if ($products) {
                 $model->products = json_encode($products, JSON_UNESCAPED_UNICODE);
             }
@@ -384,29 +516,21 @@ class B24EntitySync
                 }
             }
 
-            $invoices = Bitrix24Controller::fetchDealInvoiceNumbers($this->base, $dealId);
+            $invoices = $pre !== null && array_key_exists('invoices', $pre)
+                ? $pre['invoices']
+                : Bitrix24Controller::fetchDealInvoiceNumbers($this->base, $dealId);
             $pay = Bitrix24Controller::buildPaymentFields($invoices, $deal['OPPORTUNITY'] ?? 0);
             $model->payment_type = $pay['payment_type'];
             $model->payment = $pay['payment'];
 
             if ($isNew) {
                 $model->save();
-                try {
-                    History::createObject('deals', $model);
-                } catch (\Throwable $e) {
-                }
-            } else {
-                $dirty = $model->getDirty();
-                if (count($dirty)) {
-                    try {
-                        History::saveForObject('deals', [array_merge(['id' => $model->id], $dirty)]);
-                    } catch (\Throwable $e) {
-                    }
-                    $model->save();
-                }
+                $this->writeSyncCreatedHistory('deals', $model->id);
+            } elseif (count($model->getDirty())) {
+                $model->save();
             }
 
-            $this->linkDealRelations($model, $deal);
+            $this->linkDealRelations($model, $deal, $pre['contact_items'] ?? null);
 
             return $model;
         } finally {
@@ -414,41 +538,93 @@ class B24EntitySync
         }
     }
 
-    private function linkDealRelations(Deal $model, array $deal): void
+    /**
+     * Массовый pull не пишет полевую историю (см. инцидент 2026-07-30: ~93k
+     * строк histories за день) — только одна запись о создании объекта.
+     */
+    private function writeSyncCreatedHistory(string $slug, $id): void
     {
+        try {
+            $history = new History([
+                'entity'    => $slug,
+                'entity_id' => $id,
+                'user_id'   => null,
+                'event'     => 'OBJECT_CREATED',
+                'text'      => 'Создана запись: ' . $id . ' (синхронизировано из Bitrix24)',
+            ]);
+            $history->saveQuietly();
+        } catch (\Throwable $e) {
+        }
+    }
+
+    private function linkDealRelations(Deal $model, array $deal, ?array $contactItems = null): void
+    {
+        if ($contactItems === null) {
+            $itemsResp = $this->b24('crm.deal.contact.items.get', ['id' => $deal['ID']]);
+            $contactItems = $itemsResp['result'] ?? [];
+        }
         $contactIds = [];
-        $itemsResp = $this->b24('crm.deal.contact.items.get', ['id' => $deal['ID']]);
-        foreach (($itemsResp['result'] ?? []) as $item) {
+        foreach ($contactItems as $item) {
             if (!empty($item['CONTACT_ID'])) {
-                $contact = $this->pullContactById($item['CONTACT_ID']);
-                if ($contact) {
-                    $contactIds[] = $contact->id;
+                $localId = $this->localIdByB24('contacts', $item['CONTACT_ID']);
+                if (!$localId) {
+                    $localId = $this->pullContactById($item['CONTACT_ID'])?->id;
+                }
+                if ($localId) {
+                    $contactIds[] = (int) $localId;
                 }
             }
         }
-        $model->contacts()->sync($contactIds);
-        $model->contact_id = json_encode($contactIds);
-        if (count($contactIds)) {
-            DB::table('contacts')->whereIntegerInRaw('id', $contactIds)->update(['deal_id' => $model->id]);
+        $contactIds = array_values(array_unique($contactIds));
+        sort($contactIds);
+
+        $currentContacts = $model->contacts()->pluck('contacts.id')->map(fn ($v) => (int) $v)->sort()->values()->all();
+        if ($currentContacts !== $contactIds) {
+            $model->contacts()->sync($contactIds);
+            if (count($contactIds)) {
+                DB::table('contacts')->whereIntegerInRaw('id', $contactIds)->update(['deal_id' => $model->id]);
+            }
         }
+        $model->contact_id = json_encode($contactIds);
 
         $companyIds = [];
         if (!empty($deal['COMPANY_ID'])) {
-            $company = $this->pullCompanyById($deal['COMPANY_ID']);
-            if ($company) {
-                $companyIds[] = $company->id;
+            $localId = $this->localIdByB24('companies', $deal['COMPANY_ID']);
+            if (!$localId) {
+                $localId = $this->pullCompanyById($deal['COMPANY_ID'])?->id;
+            }
+            if ($localId) {
+                $companyIds[] = (int) $localId;
             }
         }
-        $model->companies()->sync($companyIds);
-        $model->company_id = json_encode($companyIds);
-        if (count($companyIds) && Schema::hasColumn('companies', 'deal_id')) {
-            DB::table('companies')->whereIntegerInRaw('id', $companyIds)->update(['deal_id' => $model->id]);
-        }
 
-        $model->saveQuietly();
+        $currentCompanies = $model->companies()->pluck('companies.id')->map(fn ($v) => (int) $v)->sort()->values()->all();
+        if ($currentCompanies !== $companyIds) {
+            $model->companies()->sync($companyIds);
+            if (count($companyIds) && Schema::hasColumn('companies', 'deal_id')) {
+                DB::table('companies')->whereIntegerInRaw('id', $companyIds)->update(['deal_id' => $model->id]);
+            }
+        }
+        $model->company_id = json_encode($companyIds);
+
+        if ($model->isDirty()) {
+            $model->saveQuietly();
+        }
     }
 
-    public function upsertContactFromB24(array $contact): Contact
+    private function localIdByB24(string $table, $b24Id): ?int
+    {
+        if (!Schema::hasColumn($table, 'b24_id')) {
+            return null;
+        }
+        $id = DB::table($table)
+            ->where('b24_id', (string) $b24Id)
+            ->whereNull('deleted_at')
+            ->value('id');
+        return $id ? (int) $id : null;
+    }
+
+    public function upsertContactFromB24(array $contact, ?array $companyItems = null): Contact
     {
         $b24Id = (string) $contact['ID'];
 
@@ -469,34 +645,38 @@ class B24EntitySync
 
             if ($isNew) {
                 $model->save();
-                try {
-                    History::createObject('contacts', $model);
-                } catch (\Throwable $e) {
-                }
-            } else {
-                $dirty = $model->getDirty();
-                if (count($dirty)) {
-                    try {
-                        History::saveForObject('contacts', [array_merge(['id' => $model->id], $dirty)]);
-                    } catch (\Throwable $e) {
-                    }
-                    $model->save();
-                }
+                $this->writeSyncCreatedHistory('contacts', $model->id);
+            } elseif (count($model->getDirty())) {
+                $model->save();
             }
 
+            if ($companyItems === null) {
+                $itemsResp = $this->b24('crm.contact.company.items.get', ['id' => $b24Id]);
+                $companyItems = $itemsResp['result'] ?? [];
+            }
             $companyIds = [];
-            $itemsResp = $this->b24('crm.contact.company.items.get', ['id' => $b24Id]);
-            foreach (($itemsResp['result'] ?? []) as $item) {
+            foreach ($companyItems as $item) {
                 if (!empty($item['COMPANY_ID'])) {
-                    $company = $this->pullCompanyById($item['COMPANY_ID']);
-                    if ($company) {
-                        $companyIds[] = $company->id;
+                    $localId = $this->localIdByB24('companies', $item['COMPANY_ID']);
+                    if (!$localId) {
+                        $localId = $this->pullCompanyById($item['COMPANY_ID'])?->id;
+                    }
+                    if ($localId) {
+                        $companyIds[] = (int) $localId;
                     }
                 }
             }
-            $model->companies()->sync($companyIds);
+            $companyIds = array_values(array_unique($companyIds));
+            sort($companyIds);
+
+            $currentCompanies = $model->companies()->pluck('companies.id')->map(fn ($v) => (int) $v)->sort()->values()->all();
+            if ($currentCompanies !== $companyIds) {
+                $model->companies()->sync($companyIds);
+            }
             $model->company_id = json_encode($companyIds);
-            $model->saveQuietly();
+            if ($model->isDirty()) {
+                $model->saveQuietly();
+            }
 
             return $model;
         } finally {
@@ -545,13 +725,16 @@ class B24EntitySync
         ), fn ($v) => $v !== ''));
     }
 
-    private function fetchDealProducts($dealId): array
+    private function fetchDealProducts($dealId, ?array $rows = null): array
     {
         $deliveryPrice = 0;
         $allWeight = 0;
         $products = [];
-        $resp = $this->b24('crm.deal.productrows.get', ['id' => $dealId]);
-        foreach (($resp['result'] ?? []) as $product) {
+        if ($rows === null) {
+            $resp = $this->b24('crm.deal.productrows.get', ['id' => $dealId]);
+            $rows = $resp['result'] ?? [];
+        }
+        foreach ($rows as $product) {
             $pid = $product['PRODUCT_ID'] ?? null;
             if ($pid && !in_array($pid, Bitrix24Controller::SKIP_PRODUCT_IDS)) {
                 $weight = 0;

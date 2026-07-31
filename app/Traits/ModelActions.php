@@ -307,6 +307,9 @@ trait ModelActions
                 if($this->getTable() == 'routes' && $field->field == 'task_id' && $field->type == 'relation' && method_exists($this, 'tasks')) {
                     $field_value = $this->tasks()->get()->pluck('id')->toArray();
                 }
+                if($field->type == 'relation' && \App\Models\Settings::lazy_table($settings, $field->id)) {
+                    $list_values += \App\Models\Settings::resolve_list_values($settings, $field->id, $field_value);
+                }
                 $fields_values[$field->field] = $field_value;
 
                 
@@ -365,10 +368,11 @@ trait ModelActions
                         $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true);
                         if($field->is_plural && is_array($fields_data[$field->field]['value'])) {
                             foreach($fields_data[$field->field]['value']['value'] as $field_val) {
-                                $field_values[$field_val] = $settings['list_values'][$field->id][$field_val];
+                                if(isset($list_values[$field_val]))
+                                    $field_values[$field_val] = $list_values[$field_val];
                             }
-                        } elseif($this->{$field->field} && isset($settings['list_values'][$field->id][$this->{$field->field}])) {
-                            $field_values[$this->{$field->field}] = $settings['list_values'][$field->id][$this->{$field->field}];
+                        } elseif($this->{$field->field} && isset($list_values[$this->{$field->field}])) {
+                            $field_values[$this->{$field->field}] = $list_values[$this->{$field->field}];
                         } elseif($this->{$field->field}) {
                             $field_values[$this->{$field->field}] = null;
                         }
@@ -435,11 +439,14 @@ trait ModelActions
                     if(isset($settings[$slug]['fields'][$field->field]->choosed))
                         $fields_data['choosed'] = $settings[$slug]['fields'][$field->field]->choosed;
                     $value = $fields_data['value'];
-                    
+
 
                     $list_values = array();
                     if(isset($settings['list_values'][$field->id]))
                         $list_values = $settings['list_values'][$field->id];
+                    if($field->type == 'relation' && \App\Models\Settings::lazy_table($settings, $field->id)) {
+                        $list_values += \App\Models\Settings::resolve_list_values($settings, $field->id, $field_value);
+                    }
                     if($field->type == 'relation' && $field->is_plural) {
                         $values = $field_value;
                         $fields_data['value'] = array(
@@ -474,10 +481,11 @@ trait ModelActions
                             $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true);
                             if($field->is_plural && is_array($fields_data['value'])) {
                                 foreach($fields_data['value']['value'] as $field_val) {
-                                    $field_values[$field_val] = $settings['list_values'][$field->id][$field_val];
+                                    if(isset($list_values[$field_val]))
+                                        $field_values[$field_val] = $list_values[$field_val];
                                 }
-                            } elseif($this->{$field->field} && isset($settings['list_values'][$field->id][$this->{$field->field}])) {
-                                $field_values[$this->{$field->field}] = $settings['list_values'][$field->id][$this->{$field->field}];
+                            } elseif($this->{$field->field} && isset($list_values[$this->{$field->field}])) {
+                                $field_values[$this->{$field->field}] = $list_values[$this->{$field->field}];
                             } elseif($this->{$field->field}) {
                                 $field_values[$this->{$field->field}] = null;
                             }

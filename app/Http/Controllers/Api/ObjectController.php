@@ -890,7 +890,7 @@ class ObjectController extends Controller
     private function getCategoriesForSlug($slug): array
     {
         $categoryModels = [
-            'products'     => \Modules\Products\Entities\Category::class,
+            'products'     => \App\Models\Category::class,
             'instructions' => \Modules\Instructions\Entities\Category::class,
             'faq'          => \App\Models\FaqCategory::class,
             'knowledge'    => \App\Models\KnowledgeCategory::class,

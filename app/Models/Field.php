@@ -287,17 +287,23 @@ class Field extends Model
         $data = ValueHelper::isJson($value) && $field->field != 'products' && is_array(json_decode($value, true)) ? json_decode($value, true) : $value;
 
 
+        $list_values = array();
+        if($field->type == 'relation') {
+            $list_values = isset($settings['list_values'][$field->id]) ? $settings['list_values'][$field->id] : array();
+            if(\App\Models\Settings::lazy_table($settings, $field->id))
+                $list_values += \App\Models\Settings::resolve_list_values($settings, $field->id, $data);
+        }
         if($field->type == 'relation' && $field->is_plural) {
             $values = $data;
             $data = array();
             if(is_array($values)) {
                 foreach($values as $val) {
-                    if(isset($settings['list_values'][$field->id][$val]))
-                        $data[] = $settings['list_values'][$field->id][$val]['value'];
+                    if(isset($list_values[$val]))
+                        $data[] = $list_values[$val]['value'];
                 }
             }
-        } elseif($field->type == 'relation' && isset($settings['list_values'][$field->id][$value])) {
-            $data = array($settings['list_values'][$field->id][$value]['value']);
+        } elseif($field->type == 'relation' && isset($list_values[$value])) {
+            $data = array($list_values[$value]['value']);
         } elseif($field->type == 'relation') {
             $data = null;
         };
@@ -361,6 +367,9 @@ class Field extends Model
         $list_values = array();
         if(isset($settings['list_values'][$field->id]))
             $list_values = $settings['list_values'][$field->id];
+        if($field->type == 'relation' && \App\Models\Settings::lazy_table($settings, $field->id)) {
+            $list_values += \App\Models\Settings::resolve_list_values($settings, $field->id, $field_value);
+        }
         if($field->type == 'relation' && $field->is_plural) {
             $values = $field_value;
             $fields_data[$field->field]['value'] = array(
@@ -421,10 +430,11 @@ class Field extends Model
                 $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true);
                 if($field->is_plural && isset($fields_data[$field->field]['value']['value'])) {
                     foreach($fields_data[$field->field]['value']['value'] as $field_val) {
-                        $field_values[$field_val] = $settings['list_values'][$field->id][$field_val];
+                        if(isset($list_values[$field_val]))
+                            $field_values[$field_val] = $list_values[$field_val];
                     }
-                } elseif($current->{$field->field} && isset($settings['list_values'][$field->id][$current->{$field->field}])) {
-                    $field_values[$current->{$field->field}] = $settings['list_values'][$field->id][$current->{$field->field}];
+                } elseif($current->{$field->field} && isset($list_values[$current->{$field->field}])) {
+                    $field_values[$current->{$field->field}] = $list_values[$current->{$field->field}];
                 } elseif($current->{$field->field}) {
                     $field_values[$current->{$field->field}] = null;
                 }
@@ -462,10 +472,11 @@ class Field extends Model
                 if($field->type == 'relation') {
                     if($field->is_plural && is_array($fields_data[$field->field]['value'])) {
                         foreach($fields_data[$field->field]['value']['value'] as $field_val) {
-                            $field_values[$field_val] = $settings['list_values'][$field->id][$field_val]['value'];
+                            if(isset($list_values[$field_val]))
+                                $field_values[$field_val] = $list_values[$field_val]['value'];
                         }
-                    } elseif($current->{$field->field} && isset($settings['list_values'][$field->id][$current->{$field->field}])) {
-                        $field_values[$current->{$field->field}] = $settings['list_values'][$field->id][$current->{$field->field}];
+                    } elseif($current->{$field->field} && isset($list_values[$current->{$field->field}])) {
+                        $field_values[$current->{$field->field}] = $list_values[$current->{$field->field}];
                     } elseif($current->{$field->field}) {
                         $field_values[$current->{$field->field}] = null;
                     }

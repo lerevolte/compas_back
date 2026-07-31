@@ -26,11 +26,15 @@ class SearchService
         if($params['q'] && mb_strlen($params['q']) >= 0 || isset($params['filter'])) {
             $q = mb_strtolower($params['q']);
             if(isset($params['field_id'])) {
-                $data = collect($settings['list_values'][$params['field_id']])->filter(function ($item) use ($q) {
+                if(\App\Models\Settings::lazy_table($settings, $params['field_id'])) {
+                    $data = \App\Models\Settings::search_list_values($settings, $params['field_id'], $q);
+                } else {
+                    $data = collect($settings['list_values'][$params['field_id']])->filter(function ($item) use ($q) {
 
-                    $text = mb_strtolower($item['label']['text']);
-                    return false !== stristr($text, $q) || $item['value'] == $q;
-                })->toArray();
+                        $text = mb_strtolower($item['label']['text']);
+                        return false !== stristr($text, $q) || $item['value'] == $q;
+                    })->toArray();
+                }
 
                 if(count($data)) {
                     $fieldRow = \DB::table('data_rows')->where('id', $params['field_id'])->first();
@@ -73,18 +77,20 @@ class SearchService
                                     $paginator = $paginator->whereRaw('json_contains('.$field.', \''.$val.'\')');
                                 }
                             } else {
-                                if($field == 'category_id' && !$request->exclude_childs) {
-                                    foreach($model_fields as $f) {
-                                        if($f->field == $field) {
-                                            $related_table = $field->relation_table;
-                                            $dt = \DB::table('data_types')->where('name', $related_table)->first();
-                                            $descendants = $dt->model_name::descendantsAndSelf($val)->pluck('id')->toArray();
-                                        }
+                                if($field == 'category_id') {
+                                    $f = $settings[$slug]['fields'][$field] ?? null;
+                                    $related_table = $f ? ($f->relation_table ?: (json_decode($f->details ?? '', true)['table'] ?? null)) : null;
+                                    $dt = $related_table ? \DB::table('data_types')->where('name', $related_table)->first() : null;
+                                    $descendants = null;
+                                    if($dt && $dt->model_name && class_exists($dt->model_name)) {
+                                        $descendants = $dt->model_name::descendantsAndSelf($val)->pluck('id')->toArray();
                                     }
-                                    if(isset($descendants) && is_array($descendants)) {
+                                    if(is_array($descendants)) {
                                         $paginator = $paginator->whereIntegerInRaw($field, $descendants);
+                                    } else {
+                                        $paginator = $paginator->where($field, $val);
                                     }
-                                    
+
                                 } else {
                                     if(is_array($val))
                                         $paginator = $paginator->whereIntegerInRaw($field, $val);
@@ -155,9 +161,13 @@ class SearchService
             
         } else {
             if(isset($params['field_id'])) {
-                $data = collect($settings['list_values'][$params['field_id']])->toArray();
+                if(\App\Models\Settings::lazy_table($settings, $params['field_id'])) {
+                    $data = \App\Models\Settings::search_list_values($settings, $params['field_id'], '');
+                } else {
+                    $data = collect($settings['list_values'][$params['field_id']])->toArray();
+                }
                 return array_values($data);
-                
+
             } elseif(isset($params['entity'])) {
                 $query = $entity_class::whereNull('deleted_at');
                 if($params['entity'] == 'products') {

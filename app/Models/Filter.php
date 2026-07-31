@@ -65,11 +65,13 @@ class Filter extends Model
                                             // info($value);
                                             if(is_array($value['value']))
                                                 foreach($value['value'] as $field_val) {
-                                                    $options[$field_val['value']] = $settings['list_values'][$fields_data[$field_key]->id][$field_val];
+                                                    $fv = is_array($field_val) && isset($field_val['value']) ? $field_val['value'] : $field_val;
+                                                    if($filter_option = \App\Models\Settings::list_option($settings, $fields_data[$field_key]->id, $fv))
+                                                        $options[$fv] = $filter_option;
                                                 }
-                                        } elseif($value['value'] && isset($settings['list_values'][$fields_data[$field_key]->id]) && isset($options[$value['value']])) {
+                                        } elseif($value['value'] && ($filter_option = \App\Models\Settings::list_option($settings, $fields_data[$field_key]->id, $value['value']))) {
                                             //info($settings[$slug]['list_values'][$field_key]);
-                                            $options[$value['value']] = $settings['list_values'][$fields_data[$field_key]->id][$value['value']];
+                                            $options[$value['value']] = $filter_option;
                                         }
                                     } else {
                                         if(isset($settings[$entity->slug]['options'][$field_key]))

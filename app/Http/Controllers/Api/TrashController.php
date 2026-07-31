@@ -271,15 +271,16 @@ class TrashController extends Controller
                             $data[$field->field] = ValueHelper::isJson($value) && $field->field != 'products' && is_array(json_decode($value, true)) ? json_decode($value, true) : $value;
                             if($field->type == 'relation' && $field->is_plural) {
                                 $values = $data[$field->field];
+                                $trash_list_values = \App\Models\Settings::resolve_list_values($settings, $field->id, is_array($values) ? $values : array($values));
                                 $data[$field->field] = array();
                                 if(is_array($values)) {
                                     foreach($values as $val) {
-                                        if(isset($settings['list_values'][$field->id][$val]))
-                                            $data[$field->field][] = $settings['list_values'][$field->id][$val];
+                                        if(isset($trash_list_values[$val]))
+                                            $data[$field->field][] = $trash_list_values[$val];
                                     }
                                 }
-                            } elseif($field->type == 'relation' && isset($settings['list_values'][$field->id][$value])) {
-                                $data[$field->field] = $settings['list_values'][$field->id][$value];
+                            } elseif($field->type == 'relation' && ($trash_option = \App\Models\Settings::list_option($settings, $field->id, $value))) {
+                                $data[$field->field] = $trash_option;
                             } elseif($field->type == 'relation') {
                                 $data[$field->field] = null;
                             };
