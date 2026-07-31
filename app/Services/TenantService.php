@@ -122,12 +122,13 @@ class TenantService
                 
             };
 
+            \DB::table('data_rows')->delete();
             $objects = \DB::connection('seeds')->table('data_rows')->get();
             foreach ($objects as $object) {
                 $odata = collect($object)->toArray();
-                
+
                 \DB::table('data_rows')->insert([$odata]);
-                
+
             };
 
             $objects = \DB::connection('seeds')->table('settings')->get();
@@ -168,6 +169,7 @@ class TenantService
                 \DB::table('field_values')->insert([$odata]);
             };
 
+            \DB::table('data_types')->delete();
             $objects = \DB::connection('seeds')->table('data_types')->get();
             foreach ($objects as $object) {
                 $odata = collect($object)->toArray();
@@ -289,6 +291,9 @@ class TenantService
 
             $external_link_migration = require base_path('database/migrations/tenant/2026_07_27_000001_add_external_link_role.php');
             $external_link_migration::apply(\DB::connection(), Schema::getFacadeRoot());
+
+            $categories_migration = require base_path('database/migrations/tenant/2026_07_31_000002_restore_products_category_field.php');
+            $categories_migration::apply(\DB::connection(), Schema::getFacadeRoot());
 
             $user_source = \DB::connection('seeds')->table('users')->first();
 
