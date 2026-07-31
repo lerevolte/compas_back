@@ -247,6 +247,7 @@ class TenantService
                 \DB::table('user_roles')->insert([$odata]);
             };
 
+            \DB::table('roles')->delete();
             $objects = \DB::connection('seeds')->table('roles')->get();
             foreach ($objects as $object) {
                 $odata = collect($object)->toArray();
@@ -285,6 +286,9 @@ class TenantService
                 
                 \DB::table('permissions')->insert([$odata]);
             };
+
+            $external_link_migration = require base_path('database/migrations/tenant/2026_07_27_000001_add_external_link_role.php');
+            $external_link_migration::apply(\DB::connection(), Schema::getFacadeRoot());
 
             $user_source = \DB::connection('seeds')->table('users')->first();
 
