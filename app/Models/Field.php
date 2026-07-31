@@ -411,10 +411,10 @@ class Field extends Model
 
             $fields_data[$field->field]['can_create'] = 1;
 
-            if(isset($permissions_all[$settings['models'][$field->relation_table]->id]['create_p']) && !\Auth::user()->is_admin)
+            if($field->relation_table && isset($settings['models'][$field->relation_table]) && isset($permissions_all[$settings['models'][$field->relation_table]->id]['create_p']) && !\Auth::user()->is_admin)
                 
                 $fields_data[$field->field]['can_create'] = $permissions_all[$settings['models'][$field->relation_table]->id]['create_p'] == 'N' ? 0 : 1;
-            if(isset($permissions_all[$settings['models'][$field->relation_table]->id]['update_p']) && !\Auth::user()->is_admin)
+            if($field->relation_table && isset($settings['models'][$field->relation_table]) && isset($permissions_all[$settings['models'][$field->relation_table]->id]['update_p']) && !\Auth::user()->is_admin)
                 $fields_data[$field->field]['can_edit'] = $permissions_all[$settings['models'][$field->relation_table]->id]['update_p'] == 'N' ? 0 : 1;
 
         }

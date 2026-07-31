@@ -90,7 +90,7 @@ return new class extends Migration
             'external_link' => '', 'is_external_link' => 0, 'module' => '', 'is_link' => 0,
             'module_section_id' => null, 'is_default' => 0, 'is_inactive' => 0,
             'blocked_changes' => 0, 'mask' => null, 'permanent_required' => 0, 'permanent_name' => 0,
-            'relation_table' => null, 'options' => null, 'set_color' => 0, 'related_field' => null,
+            'relation_table' => 'categories', 'options' => null, 'set_color' => 0, 'related_field' => null,
             'is_unique' => 0, 'is_program' => 0, 'subfields' => null, 'dependency_fields' => null,
         ]);
     }
