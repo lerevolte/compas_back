@@ -101,6 +101,13 @@ class CategoryController extends Controller
 
     private function validated(Request $request): array
     {
+        if ($request->exists('parent_id')) {
+            $raw = $request->input('parent_id');
+            if (is_array($raw)) {
+                $raw = $raw['value'] ?? null;
+            }
+            $request->merge(['parent_id' => is_numeric($raw) ? (int) $raw : null]);
+        }
         $fields = $request->validate([
             'name' => 'required|string|max:255',
             'parent_id' => 'nullable|integer|exists:categories,id',

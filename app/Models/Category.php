@@ -19,7 +19,6 @@ class Category extends Model
         //'sort',
         '_lft',
         '_rgt',
-        'parent_id'
     ];
 
     public static function boot()

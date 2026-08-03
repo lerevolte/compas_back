@@ -210,6 +210,22 @@ class User extends \TCG\Voyager\Models\User
 
         });
 
+        static::saved(function($model)
+        {
+            if ($model->isDirty('employee_id')) {
+                $old = (int) $model->getOriginal('employee_id');
+                $new = (int) $model->employee_id;
+                if ($old !== $new) {
+                    if ($old) {
+                        $model->writeEmployeeLinkHistory($old, false);
+                    }
+                    if ($new) {
+                        $model->writeEmployeeLinkHistory($new, true);
+                    }
+                }
+            }
+        });
+
         static::updated(function($model){
             \App\Jobs\UserAccountJob::dispatch();
             // $tenant = tenant('id');
@@ -594,6 +610,36 @@ class User extends \TCG\Voyager\Models\User
     public function sync_history($field, $new_value)
     {
         $objects = \App\Models\History::saveForObject('users', array(['id' => $this->id, $field => $new_value]), false);
+    }
+
+    public function writeEmployeeLinkHistory(int $employeeId, bool $added)
+    {
+        $user_id = \Auth::user() ? \Auth::user()->id : 1;
+        $name = $this->name ?: 'Пользователь #'.$this->id;
+        $link = "<span data-slug='users' data-id='{$this->id}'>{$name}</span>";
+
+        $base = [
+            'entity' => 'employees',
+            'entity_id' => $employeeId,
+            'user_id' => $user_id,
+            'field' => 'user_id',
+            'old_value' => $added ? '' : $name,
+            'new_value' => $added ? $name : '',
+            'is_relation' => 1,
+        ];
+
+        $history = new \App\Models\History($base + [
+            'text' => 'Пользователь: '.($added ? '' : $link).' -> '.($added ? $link : ''),
+            'event' => 'FIELD_UPDATED',
+        ]);
+        $history->saveQuietly();
+
+        $history = new \App\Models\History($base + [
+            'text' => 'Пользователь, '.($added ? 'добавлена связь: ' : 'удалена связь: ').$link,
+            'event' => $added ? 'RELATION_ADDED' : 'RELATION_DELETED',
+            'color' => $added ? '#23704B' : '#C74822',
+        ]);
+        $history->saveQuietly();
     }
 
     public function sendPasswordResetNotification($token)

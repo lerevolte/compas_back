@@ -52,6 +52,10 @@ class ObjectController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
+        if (!$user->is_admin && ($request->trashed || $request->with_trashed)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
         // 2. Получение настроек таблицы
         $table = Table::get($slug);
         if (isset($table['error'])) {
@@ -144,6 +148,12 @@ class ObjectController extends Controller
             if (!$this->isUserEmployeeObject($slug, $id, $user)) {
                 return response()->json(['message' => 'Forbidden'], 403);
             }
+        }
+
+        if ($id && $id !== '0' && !($user && $user->is_admin)
+            && \Schema::hasColumn($slug, 'deleted_at')
+            && DB::table($slug)->where('id', $id)->whereNotNull('deleted_at')->exists()) {
+            return response()->json(['message' => 'Forbidden'], 403);
         }
 
         // 2. Параметры запроса
@@ -399,13 +409,20 @@ class ObjectController extends Controller
 
     public function compose_show_module($slug, $id, $module, Request $request): JsonResponse
     {
+        $user = Auth::user();
+
+        if ($id && $id !== '0' && !($user && $user->is_admin)
+            && \Schema::hasColumn($slug, 'deleted_at')
+            && DB::table($slug)->where('id', $id)->whereNotNull('deleted_at')->exists()) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
         // Базовые данные
         $detail = EntityObject::detail_module($slug, $id, $module, new Request());
         if (isset($detail['error'])) {
             return response()->json(['message' => $detail['error']['message']], $detail['error']['code']);
         }
 
-        $user = Auth::user();
         $dataTypeId = DB::table('data_types')->where('slug', $slug)->value('id');
 
         $products = [];
