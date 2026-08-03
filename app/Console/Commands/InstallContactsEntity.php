@@ -16,8 +16,8 @@ use App\Models\Tenant;
  * СКРЫТОЕ поле «Контакт» (data_rows c section_id=0 — несуществующая секция,
  * поле не рендерится до одобрения; после одобрения переставить section_id).
  *
- * Сущность ставится СКРЫТОЙ (hidden=1, без sidebar_items) — политика avixo,
- * см. CLAUDE.md. Команда идемпотентна.
+ * Сущность видима (hidden=0) и выводится в сайдбар (sidebar_items,
+ * slug contacts) — фича одобрена. Команда идемпотентна.
  *   php artisan entity:install-contacts avixo
  */
 class InstallContactsEntity extends Command
@@ -134,7 +134,7 @@ SQL);
             'color'                => '#4A90D9',
             'enable'               => 1,
             'slug_singular'        => 'contact',
-            'hidden'               => 1,
+            'hidden'               => 0,
         ]);
 
         $infoSecId = $db->table('field_sections')->insertGetId([
@@ -202,6 +202,23 @@ SQL);
         ]);
 
         $this->patchCompanies($db, $label);
+
+        if ($db->getSchemaBuilder()->hasTable('sidebar_items')) {
+            $existingItem = $db->table('sidebar_items')->where('slug', 'contacts')->first();
+            if ($existingItem) {
+                $db->table('sidebar_items')->where('slug', 'contacts')
+                    ->update(['enabled' => 1, 'is_hidden' => 0, 'updated_at' => $now]);
+            } else {
+                $maxRgt = (int) $db->table('sidebar_items')->max('_rgt');
+                $db->table('sidebar_items')->insert([
+                    'created_at' => $now, 'updated_at' => $now,
+                    'name' => 'Контакты', 'slug' => 'contacts',
+                    'sort' => 0, 'link' => '/objects/contacts',
+                    '_lft' => $maxRgt + 1, '_rgt' => $maxRgt + 2, 'parent_id' => null,
+                    'is_hidden' => 0, 'enabled' => 1,
+                ]);
+            }
+        }
 
         try {
             \App\Models\Settings::clear_cache();

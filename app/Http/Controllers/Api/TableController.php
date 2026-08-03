@@ -181,6 +181,7 @@ class TableController extends Controller
             'product_price'  => ['title' => 'Цена', 'type' => 'number', 'read_only' => 0],
             'product_count'  => ['title' => 'Кол-во', 'type' => 'number', 'read_only' => 0],
             'product_weight' => ['title' => 'Вес, кг', 'type' => 'number', 'read_only' => 1],
+            'product_volume' => ['title' => 'Объем, л', 'type' => 'number', 'read_only' => 1],
             'product_sum'    => ['title' => 'Сумма', 'type' => 'number', 'read_only' => 1],
         ];
 

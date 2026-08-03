@@ -225,13 +225,21 @@ trait ModelActions
                                 'color' => '',
                                 'sort' => 3,
                             );
+                            $data['product_volume'] = array(
+                                'value' => $product['volume'] ?? 0,
+                                'type' => 'number',
+                                'read_only' => 1,
+                                'can_edit' => 0,
+                                'color' => '',
+                                'sort' => 4,
+                            );
                             $data['product_sum'] = array(
                                 'value' => $product['sum'],
                                 'type' => 'number',
                                 'read_only' => 1,
                                 'can_edit' => 0,
                                 'color' => '',
-                                'sort' => 4,
+                                'sort' => 5,
                             );
                             $data['sort'] = $num;
                         }

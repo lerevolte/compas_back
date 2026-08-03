@@ -17,7 +17,7 @@ class SyncOrderProductsColumns extends Command
     private const SERVICE_KEYS = [
         'isChoose', 'actions', 'iconDrag', 'iconDelete', 'clicked',
         'product_id', 'product_name', 'product_price', 'product_count',
-        'product_weight', 'product_sum', 'remnant_name',
+        'product_weight', 'product_volume', 'product_sum', 'remnant_name',
     ];
 
     public function handle(): int

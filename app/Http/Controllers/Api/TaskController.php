@@ -52,6 +52,11 @@ class TaskController extends Controller
         }
         $object->setProducts($products);
 
+        $ids = array_values(array_filter(array_map(function ($p) { return (int) $p['id']; }, $products)));
+        if (count($ids)) {
+            \DB::table('products')->whereIntegerInRaw('id', $ids)->update(['choosed_at' => now()]);
+        }
+
         return response()->json(['success' => true]);
     }
 }

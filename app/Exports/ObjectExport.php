@@ -312,6 +312,7 @@ class ObjectExport implements FromCollection, WithHeadings, WithMapping
                             $data['product_price'] = $product['price'];
                             $data['product_count'] = $product['count'];
                             $data['product_weight'] = $product['weight'];
+                            $data['product_volume'] = $product['volume'] ?? 0;
                             $data['product_sum'] = $product['sum'];
                             $data['sort'] = $num;
                         }

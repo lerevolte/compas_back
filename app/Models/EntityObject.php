@@ -1154,11 +1154,12 @@ class EntityObject
         if($slug == 'logistic_tasks' && $current->products)
             $products = json_decode($current->products, true);
 
-        $sum = $count = $weight = 0;
+        $sum = $count = $weight = $volume = 0;
         foreach($products as $product) {
             $sum+=(int)$product['price']*(int)$product['count'];
             $count+=(int)$product['count'];
             $weight+=(int)$product['weight']*(int)$product['count'];
+            $volume+=(float)($product['volume'] ?? 0)*(int)$product['count'];
         }
 
         // $history_days = \App\Models\History::where(['entity' => $slug, 'entity_id' => $current->id])->orderBy('created_at', 'DESC')->get()->groupBy(function ($val) {
@@ -2129,6 +2130,7 @@ class EntityObject
                         $data['product_price'] = $product['price'];
                         $data['product_count'] = $product['count'];
                         $data['product_weight'] = $product['weight'];
+                        $data['product_volume'] = $product['volume'] ?? 0;
                         $data['product_sum'] = $product['sum'];
                         $data['sort'] = $num;
                         $products_objects[] = $data;

@@ -641,6 +641,7 @@ class Table
                     'file' => $photo,
                     'count' => $item->quantity,
                     'weight' => $item->weight,
+                    'volume' => $item->volume ?? null,
                     'price' => $item->price
                 ],
                 'value' => $item->id
@@ -670,11 +671,11 @@ class Table
             $table_columns = collect($tables['order_products']['fields']);
             $table_columns = $table_columns->keyBy('key')->toArray();
             foreach($table_columns as $key => $column) {
-                if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'remnant_name' && $key != 'product_name' && $key != 'product_id' && $key != 'product_price' && $key != 'product_count' && $key != 'product_weight' && $key != 'product_sum' && $key != 'iconDrag' && $key != 'iconDelete' || $key == 'price' || $key == 'name' || $key == 'weight' || $key == 'price')
+                if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'remnant_name' && $key != 'product_name' && $key != 'product_id' && $key != 'product_price' && $key != 'product_count' && $key != 'product_weight' && $key != 'product_volume' && $key != 'product_sum' && $key != 'iconDrag' && $key != 'iconDelete' || $key == 'price' || $key == 'name' || $key == 'weight' || $key == 'volume' || $key == 'price')
                     unset($table_columns[$key]);
             }
             foreach ($model_fields as $field) {
-                if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->field != 'price' && $field->field != 'name' && $field->field != 'weight' && $field->field != 'price') {
+                if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->field != 'price' && $field->field != 'name' && $field->field != 'weight' && $field->field != 'volume' && $field->field != 'price') {
                     $table_columns[$field->field] = array(
                         'id' => $field->id,
                         'title' => $field->display_parent_name ? $field->display_parent_name.', '.$field->title : $field->title,
@@ -695,7 +696,7 @@ class Table
                     $table_columns[$field->field]['read_only'] = 1;
                 }
             }
-            if(!isset($table_columns['product_id']))
+            if(!isset($table_columns['product_id'])) {
                 $table_columns['product_id'] = array(
                     'id' => null,
                     'title' => 'Наименование товара',
@@ -713,6 +714,11 @@ class Table
                     "mask" => "",
                     'is_another_title' => 1
                 );
+            } else {
+                $table_columns['product_id']['type'] = 'relation';
+                $table_columns['product_id']['related_table'] = 'products';
+                $table_columns['product_id']['options'] = $options;
+            }
             // if(!isset($table_columns['product_name']))
             //     $table_columns['product_name'] = array(
             //         'id' => null,
@@ -778,6 +784,22 @@ class Table
                     "mask" => "",
                     'is_another_title' => 0
                 );
+            if(!isset($table_columns['product_volume']))
+                $table_columns['product_volume'] = array(
+                    'id' => null,
+                    'title' => 'Объем, л',
+                    'key' => 'product_volume',
+                    'width' => '200px',
+                    'enabled' => 1,
+                    'sort_order' => '',
+                    'type' => 'number',
+                    'fixed' => '',
+                    'index' => 4,
+                    'fixTarget' => '0px',
+                    'read_only' => 1,
+                    "mask" => "",
+                    'is_another_title' => 0
+                );
             if(!isset($table_columns['product_sum']))
                 $table_columns['product_sum'] = array(
                     'id' => null,
@@ -788,7 +810,7 @@ class Table
                     'sort_order' => '',
                     'type' => 'number',
                     'fixed' => '',
-                    'index' => 4,
+                    'index' => 5,
                     'fixTarget' => '0px',
                     'read_only' => 1,
                     "mask" => "",
@@ -944,6 +966,21 @@ class Table
                 "mask" => "",
                 'is_another_title' => 0
             );
+            $table_columns['product_volume'] = array(
+                'id' => null,
+                'title' => 'Объем, л',
+                'key' => 'product_volume',
+                'width' => '200px',
+                'enabled' => 1,
+                'sort_order' => '',
+                'type' => 'number',
+                'fixed' => '',
+                'index' => 4,
+                'fixTarget' => '0px',
+                'read_only' => 1,
+                "mask" => "",
+                'is_another_title' => 0
+            );
             $table_columns['product_sum'] = array(
                 'id' => null,
                 'title' => 'Сумма',
@@ -953,7 +990,7 @@ class Table
                 'sort_order' => '',
                 'type' => 'number',
                 'fixed' => '',
-                'index' => 4,
+                'index' => 5,
                 'fixTarget' => '0px',
                 'read_only' => 1,
                 "mask" => "",
@@ -1004,7 +1041,7 @@ class Table
                         $field_values = $settings['list_values'][$field->id];
                     }
                 };
-                if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->type != 'password' && $field->field != 'name' &&  $field->field != 'weight' && $field->field != 'price') {
+                if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->type != 'password' && $field->field != 'name' &&  $field->field != 'weight' && $field->field != 'volume' && $field->field != 'price') {
                     $table_columns[$field->field] = array(
                         'id' => $field->id,
                         'title' => $field->display_parent_name ? $field->display_parent_name.', '.$field->title : $field->title,

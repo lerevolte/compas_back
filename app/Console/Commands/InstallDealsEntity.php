@@ -14,9 +14,9 @@ use App\Models\Tenant;
  *   - contact_id (plural relation -> contacts);
  *   - company_id (plural relation -> companies).
  *
- * Сущность ставится СКРЫТОЙ (data_types.hidden=1, без sidebar_items):
- * доступна по прямому URL /objects/deals, не светится в меню/ролях/аналитике.
- * После одобрения — снять hidden и добавить пункт меню.
+ * Сущность видима (data_types.hidden=0) и выводится в сайдбар
+ * (sidebar_items, slug deals) — фича одобрена по задаче «вывести
+ * Сделки/Контакты в сайдбар avixo».
  *
  * Команда идемпотентна. Порядок выкатки (политика avixo, см. CLAUDE.md):
  *   1) php artisan entity:install-deals avixo        # тестовый портал
@@ -132,7 +132,7 @@ class InstallDealsEntity extends Command
             'color'                => '#E8A33D',
             'enable'               => 1,
             'slug_singular'        => 'deal',
-            'hidden'               => 1,
+            'hidden'               => 0,
         ]);
 
         $infoSecId = $db->table('field_sections')->insertGetId([
@@ -153,6 +153,23 @@ class InstallDealsEntity extends Command
             ], JSON_UNESCAPED_SLASHES),
             'type' => 'menu', 'entity' => 'deals', 'user_id' => null,
         ]);
+
+        if ($sb->hasTable('sidebar_items')) {
+            $existingItem = $db->table('sidebar_items')->where('slug', 'deals')->first();
+            if ($existingItem) {
+                $db->table('sidebar_items')->where('slug', 'deals')
+                    ->update(['enabled' => 1, 'is_hidden' => 0, 'updated_at' => $now]);
+            } else {
+                $maxRgt = (int) $db->table('sidebar_items')->max('_rgt');
+                $db->table('sidebar_items')->insert([
+                    'created_at' => $now, 'updated_at' => $now,
+                    'name' => 'Сделки', 'slug' => 'deals',
+                    'sort' => 0, 'link' => '/objects/deals',
+                    '_lft' => $maxRgt + 1, '_rgt' => $maxRgt + 2, 'parent_id' => null,
+                    'is_hidden' => 0, 'enabled' => 1,
+                ]);
+            }
+        }
 
         try {
             \App\Models\Settings::clear_cache();

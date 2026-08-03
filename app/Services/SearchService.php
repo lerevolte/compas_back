@@ -222,6 +222,7 @@ class SearchService
                             'file' => $photo,
                             'count' => $item->quantity,
                             'weight' => $item->weight,
+                            'volume' => $item->volume ?? null,
                             'price' => $item->price
                         ],
                         'value' => $item->id

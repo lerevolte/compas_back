@@ -438,7 +438,8 @@ class CrudService
                         $new_el_relations[] = $ob->id;
                         $related_rows[] = array('id' => $value, $model_fields[$field]->related_field => $new_el_relations);
                     }
-                    if(!($slug == 'routes' && in_array($field, ['car_id', 'employee_id'])))
+                    if(!($slug == 'routes' && in_array($field, ['car_id', 'employee_id']))
+                        && !($slug == 'users' && $field == 'employee_id'))
                         $h = \App\Models\History::saveForObject($relation_table, $related_rows);
                 }
 
