@@ -621,8 +621,7 @@ class EntityObject
 
                         }
                         $subfield_data['value'] = $field_value;
-                        // if($subfield->type == 'relation')
-                        //     $field_value = $settings['list_values'][$subfield->id][$field_value];
+                        $list_values = array();
                         if(isset($settings['list_values'][$subfield->id]))
                             $list_values = $settings['list_values'][$subfield->id];
                         if($subfield->type == 'relation' && $subfield->is_plural) {
@@ -636,6 +635,9 @@ class EntityObject
                                     if(isset($list_values[$val])) {
                                         $subfield_data['value']['value'][] = $list_values[$val]['value'];
                                         $subfield_data['value']['localOptions'][] = $list_values[$val];
+                                    } elseif(($table_option = self::listValueFromTable($subfield, $val))) {
+                                        $subfield_data['value']['value'][] = $table_option['value'];
+                                        $subfield_data['value']['localOptions'][] = $table_option;
                                     }
                                 }
                             }
@@ -647,6 +649,12 @@ class EntityObject
                             $subfield_data['value']['localOptions'] = array($list_values[$field_value]);
                             $subfield_data['value']['value'] = array($list_values[$field_value]['value']);
 
+                        } elseif($subfield->type == 'relation' && $field_value && !is_array($field_value)
+                            && ($table_option = self::listValueFromTable($subfield, $field_value))) {
+                            $subfield_data['value'] = array(
+                                'value' => array($table_option['value']),
+                                'localOptions' => array($table_option)
+                            );
                         } elseif($subfield->type == 'relation') {
                             $subfield_data['value'] = array(
                                 'value' => array(),
@@ -1579,6 +1587,14 @@ class EntityObject
                         $paginator = $paginator->whereDate($field, date('Y-m-d', strtotime($val)));
                         //$paginator = $paginator->whereDate($field, date('Y-m-d', strtotime($val)));
                     }
+                } elseif($settings[$slug]['fields'][$field]->type == 'deal_stages') {
+                    $vals = array_values(array_filter(
+                        is_array($val) ? $val : explode(',', (string) $val),
+                        fn ($v) => $v !== null && $v !== '' && $v !== 'null'
+                    ));
+                    if (count($vals)) {
+                        $paginator = $paginator->whereIn($field, $vals);
+                    }
                 } elseif($settings[$slug]['fields'][$field]->type == 'number' && $settings[$slug]['fields'][$field]->field != 'id') {
                     if(!is_array($val) && strstr($val, ','))
                         $val = explode(',', $val);
@@ -1623,6 +1639,8 @@ class EntityObject
                             //$paginator = $paginator->whereJsonContains($field, (int)$val);
                         } elseif($settings[$slug]['fields'][$field]->type == 'relation') {
                             $paginator = $paginator->whereJsonContains($field, (int)$val);
+                        } elseif($settings[$slug]['fields'][$field]->type == 'multi_text') {
+                            $paginator = $paginator->where($field, 'like', '%' . (is_array($val) ? implode('', array_slice($val, 0, 1)) : $val) . '%');
                         } else {
                             //->whereRaw("json_contains(`client_id`, ?)", [15])->whereRaw('json_contains(`tip_tk`, \'"'.$str.'"\')')
 

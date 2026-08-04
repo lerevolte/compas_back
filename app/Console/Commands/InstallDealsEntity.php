@@ -30,7 +30,7 @@ class InstallDealsEntity extends Command
     protected $description = 'Установить сущность «Сделки» (deals) в admin_seeds / тенант / все тенанты';
 
     /** Поля logistic_tasks, которые НЕ переносим в сделки. */
-    private array $excludeFields = ['route_id', 'employee_id', 'point_status', 'sort'];
+    private array $excludeFields = ['route_id', 'employee_id', 'point_status', 'sort', 'service_time'];
 
     public function handle(): int
     {
@@ -143,6 +143,7 @@ class InstallDealsEntity extends Command
 
         $this->cloneDataRows($db, $typeId, $infoSecId);
         $this->insertOwnRows($db, $typeId, $infoSecId);
+        $this->patchRelatedEntities($db, $label);
 
         $db->table('settings')->insert([
             'key' => 'menu', 'display_name' => null,
@@ -254,5 +255,56 @@ class InstallDealsEntity extends Command
             'sort' => 6, 'is_plural' => 1, 'details' => '{"table":"companies"}',
             'is_link' => 1, 'relation_table' => 'companies', 'related_field' => 'deal_id',
         ]));
+    }
+
+    private function patchRelatedEntities($db, string $label): void
+    {
+        $targets = [
+            'contacts'  => 'contact_id',
+            'companies' => 'company_id',
+        ];
+        foreach ($targets as $slug => $relatedField) {
+            $type = $db->table('data_types')
+                ->where('slug', $slug)->orWhere('name', $slug)
+                ->first();
+            if (!$type) {
+                continue;
+            }
+            if (!$db->getSchemaBuilder()->hasColumn($slug, 'deal_id')) {
+                $db->statement("ALTER TABLE `{$slug}` ADD COLUMN `deal_id` INT NULL");
+            }
+            $exists = $db->table('data_rows')
+                ->where('data_type_id', $type->id)
+                ->where('field', 'deal_id')
+                ->exists();
+            if ($exists) {
+                continue;
+            }
+            $sectionId = (int) ($db->table('field_sections')
+                ->where('page', $slug)->where('name', 'Прикрепленные сущности')
+                ->value('id')
+                ?: $db->table('field_sections')
+                    ->where('page', $slug)->orderBy('sort')
+                    ->value('id')
+                ?: 0);
+            $maxSort = (int) $db->table('data_rows')
+                ->where('data_type_id', $type->id)
+                ->where('section_id', $sectionId)
+                ->max('sort');
+            $db->table('data_rows')->insert([
+                'data_type_id' => $type->id, 'field' => 'deal_id', 'type' => 'relation',
+                'title' => 'Сделки', 'required' => 0, 'details' => '{"table":"deals"}',
+                'visible_always' => 1, 'label_color' => '', 'section_id' => $sectionId, 'group_id' => null,
+                'sort' => $maxSort + 1, 'button_name' => 'Загрузить', 'show_file_image' => 0, 'hide' => 0,
+                'is_plural' => 1, 'roles_read' => '', 'roles_write' => '', 'is_remove' => 0,
+                'mobile_pages' => '', 'only_read' => 0, 'is_permanent' => 0, 'show_file_name' => 0,
+                'external_link' => '', 'is_external_link' => 0, 'module' => '', 'is_link' => 1,
+                'unit' => '', 'module_section_id' => null, 'is_default' => 0, 'is_inactive' => 0,
+                'blocked_changes' => 0, 'permanent_required' => 0, 'permanent_name' => 0,
+                'relation_table' => 'deals', 'related_field' => $relatedField, 'set_color' => 0,
+                'is_unique' => 0, 'is_program' => 0,
+            ]);
+            $this->line("    [{$label}] {$slug}: добавлено поле deal_id (section={$sectionId})");
+        }
     }
 }

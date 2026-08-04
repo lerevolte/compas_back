@@ -13,8 +13,7 @@ use App\Models\Tenant;
  * (plural relation -> companies, пивот company_contact).
  *
  * Дополнительно патчит companies: колонки contact_id/b24_id/deal_id и
- * СКРЫТОЕ поле «Контакт» (data_rows c section_id=0 — несуществующая секция,
- * поле не рендерится до одобрения; после одобрения переставить section_id).
+ * поле «Контакт» в секции «Прикрепленные сущности».
  *
  * Сущность видима (hidden=0) и выводится в сайдбар (sidebar_items,
  * slug contacts) — фича одобрена. Команда идемпотентна.
@@ -83,9 +82,14 @@ CREATE TABLE IF NOT EXISTS `contacts` (
   `company_id` text DEFAULT NULL,
   `deal_id` int(11) DEFAULT NULL,
   `b24_id` varchar(32) DEFAULT NULL,
+  `contact_type` text DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL);
+
+        if (!$sb->hasColumn('contacts', 'contact_type')) {
+            $db->statement('ALTER TABLE `contacts` ADD COLUMN `contact_type` TEXT NULL');
+        }
 
         $db->statement('CREATE TABLE IF NOT EXISTS `company_contact` (
             `company_id` INT NOT NULL, `contact_id` INT NOT NULL,
@@ -112,7 +116,12 @@ SQL);
         $oldTypeIds = $db->table('data_types')
             ->where('name', 'contacts')->orWhere('slug', 'contacts')
             ->pluck('id');
+        $foreignRows = [];
         if ($oldTypeIds->isNotEmpty()) {
+            $foreignRows = $db->table('data_rows')
+                ->whereIn('data_type_id', $oldTypeIds)
+                ->where('relation_table', 'deals')
+                ->get()->map(fn ($r) => (array) $r)->all();
             $db->table('data_rows')->whereIn('data_type_id', $oldTypeIds)->delete();
             $db->table('data_types')->whereIn('id', $oldTypeIds)->delete();
         }
@@ -191,6 +200,22 @@ SQL);
             'details' => '{"table":"users"}', 'is_link' => 1,
             'relation_table' => 'users', 'related_field' => 'contact_id', 'is_inactive' => 1,
         ]));
+        $db->table('data_rows')->insert(array_merge($base, [
+            'field' => 'contact_type', 'type' => 'select_dropdown', 'title' => 'Тип контакта', 'sort' => 8,
+            'is_plural' => 1, 'is_default' => 1,
+            'details' => json_encode(['options' => [
+                ['label' => 'Клиент', 'value' => 0],
+                ['label' => 'Поставщик', 'value' => 1],
+                ['label' => 'Перевозчик', 'value' => 2],
+            ]], JSON_UNESCAPED_UNICODE),
+        ]));
+
+        foreach ($foreignRows as $row) {
+            unset($row['id']);
+            $row['data_type_id'] = $typeId;
+            $row['section_id'] = $infoSecId;
+            $db->table('data_rows')->insert($row);
+        }
 
         $db->table('settings')->insert([
             'key' => 'menu', 'display_name' => null,
@@ -228,11 +253,6 @@ SQL);
         $this->line("    [{$label}] contacts: data_type={$typeId}, section={$infoSecId}");
     }
 
-    /**
-     * Скрытое поле «Контакт» у компаний: section_id=0 (несуществующая секция) —
-     * поле не рендерится в карточке до одобрения. Для показа: выставить
-     * section_id на реальную секцию компании.
-     */
     private function patchCompanies($db, string $label): void
     {
         $companiesType = $db->table('data_types')
@@ -242,18 +262,30 @@ SQL);
             return;
         }
 
-        $exists = $db->table('data_rows')
+        $sectionId = (int) ($db->table('field_sections')
+            ->where('page', 'companies')->where('name', 'Прикрепленные сущности')
+            ->value('id')
+            ?: $db->table('field_sections')
+                ->where('page', 'companies')->orderBy('sort')
+                ->value('id')
+            ?: 0);
+
+        $existing = $db->table('data_rows')
             ->where('data_type_id', $companiesType->id)
             ->where('field', 'contact_id')
-            ->exists();
-        if ($exists) {
+            ->first();
+        if ($existing) {
+            if ((int) $existing->section_id === 0 && $sectionId) {
+                $db->table('data_rows')->where('id', $existing->id)->update(['section_id' => $sectionId]);
+                $this->line("    [{$label}] companies: поле contact_id привязано к секции {$sectionId}");
+            }
             return;
         }
 
         $db->table('data_rows')->insert([
             'data_type_id' => $companiesType->id, 'field' => 'contact_id', 'type' => 'relation',
             'title' => 'Контакт', 'required' => 0, 'details' => '{"table":"contacts"}',
-            'visible_always' => 1, 'label_color' => '', 'section_id' => 0, 'group_id' => null,
+            'visible_always' => 1, 'label_color' => '', 'section_id' => $sectionId, 'group_id' => null,
             'sort' => 90, 'button_name' => 'Загрузить', 'show_file_image' => 0, 'hide' => 0,
             'is_plural' => 1, 'roles_read' => '', 'roles_write' => '', 'is_remove' => 0,
             'mobile_pages' => '', 'only_read' => 0, 'is_permanent' => 0, 'show_file_name' => 0,
@@ -263,6 +295,6 @@ SQL);
             'relation_table' => 'contacts', 'related_field' => 'company_id', 'set_color' => 0,
             'is_unique' => 0, 'is_program' => 0,
         ]);
-        $this->line("    [{$label}] companies: добавлено скрытое поле contact_id (section_id=0)");
+        $this->line("    [{$label}] companies: добавлено поле contact_id (section={$sectionId})");
     }
 }

@@ -13,7 +13,7 @@ class Contact extends Model
     protected $table = 'contacts';
     protected $guarded = ['id'];
 
-    public const B24_PUSH_FIELDS = ['name', 'emails', 'phones'];
+    public const B24_PUSH_FIELDS = ['name', 'emails', 'phones', 'contact_type'];
 
     public static function boot()
     {
@@ -27,7 +27,7 @@ class Contact extends Model
         });
 
         static::saving(function ($model) {
-            foreach (['emails', 'phones', 'company_id'] as $col) {
+            foreach (['emails', 'phones', 'company_id', 'contact_type'] as $col) {
                 if (is_array($model->{$col})) {
                     $model->{$col} = json_encode(array_values(array_filter(
                         $model->{$col},

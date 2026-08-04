@@ -426,11 +426,10 @@ class Bitrix24Controller extends Controller
             }
         }
 
-        // Телефон: спец-поле сделки, иначе из контакта
         if (!empty($deal['UF_CRM_1623418181538'])) {
-            $task->phone = $deal['UF_CRM_1623418181538'];
+            $task->phone = self::phoneStoreValue('logistic_tasks', $deal['UF_CRM_1623418181538']);
         } elseif ($contact && ($contact['HAS_PHONE'] ?? null) == 'Y') {
-            $task->phone = $contact['PHONE'][0]['VALUE'] ?? null;
+            $task->phone = self::phoneStoreValue('logistic_tasks', $contact['PHONE'][0]['VALUE'] ?? null);
         }
 
         // delivery_price: из товаров-доставки, иначе спец-поле, иначе 0
@@ -595,6 +594,31 @@ class Bitrix24Controller extends Controller
      * списком активных сотрудников Bitrix24 (значение = ID, метка = Имя Фамилия).
      * Троттлинг — не чаще раза в 10 минут (через settings).
      */
+    public static function phoneStoreValue(string $slug, $raw)
+    {
+        static $multiBySlug = [];
+        if ($raw === null || $raw === '') {
+            return $raw;
+        }
+        if (is_string($raw) && str_starts_with(trim($raw), '[')) {
+            return $raw;
+        }
+        if (!array_key_exists($slug, $multiBySlug)) {
+            try {
+                $multiBySlug[$slug] = \DB::table('data_rows')
+                    ->join('data_types', 'data_types.id', '=', 'data_rows.data_type_id')
+                    ->where('data_types.slug', $slug)
+                    ->where('data_rows.field', 'phone')
+                    ->value('data_rows.type') === 'multi_text';
+            } catch (\Throwable $e) {
+                $multiBySlug[$slug] = false;
+            }
+        }
+        return $multiBySlug[$slug]
+            ? json_encode([(string) $raw], JSON_UNESCAPED_UNICODE)
+            : $raw;
+    }
+
     public static function actualizeBitrix24Employees($base, $usersTypeId)
     {
         if (!$usersTypeId || !$base) {

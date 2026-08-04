@@ -497,7 +497,7 @@ class Settings extends Model
 		            return $color ?? '';
 		        };
 
-		        $fields = \DB::table('data_rows')->where('type', 'relation')->orWhere('type', 'select_dropdown')->get();
+		        $fields = \DB::table('data_rows')->whereIn('type', ['relation', 'select_dropdown', 'deal_stages'])->get();
 		        $field_values = array();
 
 		        $table_objects = array();
@@ -726,7 +726,7 @@ class Settings extends Model
 		                    	}
 		                        $settings['list_values'][$field->id] = $settings[$models[$model_id]]['options'][$field->field];
 		                    }
-		                    if($field->type == 'select_dropdown' || $field->type == 'relation')
+		                    if($field->type == 'select_dropdown' || $field->type == 'relation' || $field->type == 'deal_stages')
 		                        $settings['list_values'][$field->id] = isset($field_values[$field->id]) ? $field_values[$field->id] : null;
 		                    $settings[$models[$model_id]]['colors'][$field->field] = $field->label_color ?? '';
 		                    $settings[$models[$model_id]]['perms'][$field->field] = array(

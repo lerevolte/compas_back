@@ -75,11 +75,25 @@ class UninstallDealsEntity extends Command
         $db->table('sidebar_items')->where('slug', 'deals')->delete();
         $db->table('settings')->where('entity', 'deals')->delete();
 
+        $patchedTypeIds = $db->table('data_types')
+            ->whereIn('slug', ['contacts', 'companies'])
+            ->pluck('id');
+        if ($patchedTypeIds->isNotEmpty()) {
+            $db->table('data_rows')
+                ->whereIn('data_type_id', $patchedTypeIds)
+                ->where('field', 'deal_id')
+                ->where('relation_table', 'deals')
+                ->delete();
+        }
+
         if ($this->option('purge')) {
             $db->statement('DROP TABLE IF EXISTS `deals`');
             $db->statement('DROP TABLE IF EXISTS `contact_deal`');
             $db->statement('DROP TABLE IF EXISTS `company_deal`');
             $db->table('histories')->where('entity', 'deals')->delete();
+            $db->table('settings')->whereIn('type', [
+                'b24_entities_synced_at', 'b24_deals_synced_at', 'b24_contacts_synced_at',
+            ])->delete();
         }
 
         try {

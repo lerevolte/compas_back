@@ -34,7 +34,10 @@ class B24EntitySync
     private string $base;
     private array $params;
     private ?array $b24DealFields = null;
+    private ?array $b24ContactFields = null;
     private array $responsibleCache = [];
+
+    private const CONTACT_TYPE_UF = 'UF_CRM_1785851130';
 
     private const DEFAULT_EXCLUDE_STAGES = ['NEW'];
     private const STAGE_PALETTE = [
@@ -368,7 +371,7 @@ class B24EntitySync
         }
         $contacts = $this->b24All('crm.contact.list', [
             'filter' => $filter,
-            'select' => ['ID', 'NAME', 'LAST_NAME', 'SECOND_NAME', 'EMAIL', 'PHONE', 'DATE_MODIFY'],
+            'select' => ['ID', 'NAME', 'LAST_NAME', 'SECOND_NAME', 'EMAIL', 'PHONE', 'DATE_MODIFY', self::CONTACT_TYPE_UF],
             'order'  => $since ? ['DATE_MODIFY' => 'ASC'] : ['ID' => 'ASC'],
         ], $limit);
         $more = $limit > 0 && count($contacts) >= $limit;
@@ -480,7 +483,7 @@ class B24EntitySync
             }
 
             if (!empty($deal['UF_CRM_1623418181538'])) {
-                $model->phone = $deal['UF_CRM_1623418181538'];
+                $model->phone = Bitrix24Controller::phoneStoreValue('deals', $deal['UF_CRM_1623418181538']);
             }
 
             if ($deliveryPrice > 0) {
@@ -535,6 +538,7 @@ class B24EntitySync
                 $model->save();
                 $this->writeSyncCreatedHistory('deals', $model->id);
             } elseif (count($model->getDirty())) {
+                $this->writeSyncFieldHistory('deals', $model->id, $model->getDirty());
                 $model->save();
             }
 
@@ -582,10 +586,6 @@ class B24EntitySync
         return $this->responsibleCache[$key] = $userId ? (int) $userId : null;
     }
 
-    /**
-     * Массовый pull не пишет полевую историю (см. инцидент 2026-07-30: ~93k
-     * строк histories за день) — только одна запись о создании объекта.
-     */
     private function writeSyncCreatedHistory(string $slug, $id): void
     {
         try {
@@ -598,6 +598,42 @@ class B24EntitySync
             ]);
             $history->saveQuietly();
         } catch (\Throwable $e) {
+        }
+    }
+
+    private function writeSyncFieldHistory(string $slug, $id, array $changed): void
+    {
+        unset($changed['updated_at'], $changed['created_at'], $changed['b24_id'], $changed['crm_link']);
+        if (!count($changed)) {
+            return;
+        }
+        try {
+            History::saveForObject($slug, [array_merge(['id' => $id], $changed)]);
+        } catch (\Throwable $e) {
+            Log::channel('bitrix24')->warning('entity-sync: history write failed', [
+                'slug' => $slug, 'id' => $id, 'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function writeMirrorRelationHistory(string $slug, string $modelClass, array $addedIds, array $removedIds, string $relationMethod, string $mirrorField, int $ownerId): void
+    {
+        foreach ([1 => $addedIds, 0 => $removedIds] as $isAdd => $ids) {
+            foreach ($ids as $relId) {
+                try {
+                    $related = $modelClass::find($relId);
+                    if (!$related) {
+                        continue;
+                    }
+                    $current = $related->{$relationMethod}()->pluck($related->{$relationMethod}()->getRelated()->getTable() . '.id')
+                        ->map(fn ($v) => (int) $v)->values()->all();
+                    $new = $isAdd
+                        ? array_values(array_unique(array_merge($current, [$ownerId])))
+                        : array_values(array_diff($current, [$ownerId]));
+                    History::saveForObject($slug, [['id' => $relId, $mirrorField => $new]]);
+                } catch (\Throwable $e) {
+                }
+            }
         }
     }
 
@@ -624,6 +660,16 @@ class B24EntitySync
 
         $currentContacts = $model->contacts()->pluck('contacts.id')->map(fn ($v) => (int) $v)->sort()->values()->all();
         if ($currentContacts !== $contactIds) {
+            $this->writeSyncFieldHistory('deals', $model->id, ['contact_id' => $contactIds]);
+            $this->writeMirrorRelationHistory(
+                'contacts',
+                Contact::class,
+                array_values(array_diff($contactIds, $currentContacts)),
+                array_values(array_diff($currentContacts, $contactIds)),
+                'deals',
+                'deal_id',
+                (int) $model->id
+            );
             $model->contacts()->sync($contactIds);
             if (count($contactIds)) {
                 DB::table('contacts')->whereIntegerInRaw('id', $contactIds)->update(['deal_id' => $model->id]);
@@ -644,6 +690,16 @@ class B24EntitySync
 
         $currentCompanies = $model->companies()->pluck('companies.id')->map(fn ($v) => (int) $v)->sort()->values()->all();
         if ($currentCompanies !== $companyIds) {
+            $this->writeSyncFieldHistory('deals', $model->id, ['company_id' => $companyIds]);
+            $this->writeMirrorRelationHistory(
+                'companies',
+                Company::class,
+                array_values(array_diff($companyIds, $currentCompanies)),
+                array_values(array_diff($currentCompanies, $companyIds)),
+                'deals',
+                'deal_id',
+                (int) $model->id
+            );
             $model->companies()->sync($companyIds);
             if (count($companyIds) && Schema::hasColumn('companies', 'deal_id')) {
                 DB::table('companies')->whereIntegerInRaw('id', $companyIds)->update(['deal_id' => $model->id]);
@@ -684,13 +740,30 @@ class B24EntitySync
                 $contact['SECOND_NAME'] ?? null,
             ])));
             $model->name = $name !== '' ? $name : ('Контакт #' . $b24Id);
-            $model->emails = $this->multiFieldValues($contact['EMAIL'] ?? null);
-            $model->phones = $this->multiFieldValues($contact['PHONE'] ?? null);
+            $model->emails = json_encode($this->multiFieldValues($contact['EMAIL'] ?? null), JSON_UNESCAPED_UNICODE);
+            $model->phones = json_encode($this->multiFieldValues($contact['PHONE'] ?? null), JSON_UNESCAPED_UNICODE);
+
+            if (Schema::hasColumn('contacts', 'contact_type') && array_key_exists(self::CONTACT_TYPE_UF, $contact)) {
+                $raw = $contact[self::CONTACT_TYPE_UF];
+                $values = [];
+                foreach ((is_array($raw) ? $raw : [$raw]) as $enumId) {
+                    if ($enumId === '' || $enumId === null || $enumId === false) {
+                        continue;
+                    }
+                    $label = $this->b24ContactEnumLabel(self::CONTACT_TYPE_UF, $enumId);
+                    $local = $this->localOptionValueByLabel('contacts', 'contact_type', $label);
+                    if ($local !== null) {
+                        $values[] = (int) $local;
+                    }
+                }
+                $model->contact_type = json_encode($values, JSON_UNESCAPED_UNICODE);
+            }
 
             if ($isNew) {
                 $model->save();
                 $this->writeSyncCreatedHistory('contacts', $model->id);
             } elseif (count($model->getDirty())) {
+                $this->writeSyncFieldHistory('contacts', $model->id, $model->getDirty());
                 $model->save();
             }
 
@@ -715,6 +788,16 @@ class B24EntitySync
 
             $currentCompanies = $model->companies()->pluck('companies.id')->map(fn ($v) => (int) $v)->sort()->values()->all();
             if ($currentCompanies !== $companyIds) {
+                $this->writeSyncFieldHistory('contacts', $model->id, ['company_id' => $companyIds]);
+                $this->writeMirrorRelationHistory(
+                    'companies',
+                    Company::class,
+                    array_values(array_diff($companyIds, $currentCompanies)),
+                    array_values(array_diff($currentCompanies, $companyIds)),
+                    'contacts',
+                    'contact_id',
+                    (int) $model->id
+                );
                 $model->companies()->sync($companyIds);
             }
             $model->company_id = json_encode($companyIds);
@@ -749,7 +832,11 @@ class B24EntitySync
             if (Schema::hasColumn('companies', 'b24_id')) {
                 $model->b24_id = $b24Id;
             }
-            if ($model->isDirty() || !$model->exists) {
+            if (!$model->exists) {
+                $model->saveQuietly();
+                $this->writeSyncCreatedHistory('companies', $model->id);
+            } elseif ($model->isDirty()) {
+                $this->writeSyncFieldHistory('companies', $model->id, $model->getDirty());
                 $model->saveQuietly();
             }
             return $model;
@@ -811,13 +898,76 @@ class B24EntitySync
             $resp = $this->b24('crm.deal.fields', []);
             $this->b24DealFields = $resp['result'] ?? [];
         }
-        $items = $this->b24DealFields[$ufCode]['items'] ?? null;
+        return $this->enumLabelFromItems($this->b24DealFields[$ufCode]['items'] ?? null, $enumId);
+    }
+
+    private function contactFieldsMeta(): array
+    {
+        if ($this->b24ContactFields === null) {
+            $resp = $this->b24('crm.contact.fields', []);
+            $this->b24ContactFields = $resp['result'] ?? [];
+        }
+        return $this->b24ContactFields;
+    }
+
+    private function b24ContactEnumLabel(string $ufCode, $enumId): ?string
+    {
+        return $this->enumLabelFromItems($this->contactFieldsMeta()[$ufCode]['items'] ?? null, $enumId);
+    }
+
+    private function b24ContactEnumIdByLabel(string $ufCode, ?string $label): ?string
+    {
+        if ($label === null || trim($label) === '') {
+            return null;
+        }
+        $items = $this->contactFieldsMeta()[$ufCode]['items'] ?? null;
+        if (!is_array($items)) {
+            return null;
+        }
+        $needle = mb_strtolower(trim($label));
+        foreach ($items as $item) {
+            if (mb_strtolower(trim((string) ($item['VALUE'] ?? ''))) === $needle) {
+                return (string) ($item['ID'] ?? '') ?: null;
+            }
+        }
+        return null;
+    }
+
+    private function enumLabelFromItems($items, $enumId): ?string
+    {
         if (!is_array($items)) {
             return null;
         }
         foreach ($items as $item) {
             if ((string) ($item['ID'] ?? '') === (string) $enumId) {
                 return $item['VALUE'] ?? null;
+            }
+        }
+        return null;
+    }
+
+    private function localOptionLabelByValue(string $entitySlug, string $fieldKey, $value): ?string
+    {
+        $row = DB::table('data_rows')
+            ->join('data_types', 'data_rows.data_type_id', '=', 'data_types.id')
+            ->where('data_types.slug', $entitySlug)
+            ->where('data_rows.field', $fieldKey)
+            ->select('data_rows.details')
+            ->first();
+        $details = $row && $row->details ? json_decode($row->details, true) : null;
+        foreach ((is_array($details) ? ($details['options'] ?? []) : []) as $key => $option) {
+            if (is_array($option)) {
+                $optValue = $option['value'] ?? $key;
+                $optLabel = $option['label'] ?? null;
+                if (is_array($optLabel)) {
+                    $optLabel = $optLabel['text'] ?? null;
+                }
+            } else {
+                $optValue = $key;
+                $optLabel = $option;
+            }
+            if ((string) $optValue === (string) $value) {
+                return $optLabel !== null ? (string) $optLabel : null;
             }
         }
         return null;
@@ -864,6 +1014,13 @@ class B24EntitySync
 
     public function pushDeal(Deal $deal, array $changed): void
     {
+        if (in_array('contact_id', $changed, true)) {
+            $this->pushDealContacts($deal);
+        }
+        if (in_array('company_id', $changed, true)) {
+            $this->pushDealCompany($deal);
+        }
+
         $fields = [];
         foreach ($changed as $field) {
             switch ($field) {
@@ -878,7 +1035,10 @@ class B24EntitySync
                     $fields['UF_CRM_1632832553'] = (string) $deal->time;
                     break;
                 case 'phone':
-                    $fields['UF_CRM_1623418181538'] = (string) $deal->phone;
+                    $phones = json_decode((string) $deal->phone, true);
+                    $fields['UF_CRM_1623418181538'] = is_array($phones)
+                        ? implode(', ', array_filter($phones, fn ($v) => $v !== null && $v !== ''))
+                        : (string) $deal->phone;
                     break;
                 case 'delivery_price':
                     $fields['UF_CRM_1633508830'] = (string) $deal->delivery_price;
@@ -907,6 +1067,108 @@ class B24EntitySync
         ]);
     }
 
+    private function pushDealContacts(Deal $deal): void
+    {
+        $localIds = json_decode((string) $deal->contact_id, true);
+        $localIds = is_array($localIds) ? array_filter($localIds, 'is_numeric') : [];
+
+        $items = [];
+        foreach (Contact::whereIntegerInRaw('id', $localIds)->get() as $contact) {
+            if (!$contact->b24_id) {
+                $this->createContactInB24($contact);
+            }
+            if ($contact->b24_id) {
+                $items[] = ['CONTACT_ID' => (int) $contact->b24_id];
+            }
+        }
+
+        $resp = $this->b24('crm.deal.contact.items.set', [
+            'id'    => $deal->b24_id,
+            'items' => $items,
+        ]);
+        Log::channel('bitrix24')->info('entity-sync: deal contacts pushed', [
+            'deal_id' => $deal->id, 'b24_id' => $deal->b24_id,
+            'contacts' => array_column($items, 'CONTACT_ID'),
+            'result' => $resp['result'] ?? null,
+        ]);
+    }
+
+    private function pushDealCompany(Deal $deal): void
+    {
+        $localIds = json_decode((string) $deal->company_id, true);
+        $localIds = is_array($localIds) ? array_filter($localIds, 'is_numeric') : [];
+
+        $b24CompanyId = 0;
+        if (count($localIds)) {
+            $company = Company::whereIntegerInRaw('id', $localIds)->first();
+            if ($company) {
+                if (!$company->b24_id) {
+                    $this->createCompanyInB24($company);
+                }
+                $b24CompanyId = (int) ($company->b24_id ?: 0);
+                if (!$b24CompanyId) {
+                    return;
+                }
+            }
+        }
+
+        $resp = $this->b24('crm.deal.update', [
+            'id' => $deal->b24_id,
+            'fields' => ['COMPANY_ID' => $b24CompanyId],
+        ]);
+        Log::channel('bitrix24')->info('entity-sync: deal company pushed', [
+            'deal_id' => $deal->id, 'b24_id' => $deal->b24_id,
+            'company_b24_id' => $b24CompanyId,
+            'result' => $resp['result'] ?? null,
+        ]);
+    }
+
+    private function createContactInB24(Contact $contact): void
+    {
+        $parts = preg_split('/\s+/', trim((string) $contact->name)) ?: [];
+        $fields = [
+            'LAST_NAME'   => $parts[0] ?? '',
+            'NAME'        => $parts[1] ?? '',
+            'SECOND_NAME' => isset($parts[2]) ? implode(' ', array_slice($parts, 2)) : '',
+        ];
+        foreach (['emails' => 'EMAIL', 'phones' => 'PHONE'] as $local => $b24Key) {
+            $values = json_decode((string) $contact->{$local}, true);
+            if (is_array($values) && count($values)) {
+                $fields[$b24Key] = array_map(
+                    fn ($v) => ['VALUE' => $v, 'VALUE_TYPE' => 'WORK'],
+                    array_values(array_filter($values, fn ($v) => $v !== null && $v !== ''))
+                );
+            }
+        }
+        $resp = $this->b24('crm.contact.add', ['fields' => $fields]);
+        $newId = $resp['result'] ?? null;
+        if ($newId) {
+            $contact->b24_id = (string) $newId;
+            $contact->saveQuietly();
+        }
+        Log::channel('bitrix24')->info('entity-sync: contact created in b24', [
+            'contact_id' => $contact->id, 'b24_id' => $newId,
+        ]);
+    }
+
+    private function createCompanyInB24(Company $company): void
+    {
+        if (!Schema::hasColumn('companies', 'b24_id')) {
+            return;
+        }
+        $resp = $this->b24('crm.company.add', [
+            'fields' => ['TITLE' => (string) $company->name],
+        ]);
+        $newId = $resp['result'] ?? null;
+        if ($newId) {
+            $company->b24_id = (string) $newId;
+            $company->saveQuietly();
+        }
+        Log::channel('bitrix24')->info('entity-sync: company created in b24', [
+            'company_id' => $company->id, 'b24_id' => $newId,
+        ]);
+    }
+
     public function pushContact(Contact $contact, array $changed): void
     {
         $fields = [];
@@ -916,6 +1178,19 @@ class B24EntitySync
             $fields['LAST_NAME'] = $parts[0] ?? '';
             $fields['NAME'] = $parts[1] ?? '';
             $fields['SECOND_NAME'] = isset($parts[2]) ? implode(' ', array_slice($parts, 2)) : '';
+        }
+
+        if (in_array('contact_type', $changed, true) && Schema::hasColumn('contacts', 'contact_type')) {
+            $values = json_decode((string) $contact->contact_type, true);
+            $enumIds = [];
+            foreach ((is_array($values) ? $values : []) as $val) {
+                $label = $this->localOptionLabelByValue('contacts', 'contact_type', $val);
+                $enumId = $this->b24ContactEnumIdByLabel(self::CONTACT_TYPE_UF, $label);
+                if ($enumId !== null) {
+                    $enumIds[] = $enumId;
+                }
+            }
+            $fields[self::CONTACT_TYPE_UF] = $enumIds;
         }
 
         $needMulti = array_intersect(['emails', 'phones'], $changed);
