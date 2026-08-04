@@ -489,7 +489,7 @@ class Bitrix24Controller extends Controller
         if (!empty($deal['ASSIGNED_BY_ID'])) {
             try {
                 $usersTypeId = \DB::table('data_types')->where('slug', 'users')->value('id');
-                $this->actualizeBitrix24Employees($base, $usersTypeId);
+                self::actualizeBitrix24Employees($base, $usersTypeId);
 
                 $matched = null;
                 if (\Illuminate\Support\Facades\Schema::hasColumn('users', 'b24_responsible')) {
@@ -595,7 +595,7 @@ class Bitrix24Controller extends Controller
      * списком активных сотрудников Bitrix24 (значение = ID, метка = Имя Фамилия).
      * Троттлинг — не чаще раза в 10 минут (через settings).
      */
-    private function actualizeBitrix24Employees($base, $usersTypeId)
+    public static function actualizeBitrix24Employees($base, $usersTypeId)
     {
         if (!$usersTypeId || !$base) {
             return;

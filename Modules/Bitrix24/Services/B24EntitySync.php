@@ -34,6 +34,7 @@ class B24EntitySync
     private string $base;
     private array $params;
     private ?array $b24DealFields = null;
+    private array $responsibleCache = [];
 
     private const DEFAULT_EXCLUDE_STAGES = ['NEW'];
     private const STAGE_PALETTE = [
@@ -516,6 +517,13 @@ class B24EntitySync
                 }
             }
 
+            if (Schema::hasColumn('deals', 'user_id')) {
+                $responsibleId = $this->resolveResponsible($deal['ASSIGNED_BY_ID'] ?? null);
+                if ($responsibleId) {
+                    $model->user_id = $responsibleId;
+                }
+            }
+
             $invoices = $pre !== null && array_key_exists('invoices', $pre)
                 ? $pre['invoices']
                 : Bitrix24Controller::fetchDealInvoiceNumbers($this->base, $dealId);
@@ -536,6 +544,42 @@ class B24EntitySync
         } finally {
             self::$muted = false;
         }
+    }
+
+    private function resolveResponsible($assignedById): ?int
+    {
+        if ($assignedById === null || $assignedById === '') {
+            return null;
+        }
+        $key = (string) $assignedById;
+        if (array_key_exists($key, $this->responsibleCache)) {
+            return $this->responsibleCache[$key];
+        }
+
+        $userId = null;
+        try {
+            $usersTypeId = DB::table('data_types')->where('slug', 'users')->value('id');
+            Bitrix24Controller::actualizeBitrix24Employees($this->base, $usersTypeId);
+
+            if (Schema::hasColumn('users', 'b24_responsible')) {
+                $userId = \App\Models\User::where('b24_responsible', $key)->value('id');
+            }
+
+            if (!$userId) {
+                $resp = $this->b24('user.get', ['id' => $key]);
+                $manager = $resp['result'][0] ?? null;
+                if ($manager && !empty($manager['EMAIL'])) {
+                    $userId = \App\Models\User::where('email', $manager['EMAIL'])->value('id');
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::channel('bitrix24')->warning('entity-sync: manager match failed', [
+                'assigned_by_id' => $key,
+                'error'          => $e->getMessage(),
+            ]);
+        }
+
+        return $this->responsibleCache[$key] = $userId ? (int) $userId : null;
     }
 
     /**
