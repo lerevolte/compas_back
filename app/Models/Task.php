@@ -4,14 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use App\Providers\CRest;
-use App\Traits\FieldValue, App\Traits\ModelActions;
+use App\Traits\FieldValue, App\Traits\ModelActions, App\Traits\ColorGenerator;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Auth;
 use App\Models\Route;
 
 class Task extends Model
 {
-    use FieldValue, ModelActions, SoftDeletes;
+    use FieldValue, ModelActions, ColorGenerator, SoftDeletes;
 
     //protected $fillable = ['store_name', 'is_store', 'is_supply', 'is_tc', 'is_address'];
     protected $guarded = ['id'];

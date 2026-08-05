@@ -604,6 +604,21 @@ class Field extends Model
         $res = '';
         $arr_res = array();
         $values_res = array();
+        $option_values = isset($settings['list_values'][$field->id]) ? $settings['list_values'][$field->id] : null;
+        if($option_values === null && isset($field->details) && $field->details) {
+            $details = is_array($field->details) ? $field->details : json_decode($field->details, true);
+            if(isset($details['options']) && is_array($details['options'])) {
+                $option_values = array();
+                foreach($details['options'] as $k => $option) {
+                    if(is_array($option) && isset($option['value']))
+                        $option_values[$option['value']] = $option;
+                    else
+                        $option_values[$k] = $option;
+                }
+            }
+        }
+        if($option_values === null && $field->type == 'relation' && $field->relation_table)
+            $option_values = array();
         if($field->type == 'status' && isset($settings['list_values'][$field->id])) {
             $statuses = collect($settings['list_values'][$field->id]);
             $visible_statuses = $statuses->filter(function ($status) {
@@ -622,9 +637,9 @@ class Field extends Model
                 if($status)
                     $res = $status->color;
             }
-        } elseif(isset($settings['list_values'][$field->id])) {
+        } elseif($option_values !== null) {
 
-            $list_values = $settings['list_values'][$field->id];
+            $list_values = $option_values;
             foreach($list_values as $k => $item) {
                 if(isset($item['label']))
                     $list_values[$item['value']] = $item['label'];
@@ -668,6 +683,14 @@ class Field extends Model
 
                 $v = isset($list_values[$value]['text']) ? $list_values[$value]['text'] : '';
                 $v = isset($list_values[$value]) && !is_array($list_values[$value]) ? $list_values[$value] : $v;
+                if($v === '' && $field->type == 'relation' && $field->relation_table && $value) {
+                    $rel_ob = \DB::table($field->relation_table)->where('id', $value)->first();
+                    if($rel_ob && isset($rel_ob->name)) {
+                        $v = $rel_ob->name;
+                        if(is_string($v) && ($decoded = json_decode($v, true)) && isset($decoded['value']))
+                            $v = $decoded['value'];
+                    }
+                }
                 $v = $v ? $v : $value;
                 if($field->type == 'relation' && $field->relation_table && $value) {
                     $v = "<span data-slug='$field->relation_table' data-id='$value'>$v</span>";
@@ -698,6 +721,8 @@ class Field extends Model
                         $res = implode(', ', array_values($list));
                     } elseif(isset($list['value'])) {
                         $res = $list['value'];
+                    } elseif(array_keys($list) === range(0, count($list) - 1) && !array_filter($list, 'is_array')) {
+                        $res = implode(', ', $list);
                     }
                 }
             } elseif($field->type == 'date') {

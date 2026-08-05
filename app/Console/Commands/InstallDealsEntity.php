@@ -30,7 +30,10 @@ class InstallDealsEntity extends Command
     protected $description = 'Установить сущность «Сделки» (deals) в admin_seeds / тенант / все тенанты';
 
     /** Поля logistic_tasks, которые НЕ переносим в сделки. */
-    private array $excludeFields = ['route_id', 'employee_id', 'point_status', 'sort', 'service_time'];
+    private array $excludeFields = ['route_id', 'employee_id', 'point_status', 'sort', 'service_time', 'plan_time', 'delivery_date'];
+
+    /** Кастомные поля logistic_tasks (по заголовку), которые НЕ переносим в сделки. */
+    private array $excludeTitles = ['Склад отгрузки', 'Время прибытия', 'План. время прибытия', 'Планируемое время прибытия', 'Дата доставки'];
 
     public function handle(): int
     {
@@ -192,6 +195,7 @@ class InstallDealsEntity extends Command
         $rows = $db->table('data_rows')
             ->where('data_type_id', $src->id)
             ->whereNotIn('field', $this->excludeFields)
+            ->whereNotIn('title', $this->excludeTitles)
             ->orderByRaw('group_id IS NULL DESC')
             ->orderBy('sort')
             ->get();
@@ -209,6 +213,9 @@ class InstallDealsEntity extends Command
             $arr['section_id']   = $infoSecId;
             $arr['module']       = '';
             $arr['module_section_id'] = null;
+            if ($arr['field'] === 'user_id') {
+                $arr['required'] = 1;
+            }
             if (!empty($arr['group_id'])) {
                 if (!isset($idMap[$arr['group_id']])) {
                     continue;

@@ -138,12 +138,16 @@ class B24EntitySync
             return $this->stageOptions();
         }
 
+        $colors = $this->stageColors();
+
         $options = [];
         foreach (array_values($items) as $i => $st) {
+            $statusId = (string) ($st['STATUS_ID'] ?? '');
+            $color = (string) (($st['COLOR'] ?? '') ?: ($colors[$statusId] ?? ''));
             $options[] = [
-                'value' => (string) ($st['STATUS_ID'] ?? ''),
+                'value' => $statusId,
                 'label' => (string) ($st['NAME'] ?? ''),
-                'color' => (string) (($st['COLOR'] ?? '') ?: self::STAGE_PALETTE[$i % count(self::STAGE_PALETTE)]),
+                'color' => $color !== '' ? $color : self::STAGE_PALETTE[$i % count(self::STAGE_PALETTE)],
             ];
         }
 
@@ -163,6 +167,26 @@ class B24EntitySync
         }
 
         return $options;
+    }
+
+    private function stageColors(): array
+    {
+        $categoryId = $this->categoryId();
+        $entityId = $categoryId > 0 ? 'DEAL_STAGE_' . $categoryId : 'DEAL_STAGE';
+        $colors = [];
+        try {
+            $items = $this->b24All('crm.status.list', ['filter' => ['ENTITY_ID' => $entityId]]);
+            foreach ($items as $st) {
+                $statusId = (string) ($st['STATUS_ID'] ?? '');
+                $color = (string) ($st['COLOR'] ?? '');
+                if ($statusId !== '' && $color !== '') {
+                    $colors[$statusId] = $color;
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::channel('bitrix24')->warning('entity-sync: stage colors failed', ['error' => $e->getMessage()]);
+        }
+        return $colors;
     }
 
     public function stageOptions(): array
@@ -371,7 +395,7 @@ class B24EntitySync
         }
         $contacts = $this->b24All('crm.contact.list', [
             'filter' => $filter,
-            'select' => ['ID', 'NAME', 'LAST_NAME', 'SECOND_NAME', 'EMAIL', 'PHONE', 'DATE_MODIFY', self::CONTACT_TYPE_UF],
+            'select' => ['ID', 'NAME', 'LAST_NAME', 'SECOND_NAME', 'EMAIL', 'PHONE', 'DATE_MODIFY', 'ASSIGNED_BY_ID', self::CONTACT_TYPE_UF],
             'order'  => $since ? ['DATE_MODIFY' => 'ASC'] : ['ID' => 'ASC'],
         ], $limit);
         $more = $limit > 0 && count($contacts) >= $limit;
@@ -759,6 +783,13 @@ class B24EntitySync
                 $model->contact_type = json_encode($values, JSON_UNESCAPED_UNICODE);
             }
 
+            if (Schema::hasColumn('contacts', 'user_id')) {
+                $responsibleId = $this->resolveResponsible($contact['ASSIGNED_BY_ID'] ?? null);
+                if ($responsibleId) {
+                    $model->user_id = $responsibleId;
+                }
+            }
+
             if ($isNew) {
                 $model->save();
                 $this->writeSyncCreatedHistory('contacts', $model->id);
@@ -832,6 +863,12 @@ class B24EntitySync
             if (Schema::hasColumn('companies', 'b24_id')) {
                 $model->b24_id = $b24Id;
             }
+            if (Schema::hasColumn('companies', 'user_id')) {
+                $responsibleId = $this->resolveResponsible($company['ASSIGNED_BY_ID'] ?? null);
+                if ($responsibleId) {
+                    $model->user_id = $responsibleId;
+                }
+            }
             if (!$model->exists) {
                 $model->saveQuietly();
                 $this->writeSyncCreatedHistory('companies', $model->id);
@@ -867,19 +904,15 @@ class B24EntitySync
         }
         foreach ($rows as $product) {
             $pid = $product['PRODUCT_ID'] ?? null;
-            if ($pid && !in_array($pid, Bitrix24Controller::SKIP_PRODUCT_IDS)) {
-                $weight = 0;
-                try {
-                    $prod = \Modules\Products\Entities\Product::where('id_b24', $pid)->first();
-                    $weight = $prod->weight ?? 0;
-                    $name = $prod->name ?? ($product['PRODUCT_NAME'] ?? ('Товар #' . $pid));
-                } catch (\Throwable $e) {
-                    $name = $product['PRODUCT_NAME'] ?? ('Товар #' . $pid);
-                }
+            $prod = ($pid && in_array($pid, Bitrix24Controller::SKIP_PRODUCT_IDS))
+                ? null
+                : Bitrix24Controller::resolveDealProduct($this->base, $product);
+            if ($prod) {
                 $qty = $product['QUANTITY'] ?? 0;
+                $weight = $prod->weight ?? 0;
                 $allWeight += ((float) $weight) * $qty;
                 $products[] = [
-                    'name'   => $name,
+                    'name'   => $prod->name,
                     'price'  => $product['PRICE'] ?? 0,
                     'count'  => $qty,
                     'weight' => $weight,

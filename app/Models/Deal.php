@@ -4,11 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use App\Traits\FieldValue, App\Traits\ModelActions;
+use App\Traits\FieldValue, App\Traits\ModelActions, App\Traits\ColorGenerator;
 
 class Deal extends Model
 {
-    use FieldValue, ModelActions, SoftDeletes;
+    use FieldValue, ModelActions, ColorGenerator, SoftDeletes;
 
     protected $table = 'deals';
     protected $guarded = ['id'];

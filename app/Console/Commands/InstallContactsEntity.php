@@ -83,12 +83,16 @@ CREATE TABLE IF NOT EXISTS `contacts` (
   `deal_id` int(11) DEFAULT NULL,
   `b24_id` varchar(32) DEFAULT NULL,
   `contact_type` text DEFAULT NULL,
+  `color` varchar(191) DEFAULT '',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL);
 
         if (!$sb->hasColumn('contacts', 'contact_type')) {
             $db->statement('ALTER TABLE `contacts` ADD COLUMN `contact_type` TEXT NULL');
+        }
+        if (!$sb->hasColumn('contacts', 'color')) {
+            $db->statement("ALTER TABLE `contacts` ADD COLUMN `color` VARCHAR(191) NULL DEFAULT ''");
         }
 
         $db->statement('CREATE TABLE IF NOT EXISTS `company_contact` (
@@ -197,7 +201,7 @@ SQL);
         ]));
         $db->table('data_rows')->insert(array_merge($base, [
             'field' => 'user_id', 'type' => 'relation', 'title' => 'Ответственный', 'sort' => 7,
-            'details' => '{"table":"users"}', 'is_link' => 1,
+            'details' => '{"table":"users"}', 'is_link' => 1, 'required' => 1,
             'relation_table' => 'users', 'related_field' => 'contact_id', 'is_inactive' => 1,
         ]));
         $db->table('data_rows')->insert(array_merge($base, [

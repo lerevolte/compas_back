@@ -112,7 +112,10 @@ class EntityObject
         }
 
         $color = $object->color ?? '';
-        if ($color !== '' && is_numeric($color)) {
+        if ($color === '' && property_exists($object, 'color')) {
+            $color = \App\Helpers\ColorPalette::random();
+            \DB::table($table)->where('id', $object->id)->update(['color' => $color]);
+        } elseif ($color !== '' && is_numeric($color)) {
             // Числовой color — ID записи field_values (палитра, см. routes)
             $fv = \DB::table('field_values')->where('id', (int) $color)->first();
             $color = $fv->color ?? '';

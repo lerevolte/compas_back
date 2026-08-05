@@ -1,9 +1,10 @@
-<?
-namespace App\Traits;
+<?php
 
-trait ColorGenerator
+namespace App\Helpers;
+
+class ColorPalette
 {
-	protected $colors = [
+    public const GRADIENTS = [
         'linear-gradient(to bottom, #aeee90 2%, #65dd78 100%)',
         'linear-gradient(to bottom, #ffdc96 2%, #ffc28d)',
         'linear-gradient(to bottom, #f1c3ff 2%, #ee9cff)',
@@ -17,18 +18,11 @@ trait ColorGenerator
         'linear-gradient(to bottom, #ffab8e 2%, #ff8596 100%)',
         'linear-gradient(to bottom, #ee9090 2%, #6765dd 100%)',
         'linear-gradient(to bottom, #ee90d2 4%, #dd6565 100%)',
-        'linear-gradient(to bottom, #ee90d2 4%, #dd6565 100%)',
-        'linear-gradient(to bottom, #9390ee 2%, #dd65d5)'
+        'linear-gradient(to bottom, #9390ee 2%, #dd65d5)',
     ];
 
-    public function getColor() {
-        if(!$this->color) {
-            $this->color = \App\Helpers\ColorPalette::random();
-            $this->saveQuietly();
-        }
-
-        return $this->color;
+    public static function random(): string
+    {
+        return self::GRADIENTS[array_rand(self::GRADIENTS)];
     }
-
-
 }

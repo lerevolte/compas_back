@@ -332,25 +332,8 @@ class Bitrix24Controller extends Controller
         if (isset($prodResp['result']) && is_array($prodResp['result'])) {
             foreach ($prodResp['result'] as $product) {
                 $pid = $product['PRODUCT_ID'] ?? null;
-                if ($pid && !in_array($pid, self::SKIP_PRODUCT_IDS)) {
-                    $prod = \Modules\Products\Entities\Product::where('id_b24', $pid)->first();
-                    if (!$prod) {
-                        // crm.product.list даёт свойства PROPERTY_* (вес и пр.)
-                        $plist = Http::post($base . 'crm.product.list', [
-                            'order'  => ['ID' => 'ASC'],
-                            'filter' => ['ID' => $pid],
-                            'select' => ['*', 'PROPERTY_*'],
-                        ])->collect();
-                        $prod = new \Modules\Products\Entities\Product();
-                        $prod->id_b24 = $pid;
-                        $prod->name = $product['PRODUCT_NAME'] ?? ('Товар #' . $pid);
-                        if (isset($plist['result'][0]['PROPERTY_134']['value'])) {
-                            // в тенанте у products есть только name/id_b24/weight
-                            $prod->weight = $plist['result'][0]['PROPERTY_134']['value'];
-                        }
-                        $prod->save();
-                    }
-
+                $prod = ($pid && in_array($pid, self::SKIP_PRODUCT_IDS)) ? null : self::resolveDealProduct($base, $product);
+                if ($prod) {
                     $qty = $product['QUANTITY'] ?? 0;
                     $all_weight += ((float) $prod->weight) * $qty;
 
@@ -775,5 +758,50 @@ class Bitrix24Controller extends Controller
             'payment_type' => 2,
             'payment'      => 'Нал: ' . (int) ($opportunity ?? 0) . ' р.',
         ];
+    }
+
+    public static function resolveDealProduct(string $base, array $row)
+    {
+        $pid = $row['PRODUCT_ID'] ?? null;
+        $name = trim((string) ($row['PRODUCT_NAME'] ?? ''));
+        try {
+            if ($pid) {
+                $prod = \Modules\Products\Entities\Product::where('id_b24', $pid)->first();
+                if ($prod) {
+                    return $prod;
+                }
+                $plist = Http::post($base . 'crm.product.list', [
+                    'order'  => ['ID' => 'ASC'],
+                    'filter' => ['ID' => $pid],
+                    'select' => ['*', 'PROPERTY_*'],
+                ])->collect();
+                $prod = new \Modules\Products\Entities\Product();
+                $prod->id_b24 = $pid;
+                $prod->name = $name !== '' ? $name : ('Товар #' . $pid);
+                if (isset($plist['result'][0]['PROPERTY_134']['value'])) {
+                    $prod->weight = $plist['result'][0]['PROPERTY_134']['value'];
+                }
+                $prod->save();
+                return $prod;
+            }
+
+            if ($name === '') {
+                return null;
+            }
+            $prod = \Modules\Products\Entities\Product::where('name', $name)->first();
+            if (!$prod) {
+                $prod = new \Modules\Products\Entities\Product();
+                $prod->name = $name;
+                $prod->save();
+            }
+            return $prod;
+        } catch (\Throwable $e) {
+            Log::channel('bitrix24')->warning('product resolve failed', [
+                'product_id' => $pid,
+                'name'       => $name,
+                'error'      => $e->getMessage(),
+            ]);
+            return null;
+        }
     }
 }

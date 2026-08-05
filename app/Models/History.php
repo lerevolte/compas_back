@@ -666,7 +666,8 @@ class History extends Model
                     }
                 }
             }
-            
+            $row = array_replace($rows[$id], array('id' => $row['id']));
+
             foreach($model_fields as $field) {
                 if($field->field == 'created_at' || $field->field == 'updated_at')
                     $changed_fields[] = $field->id;
