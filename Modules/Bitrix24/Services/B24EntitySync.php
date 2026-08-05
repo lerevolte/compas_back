@@ -610,6 +610,50 @@ class B24EntitySync
         return $this->responsibleCache[$key] = $userId ? (int) $userId : null;
     }
 
+    public function backfillResponsibles(): array
+    {
+        $map = [
+            'deals'     => 'crm.deal.list',
+            'contacts'  => 'crm.contact.list',
+            'companies' => 'crm.company.list',
+        ];
+        $out = [];
+        foreach ($map as $table => $method) {
+            if (!Schema::hasTable($table)
+                || !Schema::hasColumn($table, 'user_id')
+                || !Schema::hasColumn($table, 'b24_id')) {
+                continue;
+            }
+            $rows = DB::table($table)
+                ->whereNull('deleted_at')
+                ->where(function ($q) {
+                    $q->whereNull('user_id')->orWhere('user_id', 0);
+                })
+                ->whereNotNull('b24_id')
+                ->where('b24_id', '!=', '')
+                ->pluck('b24_id', 'id');
+
+            $updated = 0;
+            foreach (array_chunk($rows->all(), 50, true) as $chunk) {
+                $cmd = [];
+                foreach ($chunk as $localId => $b24Id) {
+                    $cmd['r_' . $localId] = $method . '?filter[ID]=' . $b24Id . '&select[]=ID&select[]=ASSIGNED_BY_ID';
+                }
+                $res = $this->b24Batch($cmd);
+                foreach ($chunk as $localId => $b24Id) {
+                    $item = $res['r_' . $localId][0] ?? null;
+                    $userId = $this->resolveResponsible($item['ASSIGNED_BY_ID'] ?? null);
+                    if ($userId) {
+                        DB::table($table)->where('id', $localId)->update(['user_id' => $userId]);
+                        $updated++;
+                    }
+                }
+            }
+            $out[$table] = ['empty' => count($rows), 'updated' => $updated];
+        }
+        return $out;
+    }
+
     private function writeSyncCreatedHistory(string $slug, $id): void
     {
         try {

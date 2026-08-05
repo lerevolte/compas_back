@@ -188,11 +188,11 @@ SQL);
         ]));
         $db->table('data_rows')->insert(array_merge($base, [
             'field' => 'phones', 'type' => 'multi_text', 'title' => 'Телефон', 'sort' => 4,
-            'is_plural' => 1,
+            'is_plural' => 1, 'mask' => '+7 (###) ###-##-##',
         ]));
         $db->table('data_rows')->insert(array_merge($base, [
             'field' => 'emails', 'type' => 'multi_text', 'title' => 'Email', 'sort' => 5,
-            'is_plural' => 1,
+            'is_plural' => 1, 'mask' => 'email',
         ]));
         $db->table('data_rows')->insert(array_merge($base, [
             'field' => 'company_id', 'type' => 'relation', 'title' => 'Компания', 'sort' => 6,

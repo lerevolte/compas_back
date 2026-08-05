@@ -10,6 +10,7 @@ use App\Models\Tenant;
  *  - удаляет из «Сделок» поля «Время прибытия» (plan_time), «Склад отгрузки»
  *    и «Дата доставки» (delivery_date);
  *  - делает поле «Ответственный» (user_id) обязательным у deals/contacts/companies;
+ *  - проставляет маски multi_text-полям Телефон/Email (8883);
  *  - проставляет «Тип контакта» = Клиент всем контактам без типа.
  *
  * Команда идемпотентна.
@@ -84,6 +85,22 @@ class FixCrmFields extends Command
                 ->update(['required' => 1]);
             $this->line("  {$label}: «Ответственный» стал обязательным — {$required}");
         }
+
+        $phoneMasks = $db->table('data_rows')
+            ->where('type', 'multi_text')
+            ->where('field', 'phones')
+            ->where(function ($q) {
+                $q->whereNull('mask')->orWhere('mask', '');
+            })
+            ->update(['mask' => '+7 (###) ###-##-##']);
+        $emailMasks = $db->table('data_rows')
+            ->where('type', 'multi_text')
+            ->where('field', 'emails')
+            ->where(function ($q) {
+                $q->whereNull('mask')->orWhere('mask', '');
+            })
+            ->update(['mask' => 'email']);
+        $this->line("  {$label}: маски multi_text — телефоны {$phoneMasks}, email {$emailMasks}");
 
         if ($sb->hasTable('contacts') && $sb->hasColumn('contacts', 'contact_type')) {
             $filled = $db->table('contacts')
