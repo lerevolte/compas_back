@@ -452,16 +452,6 @@ class B24ProductSync
             $fields['PRICE'] = (float) $product->price;
             $fields['CURRENCY_ID'] = 'RUB';
         }
-        if ($all || in_array('weight', $changed, true)) {
-            $fields[self::WEIGHT_PROPERTY] = $product->weight !== null ? (string) $product->weight : '';
-        }
-        if ($all || in_array('link', $changed, true)) {
-            $rawLink = (string) $product->link;
-            $decodedLink = json_decode($rawLink, true);
-            $fields[self::LINK_PROPERTY] = is_array($decodedLink)
-                ? (string) ($decodedLink['external_link'] ?? '')
-                : $rawLink;
-        }
         if ($all || in_array('category_id', $changed, true)) {
             $sectionId = 0;
             if ($product->category_id) {
@@ -475,9 +465,19 @@ class B24ProductSync
             }
             $fields['SECTION_ID'] = $sectionId;
         }
-        if (!count($fields)) {
+        $propsChanged = $all
+            || in_array('weight', $changed, true)
+            || in_array('link', $changed, true);
+        if (!count($fields) && !$propsChanged) {
             return;
         }
+
+        $fields[self::WEIGHT_PROPERTY] = $product->weight !== null ? (string) $product->weight : '';
+        $rawLink = (string) $product->link;
+        $decodedLink = json_decode($rawLink, true);
+        $fields[self::LINK_PROPERTY] = is_array($decodedLink)
+            ? (string) ($decodedLink['external_link'] ?? '')
+            : $rawLink;
 
         if ($product->id_b24) {
             $resp = $this->b24('crm.product.update', ['id' => $product->id_b24, 'fields' => $fields]);
