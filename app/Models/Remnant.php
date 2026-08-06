@@ -22,7 +22,9 @@ class Remnant extends Model
             if(!$model->user_id && $user)
                 $model->user_id = $user->id;
             if(!$model->name)
-                $model->name = $model->product->name;
+                $model->name = class_exists(\Modules\Bitrix24\Services\B24ProductSync::class)
+                    ? \Modules\Bitrix24\Services\B24ProductSync::nameText($model->product->name)
+                    : $model->product->name;
         });
 
         self::created(function($model){

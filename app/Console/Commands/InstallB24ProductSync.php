@@ -93,46 +93,17 @@ class InstallB24ProductSync extends Command
 
         $typeId = $db->table('data_types')->where('slug', 'products')->value('id');
         if (!$typeId) {
-            $this->warn("  {$label}: нет сущности products в data_types — поле «Ссылка на товар» не добавлено");
+            $this->warn("  {$label}: нет сущности products в data_types — поле name не настроено");
             return;
         }
 
-        $existing = $db->table('data_rows')
+        $db->table('data_rows')
+            ->where('data_type_id', $typeId)
+            ->where('field', 'name')
+            ->update(['is_external_link' => 1]);
+        $db->table('data_rows')
             ->where('data_type_id', $typeId)
             ->where('field', 'link')
-            ->first(['id', 'is_external_link']);
-        if ($existing && !$existing->is_external_link) {
-            $db->table('data_rows')->where('id', $existing->id)->update(['is_external_link' => 1]);
-        }
-        if (!$existing) {
-            $sample = $db->table('data_rows')
-                ->where('data_type_id', $typeId)
-                ->where('field', 'weight')
-                ->first();
-            $maxSort = (int) $db->table('data_rows')->where('data_type_id', $typeId)->max('sort');
-            $db->table('data_rows')->insert([
-                'data_type_id'   => $typeId,
-                'field'          => 'link',
-                'type'           => 'text',
-                'title'          => 'Ссылка на товар',
-                'required'       => 0,
-                'details'        => '',
-                'visible_always' => 0,
-                'label_color'    => '#000',
-                'section_id'     => $sample->section_id ?? null,
-                'sort'           => $maxSort + 1,
-                'button_name'    => 'Загрузить',
-                'hide'           => 0,
-                'is_plural'      => 0,
-                'roles_read'     => '',
-                'roles_write'    => '',
-                'mobile_pages'   => '',
-                'only_read'      => 0,
-                'is_permanent'   => 0,
-                'external_link'  => '',
-                'is_external_link' => 1,
-                'unit'           => '',
-            ]);
-        }
+            ->delete();
     }
 }

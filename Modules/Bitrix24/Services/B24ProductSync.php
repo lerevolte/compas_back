@@ -20,7 +20,7 @@ class B24ProductSync
     private array $params;
     private ?bool $catalogScope = null;
 
-    public const PUSH_PRODUCT_FIELDS = ['name', 'price', 'weight', 'link', 'category_id'];
+    public const PUSH_PRODUCT_FIELDS = ['name', 'price', 'weight', 'category_id'];
     public const PUSH_CATEGORY_FIELDS = ['name', 'parent_id'];
 
     private const LINK_PROPERTY = 'PROPERTY_132';
@@ -250,6 +250,22 @@ class B24ProductSync
         }
     }
 
+    public static function nameText($name): string
+    {
+        $decoded = json_decode((string) $name, true);
+        if (is_array($decoded) && array_key_exists('value', $decoded)) {
+            return (string) $decoded['value'];
+        }
+        return (string) $name;
+    }
+
+    public static function linkFromName($name): ?string
+    {
+        $decoded = json_decode((string) $name, true);
+        $url = is_array($decoded) ? ($decoded['external_link'] ?? null) : null;
+        return ($url !== null && $url !== '') ? (string) $url : null;
+    }
+
     private function propertyValue($raw): ?string
     {
         if (is_array($raw)) {
@@ -270,7 +286,12 @@ class B24ProductSync
             $model = Product::withTrashed()->where('id_b24', $b24Id)->first();
             $name = trim((string) ($row['NAME'] ?? ''));
             if (!$model && $name !== '') {
-                $model = Product::where('name', $name)->whereNull('id_b24')->first();
+                $model = Product::whereNull('id_b24')
+                    ->where(function ($q) use ($name) {
+                        $q->where('name', $name)
+                          ->orWhereRaw('(JSON_VALID(name) AND JSON_UNQUOTE(JSON_EXTRACT(name, "$.value")) = ?)', [$name]);
+                    })
+                    ->first();
             }
             if (!$model) {
                 $model = new Product();
@@ -281,18 +302,18 @@ class B24ProductSync
             }
 
             $model->id_b24 = $b24Id;
-            $model->name = $name !== '' ? $name : ('Товар #' . $b24Id);
+            $nameText = $name !== '' ? $name : ('Товар #' . $b24Id);
+            $linkUrl = array_key_exists(self::LINK_PROPERTY, $row)
+                ? $this->propertyValue($row[self::LINK_PROPERTY])
+                : self::linkFromName($model->name);
+            $model->name = $linkUrl
+                ? json_encode(['value' => $nameText, 'external_link' => $linkUrl], JSON_UNESCAPED_UNICODE)
+                : $nameText;
             if (array_key_exists('PRICE', $row)) {
                 $model->price = (float) $row['PRICE'];
             }
             if (array_key_exists(self::WEIGHT_PROPERTY, $row)) {
                 $model->weight = (float) $this->propertyValue($row[self::WEIGHT_PROPERTY]);
-            }
-            if (array_key_exists(self::LINK_PROPERTY, $row)) {
-                $linkUrl = $this->propertyValue($row[self::LINK_PROPERTY]);
-                $model->link = $linkUrl
-                    ? json_encode(['value' => 'Перейти на сайт', 'external_link' => $linkUrl], JSON_UNESCAPED_UNICODE)
-                    : null;
             }
             if (array_key_exists('SECTION_ID', $row)) {
                 $model->category_id = $row['SECTION_ID']
@@ -446,7 +467,7 @@ class B24ProductSync
         $all = !count($changed) || !$product->id_b24;
 
         if ($all || in_array('name', $changed, true)) {
-            $fields['NAME'] = (string) $product->name;
+            $fields['NAME'] = self::nameText($product->name);
         }
         if ($all || in_array('price', $changed, true)) {
             $fields['PRICE'] = (float) $product->price;
@@ -465,19 +486,13 @@ class B24ProductSync
             }
             $fields['SECTION_ID'] = $sectionId;
         }
-        $propsChanged = $all
-            || in_array('weight', $changed, true)
-            || in_array('link', $changed, true);
+        $propsChanged = $all || in_array('weight', $changed, true);
         if (!count($fields) && !$propsChanged) {
             return;
         }
 
         $fields[self::WEIGHT_PROPERTY] = $product->weight !== null ? (string) $product->weight : '';
-        $rawLink = (string) $product->link;
-        $decodedLink = json_decode($rawLink, true);
-        $fields[self::LINK_PROPERTY] = is_array($decodedLink)
-            ? (string) ($decodedLink['external_link'] ?? '')
-            : $rawLink;
+        $fields[self::LINK_PROPERTY] = (string) (self::linkFromName($product->name) ?? '');
 
         if ($product->id_b24) {
             $resp = $this->b24('crm.product.update', ['id' => $product->id_b24, 'fields' => $fields]);

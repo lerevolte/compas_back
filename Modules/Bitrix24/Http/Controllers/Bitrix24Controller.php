@@ -186,13 +186,14 @@ class Bitrix24Controller extends Controller
                                 $prod->save();
                             }
                             $all_weight = $all_weight + $prod->weight*$product['QUANTITY'];
-                            
-                            if(!array_key_exists($prod['name'], $arItems))
-                                $arItems[$prod['name']] = $product['QUANTITY'];
+
+                            $prodName = \Modules\Bitrix24\Services\B24ProductSync::nameText($prod['name']);
+                            if(!array_key_exists($prodName, $arItems))
+                                $arItems[$prodName] = $product['QUANTITY'];
                             else
-                                $arItems[$prod['name'].'.'] = $product['QUANTITY'];
+                                $arItems[$prodName.'.'] = $product['QUANTITY'];
                             $products[] = array(
-                                'name' => $prod['name'],
+                                'name' => $prodName,
                                 'price' => $product['PRICE'],
                                 'count' => $product['QUANTITY'],
                                 'weight' => $prod->weight,
@@ -341,14 +342,14 @@ class Bitrix24Controller extends Controller
                     $qty = $product['QUANTITY'] ?? 0;
                     $all_weight += ((float) $prod->weight) * $qty;
 
-                    $itemKey = $prod->name;
+                    $itemKey = \Modules\Bitrix24\Services\B24ProductSync::nameText($prod->name);
                     if (array_key_exists($itemKey, $arItems)) {
                         $itemKey .= '.';
                     }
                     $arItems[$itemKey] = $qty;
 
                     $products[] = [
-                        'name'   => $prod->name,
+                        'name'   => \Modules\Bitrix24\Services\B24ProductSync::nameText($prod->name),
                         'price'  => $product['PRICE'] ?? 0,
                         'count'  => $qty,
                         'weight' => $prod->weight,
@@ -789,6 +790,13 @@ class Bitrix24Controller extends Controller
                 if ($prod) {
                     return $prod;
                 }
+                $svc = \Modules\Bitrix24\Services\B24ProductSync::make();
+                if ($svc) {
+                    $pulled = $svc->pullProductById($pid);
+                    if ($pulled) {
+                        return \Modules\Products\Entities\Product::find($pulled->id);
+                    }
+                }
                 $plist = Http::post($base . 'crm.product.list', [
                     'order'  => ['ID' => 'ASC'],
                     'filter' => ['ID' => $pid],
@@ -807,7 +815,11 @@ class Bitrix24Controller extends Controller
             if ($name === '') {
                 return null;
             }
-            $prod = \Modules\Products\Entities\Product::where('name', $name)->first();
+            $prod = \Modules\Products\Entities\Product::where(function ($q) use ($name) {
+                    $q->where('name', $name)
+                      ->orWhereRaw('(JSON_VALID(name) AND JSON_UNQUOTE(JSON_EXTRACT(name, "$.value")) = ?)', [$name]);
+                })
+                ->first();
             if (!$prod) {
                 $prod = new \Modules\Products\Entities\Product();
                 $prod->name = $name;

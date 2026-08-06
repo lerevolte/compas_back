@@ -27,9 +27,9 @@ class Product extends Model
        {
             if(!$model->remnants->count() && $model->quantity) {
                 $remnants = array();
-                for ($i=0; $i < $model->quantity; $i++) { 
+                for ($i=0; $i < $model->quantity; $i++) {
                     $remnants[] = array(
-                        'name' => $model->name,
+                        'name' => \Modules\Bitrix24\Services\B24ProductSync::nameText($model->name),
                         'price' => $model->price,
                         'product_id' => $model->id
                     );
