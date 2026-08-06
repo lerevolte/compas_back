@@ -1821,7 +1821,14 @@ class EntityObject
                 if(is_array($products)) {
                     foreach($products as $product_k => $product) {
                         if(!isset($product['id'])) {
-                            $prod = \Modules\Products\Entities\Product::where('name', $product['name'])->first();
+                            $prod = null;
+                            if(isset($product['name']) && $product['name'] !== '') {
+                                $prod = \Modules\Products\Entities\Product::where(function ($q) use ($product) {
+                                        $q->where('name', $product['name'])
+                                          ->orWhereRaw('(JSON_VALID(name) AND JSON_UNQUOTE(JSON_EXTRACT(name, "$.value")) = ?)', [$product['name']]);
+                                    })
+                                    ->first();
+                            }
                             if($prod) {
                                 $fix_order = true;
                                 $product_ids[] = $prod->id;

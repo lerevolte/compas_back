@@ -966,6 +966,7 @@ class B24EntitySync
                 $weight = $prod->weight ?? 0;
                 $allWeight += ((float) $weight) * $qty;
                 $products[] = [
+                    'id'     => $prod->id,
                     'name'   => B24ProductSync::nameText($prod->name),
                     'price'  => $product['PRICE'] ?? 0,
                     'count'  => $qty,

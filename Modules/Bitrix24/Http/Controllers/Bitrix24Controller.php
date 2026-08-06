@@ -193,6 +193,7 @@ class Bitrix24Controller extends Controller
                             else
                                 $arItems[$prodName.'.'] = $product['QUANTITY'];
                             $products[] = array(
+                                'id' => $prod->id,
                                 'name' => $prodName,
                                 'price' => $product['PRICE'],
                                 'count' => $product['QUANTITY'],
@@ -349,6 +350,7 @@ class Bitrix24Controller extends Controller
                     $arItems[$itemKey] = $qty;
 
                     $products[] = [
+                        'id'     => $prod->id,
                         'name'   => \Modules\Bitrix24\Services\B24ProductSync::nameText($prod->name),
                         'price'  => $product['PRICE'] ?? 0,
                         'count'  => $qty,
