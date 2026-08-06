@@ -97,11 +97,14 @@ class InstallB24ProductSync extends Command
             return;
         }
 
-        $exists = $db->table('data_rows')
+        $existing = $db->table('data_rows')
             ->where('data_type_id', $typeId)
             ->where('field', 'link')
-            ->exists();
-        if (!$exists) {
+            ->first(['id', 'is_external_link']);
+        if ($existing && !$existing->is_external_link) {
+            $db->table('data_rows')->where('id', $existing->id)->update(['is_external_link' => 1]);
+        }
+        if (!$existing) {
             $sample = $db->table('data_rows')
                 ->where('data_type_id', $typeId)
                 ->where('field', 'weight')
@@ -127,6 +130,7 @@ class InstallB24ProductSync extends Command
                 'only_read'      => 0,
                 'is_permanent'   => 0,
                 'external_link'  => '',
+                'is_external_link' => 1,
                 'unit'           => '',
             ]);
         }

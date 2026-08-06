@@ -289,7 +289,10 @@ class B24ProductSync
                 $model->weight = (float) $this->propertyValue($row[self::WEIGHT_PROPERTY]);
             }
             if (array_key_exists(self::LINK_PROPERTY, $row)) {
-                $model->link = $this->propertyValue($row[self::LINK_PROPERTY]);
+                $linkUrl = $this->propertyValue($row[self::LINK_PROPERTY]);
+                $model->link = $linkUrl
+                    ? json_encode(['value' => 'Перейти на сайт', 'external_link' => $linkUrl], JSON_UNESCAPED_UNICODE)
+                    : null;
             }
             if (array_key_exists('SECTION_ID', $row)) {
                 $model->category_id = $row['SECTION_ID']
@@ -453,7 +456,11 @@ class B24ProductSync
             $fields[self::WEIGHT_PROPERTY] = $product->weight !== null ? (string) $product->weight : '';
         }
         if ($all || in_array('link', $changed, true)) {
-            $fields[self::LINK_PROPERTY] = (string) $product->link;
+            $rawLink = (string) $product->link;
+            $decodedLink = json_decode($rawLink, true);
+            $fields[self::LINK_PROPERTY] = is_array($decodedLink)
+                ? (string) ($decodedLink['external_link'] ?? '')
+                : $rawLink;
         }
         if ($all || in_array('category_id', $changed, true)) {
             $sectionId = 0;
