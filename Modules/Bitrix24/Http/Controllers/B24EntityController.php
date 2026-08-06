@@ -24,7 +24,7 @@ class B24EntityController extends Controller
             'input' => $request->all(),
         ]);
 
-        if (!B24EntitySync::ready()) {
+        if (!B24EntitySync::ready() && !\Modules\Bitrix24\Services\B24ProductSync::ready()) {
             return response('entity sync is not configured', 200);
         }
 
@@ -32,7 +32,9 @@ class B24EntityController extends Controller
         $id = data_get($request->input('data'), 'FIELDS.ID') ?: $request->input('id');
         $type = $request->input('type');
         if (!$type) {
-            if (str_contains($event, 'DEAL')) {
+            if (str_contains($event, 'PRODUCT')) {
+                $type = 'product';
+            } elseif (str_contains($event, 'DEAL')) {
                 $type = 'deal';
             } elseif (str_contains($event, 'CONTACT')) {
                 $type = 'contact';

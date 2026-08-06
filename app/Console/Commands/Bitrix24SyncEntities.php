@@ -41,7 +41,7 @@ class Bitrix24SyncEntities extends Command
         foreach ($tenants as $tenant) {
             try {
                 $tenant->run(function () use ($tenant, $chunk) {
-                    if (!B24EntitySync::ready()) {
+                    if (!B24EntitySync::ready() && !\Modules\Bitrix24\Services\B24ProductSync::ready()) {
                         return;
                     }
 
@@ -51,9 +51,9 @@ class Bitrix24SyncEntities extends Command
                         return;
                     }
 
-                    $svc = B24EntitySync::make();
+                    $svc = B24EntitySync::ready() ? B24EntitySync::make() : null;
 
-                    if ($this->option('full')) {
+                    if ($svc && $this->option('full')) {
                         $result = $svc->fullSync(null);
                         $startedAt = now()->format('Y-m-d\TH:i:sP');
                         foreach (['b24_entities_synced_at', 'b24_deals_synced_at', 'b24_contacts_synced_at'] as $type) {
@@ -63,16 +63,32 @@ class Bitrix24SyncEntities extends Command
                             );
                         }
                         $this->info("  ✓ {$tenant->id} (full): deals={$result['deals']}, contacts={$result['contacts']}, stages={$result['stages']}");
-                        return;
+                    } elseif ($svc) {
+                        $result = $svc->runIncremental($chunk);
+                        if ($result['init']) {
+                            $this->info("  ✓ {$tenant->id} (init): stages={$result['stages']}; сделки/контакты дальше пойдут инкрементально чанками по {$chunk}, полная выгрузка — только с --full");
+                        } else {
+                            $more = $result['more'] ? ', есть ещё (доберёт следующий прогон)' : '';
+                            $this->info("  ✓ {$tenant->id}: deals={$result['deals']}, contacts={$result['contacts']}{$more}");
+                        }
                     }
 
-                    $result = $svc->runIncremental($chunk);
-                    if ($result['init']) {
-                        $this->info("  ✓ {$tenant->id} (init): stages={$result['stages']}; сделки/контакты дальше пойдут инкрементально чанками по {$chunk}, полная выгрузка — только с --full");
-                        return;
+                    $productSvc = \Modules\Bitrix24\Services\B24ProductSync::make();
+                    if ($productSvc) {
+                        if ($this->option('full')) {
+                            $categories = $productSvc->pullCategories();
+                            $products = $productSvc->pullProducts(null);
+                            \DB::table('settings')->updateOrInsert(
+                                ['type' => 'b24_products_synced_at', 'entity' => null, 'user_id' => null],
+                                ['key' => 'b24_products_synced_at', 'value' => now()->format('Y-m-d\TH:i:sP')]
+                            );
+                            $this->info("  ✓ {$tenant->id} (full): categories={$categories}, products={$products['count']}");
+                        } else {
+                            $result = $productSvc->runIncremental($chunk);
+                            $more = $result['more'] ? ', есть ещё' : '';
+                            $this->info("  ✓ {$tenant->id}: categories={$result['categories']}, products={$result['products']}{$more}");
+                        }
                     }
-                    $more = $result['more'] ? ', есть ещё (доберёт следующий прогон)' : '';
-                    $this->info("  ✓ {$tenant->id}: deals={$result['deals']}, contacts={$result['contacts']}{$more}");
                 });
             } catch (\Throwable $e) {
                 $this->error("  ✗ {$tenant->id}: " . $e->getMessage());

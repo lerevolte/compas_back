@@ -468,6 +468,9 @@ class B24EntitySync
         try {
             $model = Deal::withTrashed()->where('b24_id', (string) $dealId)->first() ?: new Deal();
             $isNew = !$model->exists;
+            if (!$isNew && $model->trashed()) {
+                $model->deleted_at = null;
+            }
 
             $model->b24_id = (string) $dealId;
             $model->stage = (string) ($deal['STAGE_ID'] ?? '');
@@ -671,7 +674,7 @@ class B24EntitySync
 
     private function writeSyncFieldHistory(string $slug, $id, array $changed): void
     {
-        unset($changed['updated_at'], $changed['created_at'], $changed['b24_id'], $changed['crm_link']);
+        unset($changed['updated_at'], $changed['created_at'], $changed['b24_id'], $changed['crm_link'], $changed['deleted_at']);
         if (!count($changed)) {
             return;
         }
@@ -800,6 +803,9 @@ class B24EntitySync
         try {
             $model = Contact::withTrashed()->where('b24_id', $b24Id)->first() ?: new Contact();
             $isNew = !$model->exists;
+            if (!$isNew && $model->trashed()) {
+                $model->deleted_at = null;
+            }
 
             $model->b24_id = $b24Id;
             $name = trim(implode(' ', array_filter([
@@ -903,6 +909,8 @@ class B24EntitySync
             if (!$model) {
                 $model = new Company();
                 $model->name = $title !== '' ? $title : ('Компания #' . $b24Id);
+            } elseif ($model->trashed()) {
+                $model->deleted_at = null;
             }
             if (Schema::hasColumn('companies', 'b24_id')) {
                 $model->b24_id = $b24Id;

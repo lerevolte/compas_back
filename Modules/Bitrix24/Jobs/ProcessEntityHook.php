@@ -36,6 +36,28 @@ class ProcessEntityHook implements ShouldQueue
             return;
         }
         $tenant->run(function () {
+            if ($this->type === 'product') {
+                $productSvc = \Modules\Bitrix24\Services\B24ProductSync::make();
+                if (!$productSvc) {
+                    return;
+                }
+                try {
+                    if ($this->isDelete) {
+                        $productSvc->deleteByB24Id($this->entityId);
+                    } else {
+                        $productSvc->pullProductById($this->entityId);
+                    }
+                } catch (\Throwable $e) {
+                    Log::channel('bitrix24')->error('entity-hook job: failed', [
+                        'tenant' => $this->tenantId,
+                        'type'   => $this->type,
+                        'id'     => $this->entityId,
+                        'error'  => $e->getMessage(),
+                    ]);
+                }
+                return;
+            }
+
             $svc = B24EntitySync::make();
             if (!$svc) {
                 return;
