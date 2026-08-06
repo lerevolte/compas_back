@@ -53,6 +53,13 @@ class Task extends Model
                         $model->employee_id = json_encode($routeEmployees);
                     }
                 }
+                if ($model->sort === null) {
+                    $query = self::where('route_id', $model->route_id);
+                    if ($model->id) {
+                        $query->where('id', '!=', $model->id);
+                    }
+                    $model->sort = (int) $query->max('sort') + 1;
+                }
             }
        });
 

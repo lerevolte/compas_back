@@ -222,6 +222,17 @@ class User extends \TCG\Voyager\Models\User
                     if ($new) {
                         $model->writeEmployeeLinkHistory($new, true);
                     }
+                    if (\Schema::hasColumn('employees', 'related_user_id')) {
+                        if ($old) {
+                            \DB::table('employees')->where('id', $old)
+                                ->where('related_user_id', $model->id)
+                                ->update(['related_user_id' => null]);
+                        }
+                        if ($new) {
+                            \DB::table('employees')->where('id', $new)
+                                ->update(['related_user_id' => $model->id]);
+                        }
+                    }
                 }
             }
         });

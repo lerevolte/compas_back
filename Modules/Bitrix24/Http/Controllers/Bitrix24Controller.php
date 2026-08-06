@@ -332,7 +332,11 @@ class Bitrix24Controller extends Controller
         if (isset($prodResp['result']) && is_array($prodResp['result'])) {
             foreach ($prodResp['result'] as $product) {
                 $pid = $product['PRODUCT_ID'] ?? null;
-                $prod = ($pid && in_array($pid, self::SKIP_PRODUCT_IDS)) ? null : self::resolveDealProduct($base, $product);
+                $isDelivery = $pid && in_array($pid, self::SKIP_PRODUCT_IDS);
+                $prod = self::resolveDealProduct($base, $product);
+                if ($isDelivery) {
+                    $delivery_price += (float) ($product['PRICE'] ?? 0) * ($product['QUANTITY'] ?? 0);
+                }
                 if ($prod) {
                     $qty = $product['QUANTITY'] ?? 0;
                     $all_weight += ((float) $prod->weight) * $qty;
@@ -350,7 +354,7 @@ class Bitrix24Controller extends Controller
                         'weight' => $prod->weight,
                         'sum'    => ($product['PRICE'] ?? 0) * $qty,
                     ];
-                } else {
+                } elseif (!$isDelivery) {
                     $delivery_price += (float) ($product['PRICE'] ?? 0) * ($product['QUANTITY'] ?? 0);
                 }
             }
@@ -395,7 +399,7 @@ class Bitrix24Controller extends Controller
             $task->products = json_encode($products, JSON_UNESCAPED_UNICODE);
         }
         $task->weight = $all_weight;
-        $task->time = $deal['UF_CRM_1632832553'] ?? null;
+        $task->time = self::normalizeTimeWindow($deal['UF_CRM_1632832553'] ?? null);
 
         // Дата доставки — из UF_CRM_1738582841. Битрикс отдаёт DateTime в UTC
         // (например «2026-06-08T21:00:00+00:00» = 09.06.2026 00:00 по МСК).
@@ -758,6 +762,21 @@ class Bitrix24Controller extends Controller
             'payment_type' => 2,
             'payment'      => 'Нал: ' . (int) ($opportunity ?? 0) . ' р.',
         ];
+    }
+
+    public static function normalizeTimeWindow($raw)
+    {
+        if (!is_string($raw) || trim($raw) === '') {
+            return $raw;
+        }
+        if (!preg_match_all('/(\d{1,2})\s*[:.]\s*(\d{2})/', $raw, $m, PREG_SET_ORDER)) {
+            return $raw;
+        }
+        $parts = [];
+        foreach (array_slice($m, 0, 2) as $t) {
+            $parts[] = str_pad($t[1], 2, '0', STR_PAD_LEFT) . ':' . $t[2];
+        }
+        return implode(' - ', $parts);
     }
 
     public static function resolveDealProduct(string $base, array $row)

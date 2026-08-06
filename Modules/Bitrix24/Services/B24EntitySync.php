@@ -495,7 +495,7 @@ class B24EntitySync
                 $model->products = json_encode($products, JSON_UNESCAPED_UNICODE);
             }
             $model->weight = $allWeight;
-            $model->time = $deal['UF_CRM_1632832553'] ?? null;
+            $model->time = Bitrix24Controller::normalizeTimeWindow($deal['UF_CRM_1632832553'] ?? null);
 
             if (!empty($deal['UF_CRM_1738582841'])) {
                 try {
@@ -948,9 +948,11 @@ class B24EntitySync
         }
         foreach ($rows as $product) {
             $pid = $product['PRODUCT_ID'] ?? null;
-            $prod = ($pid && in_array($pid, Bitrix24Controller::SKIP_PRODUCT_IDS))
-                ? null
-                : Bitrix24Controller::resolveDealProduct($this->base, $product);
+            $isDelivery = $pid && in_array($pid, Bitrix24Controller::SKIP_PRODUCT_IDS);
+            $prod = Bitrix24Controller::resolveDealProduct($this->base, $product);
+            if ($isDelivery) {
+                $deliveryPrice += (float) ($product['PRICE'] ?? 0) * ($product['QUANTITY'] ?? 0);
+            }
             if ($prod) {
                 $qty = $product['QUANTITY'] ?? 0;
                 $weight = $prod->weight ?? 0;
@@ -962,7 +964,7 @@ class B24EntitySync
                     'weight' => $weight,
                     'sum'    => ($product['PRICE'] ?? 0) * $qty,
                 ];
-            } else {
+            } elseif (!$isDelivery) {
                 $deliveryPrice += (float) ($product['PRICE'] ?? 0) * ($product['QUANTITY'] ?? 0);
             }
         }

@@ -603,7 +603,26 @@ class ObjectController extends Controller
     {
         // Убрал info(), если они нужны для дебага, можно вернуть
         $user = Auth::user();
-        
+
+        $permissions = $this->getPermissions($user, $slug);
+        if (!$user->is_admin && isset($permissions['read_p']) && $permissions['read_p'] === 'N') {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        if (!$user->is_admin && isset($permissions['export_p']) && $permissions['export_p'] === 'N') {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        if (!$user->is_admin && ($request->trashed || $request->with_trashed)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        if (isset($permissions['read_p']) && $permissions['read_p'] === 'Y' && !$user->is_admin) {
+            $request->merge(['filter' => array_merge($request->input('filter', []), ['user_id' => $user->id])]);
+        }
+        if (isset($permissions['read_p']) && $permissions['read_p'] === 'E' && !$user->is_admin
+            && $this->hasEmployeeBinding($slug)) {
+            $employeeIds = \App\Models\Employee::idsForUser($user);
+            $request->merge(['filter' => array_merge($request->input('filter', []), ['employee_id' => $employeeIds ?: -1])]);
+        }
+
         // Логика получения настроек таблиц
         $tables = $this->getUserTables($user, $slug);
 
