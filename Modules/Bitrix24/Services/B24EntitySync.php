@@ -138,17 +138,24 @@ class B24EntitySync
             return $this->stageOptions();
         }
 
-        $colors = $this->stageColors();
+        $meta = $this->stageMeta();
 
         $options = [];
         foreach (array_values($items) as $i => $st) {
             $statusId = (string) ($st['STATUS_ID'] ?? '');
-            $color = (string) (($st['COLOR'] ?? '') ?: ($colors[$statusId] ?? ''));
-            $options[] = [
+            $color = (string) (($st['COLOR'] ?? '') ?: ($meta[$statusId]['color'] ?? ''));
+            $option = [
                 'value' => $statusId,
                 'label' => (string) ($st['NAME'] ?? ''),
                 'color' => $color !== '' ? $color : self::STAGE_PALETTE[$i % count(self::STAGE_PALETTE)],
             ];
+            $semantics = strtoupper((string) ($meta[$statusId]['semantics'] ?? ''));
+            if (in_array($semantics, ['S', 'SUCCESS'], true)) {
+                $option['semantics'] = 'success';
+            } elseif (in_array($semantics, ['F', 'FAILURE', 'FAIL'], true)) {
+                $option['semantics'] = 'failure';
+            }
+            $options[] = $option;
         }
 
         $row = $this->stageFieldRow();
@@ -169,24 +176,27 @@ class B24EntitySync
         return $options;
     }
 
-    private function stageColors(): array
+    private function stageMeta(): array
     {
         $categoryId = $this->categoryId();
         $entityId = $categoryId > 0 ? 'DEAL_STAGE_' . $categoryId : 'DEAL_STAGE';
-        $colors = [];
+        $meta = [];
         try {
             $items = $this->b24All('crm.status.list', ['filter' => ['ENTITY_ID' => $entityId]]);
             foreach ($items as $st) {
                 $statusId = (string) ($st['STATUS_ID'] ?? '');
-                $color = (string) ($st['COLOR'] ?? '');
-                if ($statusId !== '' && $color !== '') {
-                    $colors[$statusId] = $color;
+                if ($statusId === '') {
+                    continue;
                 }
+                $meta[$statusId] = [
+                    'color' => (string) ($st['COLOR'] ?? ''),
+                    'semantics' => (string) ($st['SEMANTICS'] ?? ($st['EXTRA']['SEMANTICS'] ?? '')),
+                ];
             }
         } catch (\Throwable $e) {
             Log::channel('bitrix24')->warning('entity-sync: stage colors failed', ['error' => $e->getMessage()]);
         }
-        return $colors;
+        return $meta;
     }
 
     public function stageOptions(): array
