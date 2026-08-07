@@ -45,7 +45,33 @@ class Employee extends Model
             //     }
             // }
         });
-        static::deleting(function($model){ 
+        static::saved(function($model)
+        {
+            if ($model->isDirty('related_user_id')) {
+                $old = (int) $model->getOriginal('related_user_id');
+                $new = (int) $model->related_user_id;
+                if ($old !== $new && \Schema::hasColumn('users', 'employee_id')) {
+                    if ($old) {
+                        $updated = \DB::table('users')->where('id', $old)
+                            ->where('employee_id', $model->id)
+                            ->update(['employee_id' => null]);
+                        if ($updated) {
+                            $model->writeUserLinkHistory($old, false);
+                        }
+                    }
+                    if ($new) {
+                        \DB::table('users')->where('id', $new)
+                            ->update(['employee_id' => $model->id]);
+                        \DB::table('employees')->where('related_user_id', $new)
+                            ->where('id', '!=', $model->id)
+                            ->update(['related_user_id' => null]);
+                        $model->writeUserLinkHistory($new, true);
+                    }
+                }
+            }
+        });
+
+        static::deleting(function($model){
             //$model->cars()->sync([]);
             if($model->carsmonitoring_id) {
 
@@ -55,6 +81,36 @@ class Employee extends Model
             }
             return true; // let the delete go through
         });
+    }
+
+    public function writeUserLinkHistory(int $userId, bool $added)
+    {
+        $auth_id = \Auth::user() ? \Auth::user()->id : 1;
+        $name = $this->name ?: 'Сотрудник #'.$this->id;
+        $link = "<span data-slug='employees' data-id='{$this->id}'>{$name}</span>";
+
+        $base = [
+            'entity' => 'users',
+            'entity_id' => $userId,
+            'user_id' => $auth_id,
+            'field' => 'employee_id',
+            'old_value' => $added ? '' : $name,
+            'new_value' => $added ? $name : '',
+            'is_relation' => 1,
+        ];
+
+        $history = new \App\Models\History($base + [
+            'text' => 'Сотрудник: '.($added ? '' : $link).' -> '.($added ? $link : ''),
+            'event' => 'FIELD_UPDATED',
+        ]);
+        $history->saveQuietly();
+
+        $history = new \App\Models\History($base + [
+            'text' => 'Сотрудник, '.($added ? 'добавлена связь: ' : 'удалена связь: ').$link,
+            'event' => $added ? 'RELATION_ADDED' : 'RELATION_DELETED',
+            'color' => $added ? '#23704B' : '#C74822',
+        ]);
+        $history->saveQuietly();
     }
 
 
