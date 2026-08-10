@@ -168,6 +168,9 @@ class SearchService
                 } else {
                     $data = collect($settings['list_values'][$params['field_id']])->toArray();
                 }
+                if(!empty($params['carrier_only']) && count($data)) {
+                    $data = $this->filterCarriers($data);
+                }
                 return array_values($data);
 
             } elseif(isset($params['entity'])) {

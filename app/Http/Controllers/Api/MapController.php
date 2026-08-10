@@ -13,12 +13,6 @@ use App\Models\YandexRouteLog;
 
 class MapController extends Controller
 {
-    /**
-     * Принимает «маячок» от фронтенда о запросе к Яндекс-маршрутизатору
-     * и фиксирует, с какого IP и каким API-ключом он прошёл.
-     * Endpoint публичный (вызывается со статического лендинга), поэтому
-     * максимально защищён от мусора и никогда не роняет клиента.
-     */
     public function logRoute(Request $request)
     {
         try {
@@ -47,7 +41,6 @@ class MapController extends Controller
                 'created_at' => now(),
             ]);
         } catch (\Throwable $e) {
-            // Логирование не должно влиять на работу карты.
             report($e);
         }
 
@@ -104,28 +97,33 @@ class MapController extends Controller
         $address = $request->address;
         $data = array();
         
-        // Check if input looks like coordinates
         $coordPattern = '/^[\s]*(-?\d+\.?\d*)[,\s]+(-?\d+\.?\d*)[\s]*$/';
         if (preg_match($coordPattern, $address, $matches)) {
             $lat = floatval($matches[1]);
             $lon = floatval($matches[2]);
             
-            $result = $dadata->geolocate($lat, $lon, 5);
+            $result = $dadata->geolocate($lat, $lon, 5, 30);
 
             if (isset($result['suggestions'])) {
                 foreach ($result['suggestions'] as $item) {
+                    $isHouse = !empty($item['data']['house']);
                     $data[] = array(
-                        'text' => !empty($item['data']['house']) ? $item['value'] : $lat.', '.$lon,
-                        'coords' => array(
-                            $item['data']['geo_lat'],
-                            $item['data']['geo_lon']
-                        )
+                        'text' => $isHouse ? $item['value'] : $lat.', '.$lon,
+                        'coords' => $isHouse
+                            ? array($item['data']['geo_lat'], $item['data']['geo_lon'])
+                            : array($lat, $lon)
                     );
                 }
             }
+
+            if (!count($data)) {
+                $data[] = array(
+                    'text' => $lat.', '.$lon,
+                    'coords' => array($lat, $lon)
+                );
+            }
         } else {
             $fields = array("query" => $address, "count" => 5);
-            // Ограничение по типу административной единицы (например ?restrict=city).
             if ($request->restrict) {
                 $fields = array_merge($fields, [
                     'from_bound' => ['value' => $request->restrict],
