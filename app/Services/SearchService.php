@@ -26,6 +26,12 @@ class SearchService
         if($params['q'] && mb_strlen($params['q']) >= 0 || isset($params['filter'])) {
             $q = mb_strtolower($params['q']);
             if(isset($params['field_id'])) {
+                if(!empty($params['carrier_only'])) {
+                    $carrier_ids = $this->carrierIds($q);
+                    if($carrier_ids !== null) {
+                        return array_values(\App\Models\Settings::resolve_list_values($settings, $params['field_id'], $carrier_ids));
+                    }
+                }
                 if(\App\Models\Settings::lazy_table($settings, $params['field_id'])) {
                     $data = \App\Models\Settings::search_list_values($settings, $params['field_id'], $q);
                 } else {
@@ -46,10 +52,6 @@ class SearchService
                                 unset($data[$key]);
                         }
                     }
-                }
-
-                if(!empty($params['carrier_only']) && count($data)) {
-                    $data = $this->filterCarriers($data);
                 }
 
                 if(isset($params['filter']) && count($data) && isset($slug)) {
@@ -163,13 +165,16 @@ class SearchService
             
         } else {
             if(isset($params['field_id'])) {
+                if(!empty($params['carrier_only'])) {
+                    $carrier_ids = $this->carrierIds('');
+                    if($carrier_ids !== null) {
+                        return array_values(\App\Models\Settings::resolve_list_values($settings, $params['field_id'], $carrier_ids));
+                    }
+                }
                 if(\App\Models\Settings::lazy_table($settings, $params['field_id'])) {
                     $data = \App\Models\Settings::search_list_values($settings, $params['field_id'], '');
                 } else {
                     $data = collect($settings['list_values'][$params['field_id']])->toArray();
-                }
-                if(!empty($params['carrier_only']) && count($data)) {
-                    $data = $this->filterCarriers($data);
                 }
                 return array_values($data);
 
@@ -282,11 +287,11 @@ class SearchService
         return array_values($data);
     }
 
-    private function filterCarriers(array $data): array
+    private function carrierIds(string $q): ?array
     {
         $dataTypeId = \DB::table('data_types')->where('slug', 'companies')->value('id');
-        if(!$dataTypeId)
-            return $data;
+        if(!$dataTypeId || !\Schema::hasTable('companies'))
+            return null;
 
         $typeField = \DB::table('data_rows')
             ->where('data_type_id', $dataTypeId)
@@ -296,7 +301,7 @@ class SearchService
             ->first();
 
         if(!$typeField || !\Schema::hasColumn('companies', $typeField->field))
-            return $data;
+            return null;
 
         $carrierValue = null;
         $details = json_decode($typeField->details ?? '', true);
@@ -308,12 +313,10 @@ class SearchService
         }
 
         if($carrierValue === null)
-            return $data;
+            return null;
 
         $col = $typeField->field;
-        $query = \DB::table('companies')
-            ->whereNull('deleted_at')
-            ->whereIntegerInRaw('id', array_keys($data));
+        $query = \DB::table('companies')->whereNull('deleted_at');
 
         if($typeField->is_plural) {
             $query->whereRaw(
@@ -321,17 +324,23 @@ class SearchService
                 [json_encode($carrierValue), json_encode((string) $carrierValue)]
             );
         } else {
-            $query->where(function($q) use ($col, $carrierValue) {
-                $q->where($col, $carrierValue)->orWhere($col, (string) $carrierValue);
+            $query->where(function($sub) use ($col, $carrierValue) {
+                $sub->where($col, $carrierValue)->orWhere($col, (string) $carrierValue);
             });
         }
 
-        $ids = array_flip($query->pluck('id')->all());
-        foreach($data as $key => $item) {
-            if(!isset($ids[$key]))
-                unset($data[$key]);
+        if($q !== '') {
+            $like = '%'.str_replace(' ', '%', $q).'%';
+            $query->where(function($sub) use ($like, $q) {
+                $sub->where('name', 'LIKE', $like)
+                    ->orWhere('name->value', 'LIKE', $like);
+                if(is_numeric($q))
+                    $sub->orWhere('id', (int) $q);
+            });
         }
 
-        return $data;
+        $query->orderBy('choosed_at', 'DESC')->orderBy('name', 'ASC');
+
+        return $query->limit(50)->pluck('id')->map(fn ($v) => (int) $v)->toArray();
     }
 }
