@@ -37,13 +37,13 @@ class TaskController extends Controller
         $products = array();
         foreach ($request->products as $product) {
             $products[] = array(
-                'id' => $product['id'],
-                'name' => $product['product_name'],
-                'price' => $product['product_price'],
-                'count' => $product['product_count'],
-                'weight' => $product['product_weight'],
+                'id' => $product['id'] ?? null,
+                'name' => $product['product_name'] ?? ($product['name'] ?? ''),
+                'price' => $product['product_price'] ?? null,
+                'count' => $product['product_count'] ?? null,
+                'weight' => $product['product_weight'] ?? null,
                 'volume' => $product['product_volume'] ?? 0,
-                'sum' => $product['product_sum'],
+                'sum' => $product['product_sum'] ?? null,
             );
         }
         $object = $class::find($id);

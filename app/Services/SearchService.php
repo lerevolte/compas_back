@@ -48,6 +48,10 @@ class SearchService
                     }
                 }
 
+                if(!empty($params['carrier_only']) && count($data)) {
+                    $data = $this->filterCarriers($data);
+                }
+
                 if(isset($params['filter']) && count($data) && isset($slug)) {
                     $paginator = $entity_class::whereNull('deleted_at')->whereIntegerInRaw('id', array_keys($data));
                     foreach($params['filter'] as $field => $val) {
@@ -134,8 +138,6 @@ class SearchService
                               ->orWhere('id', (int)$params['q']);
                     })->whereNull('deleted_at')->where('is_active', 1)->limit(20)->get();
                 } elseif($params['entity'] == 'logistic_tasks') {
-                    // У задач логистики name часто пустой/служебный — ищем ещё
-                    // по адресу и по id, чтобы поиск был полезен для пользователя.
                     $items = $entity_class::where(function($query) use ($field_name, $q, $params) {
                         $query->where($field_name, 'LIKE', $q)
                               ->orWhere("{$field_name}->value", 'LIKE', $q)
@@ -178,10 +180,6 @@ class SearchService
                 $items = $query->get();
             }
         }
-        // Для задач логистики: какие из привязанных маршрутов ещё живы.
-        // route_id удалённого маршрута в результаты поиска отдавать нельзя —
-        // иначе фронт пытается открыть «Задачи в машине» для удалённого
-        // маршрута, а RouteController::tasks падает на Route::find()->tasks().
         $alive_route_ids = array();
         if(isset($params['entity']) && $params['entity'] == 'logistic_tasks' && count($items)) {
             $route_ids = collect($items)->pluck('route_id')->filter()->unique()->values()->all();
@@ -260,14 +258,7 @@ class SearchService
                         $slug = json_decode($item->slug, true);
                         $item_data['label']['slug'] = is_array($slug) ? $slug['value'] : $item->slug;
                     }
-                    // Для задач логистики прокидываем route_id и delivery_date,
-                    // чтобы фронтовый поиск мог решить, куда вести по клику:
-                    // в /logistic на конкретную дату с авто-выбором маршрута,
-                    // на /logistic без маршрута, или в общий список с фильтром.
                     if($params['entity'] == 'logistic_tasks') {
-                        // route_id отдаём только если маршрут не удалён —
-                        // иначе задача удалённого маршрута откроет «Задачи в
-                        // машине» и уронит RouteController::tasks.
                         $item_data['label']['route_id'] = ($item->route_id && isset($alive_route_ids[$item->route_id]))
                             ? $item->route_id
                             : null;
@@ -275,9 +266,6 @@ class SearchService
                             ? \Carbon\Carbon::parse($item->delivery_date)->format('Y-m-d')
                             : null;
 
-                        // Заголовок поиска — ВСЕГДА название задачи (адрес
-                        // не показываем, пользователь хочет видеть имя).
-                        // Если имя пустое — показываем «Задача #ID».
                         $item_data['label']['text'] = $name !== '' && $name !== null
                             ? $name
                             : ('Задача #' . $item->id);
@@ -289,5 +277,58 @@ class SearchService
         }
 
         return array_values($data);
+    }
+
+    private function filterCarriers(array $data): array
+    {
+        $dataTypeId = \DB::table('data_types')->where('slug', 'companies')->value('id');
+        if(!$dataTypeId)
+            return $data;
+
+        $typeField = \DB::table('data_rows')
+            ->where('data_type_id', $dataTypeId)
+            ->where('type', 'select_dropdown')
+            ->where('title', 'Тип компании')
+            ->where('is_remove', 0)
+            ->first();
+
+        if(!$typeField || !\Schema::hasColumn('companies', $typeField->field))
+            return $data;
+
+        $carrierValue = null;
+        $details = json_decode($typeField->details ?? '', true);
+        foreach(($details['options'] ?? []) as $option) {
+            if(is_array($option) && isset($option['label']) && mb_strtolower($option['label']) == 'перевозчик') {
+                $carrierValue = $option['value'];
+                break;
+            }
+        }
+
+        if($carrierValue === null)
+            return $data;
+
+        $col = $typeField->field;
+        $query = \DB::table('companies')
+            ->whereNull('deleted_at')
+            ->whereIntegerInRaw('id', array_keys($data));
+
+        if($typeField->is_plural) {
+            $query->whereRaw(
+                "JSON_VALID(`{$col}`) AND (JSON_CONTAINS(`{$col}`, ?) OR JSON_CONTAINS(`{$col}`, ?))",
+                [json_encode($carrierValue), json_encode((string) $carrierValue)]
+            );
+        } else {
+            $query->where(function($q) use ($col, $carrierValue) {
+                $q->where($col, $carrierValue)->orWhere($col, (string) $carrierValue);
+            });
+        }
+
+        $ids = array_flip($query->pluck('id')->all());
+        foreach($data as $key => $item) {
+            if(!isset($ids[$key]))
+                unset($data[$key]);
+        }
+
+        return $data;
     }
 }

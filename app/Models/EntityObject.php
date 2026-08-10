@@ -13,8 +13,6 @@ use Illuminate\Support\Facades\Hash;
 class EntityObject
 {
 
-    // Кэш проверок схемы на время запроса (Schema::hasTable/hasColumn ходят
-    // в information_schema — не дёргаем их повторно для одной таблицы).
     protected static $relation_tables_cache = [];
     protected static $deleted_at_columns_cache = [];
     protected static $columns_cache = [];
@@ -116,7 +114,6 @@ class EntityObject
             $color = \App\Helpers\ColorPalette::random();
             \DB::table($table)->where('id', $object->id)->update(['color' => $color]);
         } elseif ($color !== '' && is_numeric($color)) {
-            // Числовой color — ID записи field_values (палитра, см. routes)
             $fv = \DB::table('field_values')->where('id', (int) $color)->first();
             $color = $fv->color ?? '';
         }
@@ -175,6 +172,31 @@ class EntityObject
         return false;
     }
 
+    private static function employeeReverseIds($field, $employeeId, $withTrashed = false): array
+    {
+        if (!$employeeId || !in_array($field->relation_table, ['routes', 'logistic_tasks'])) {
+            return [];
+        }
+        if (!\Schema::hasTable($field->relation_table) || !\Schema::hasColumn($field->relation_table, 'employee_id')) {
+            return [];
+        }
+        $query = \DB::table($field->relation_table);
+        if (!$withTrashed && \Schema::hasColumn($field->relation_table, 'deleted_at')) {
+            $query->whereNull('deleted_at');
+        }
+        return $query
+            ->whereNotNull('employee_id')
+            ->where(function($q) use ($employeeId) {
+                $q->whereRaw(
+                    'JSON_VALID(`employee_id`) AND (JSON_CONTAINS(`employee_id`, ?) OR JSON_CONTAINS(`employee_id`, ?))',
+                    [json_encode((int) $employeeId), json_encode((string) $employeeId)]
+                )->orWhere('employee_id', (string) $employeeId);
+            })
+            ->pluck('id')
+            ->map(fn ($v) => (int) $v)
+            ->toArray();
+    }
+
     public static function detail($slug, $id, Request $request, $settings = null)
     {
         $settings = $settings ?: app('settings');
@@ -205,7 +227,6 @@ class EntityObject
             ];
         }
 
-        // Проверка аутентификации
         $isAuthenticated = auth()->check();
         $user = $isAuthenticated ? auth()->user() : null;
         $isAdmin = $isAuthenticated && $user->is_admin;
@@ -235,7 +256,6 @@ class EntityObject
             if($permissions_row)
                 $permissions = $permissions_row->toArray();
         }
-        // Получение текущего объекта
         if ($id) {
             $current = $entity_class::withTrashed()->where(['id' => $id])->first();
         } else {
@@ -254,7 +274,6 @@ class EntityObject
                 $current->{$mf->field} = $mf->default_value;
             }
 
-            // Специфичная логика для osago_polises
             if ($slug == 'osago_polises') {
                 $local_module = \DB::table('modules')->where('slug', 'osago')->first();
                 if ($local_module) {
@@ -277,7 +296,6 @@ class EntityObject
             }
         }
 
-        // Проверка прав доступа
         if ($request->user_id && $current->user_id != $request->user_id) {
             return [
                 'error' => [
@@ -296,7 +314,6 @@ class EntityObject
             ];
         }
 
-        // Обработка заголовка
         $data['title'] = $current->name ?? '';
         $tenant = tenant('id');
 
@@ -332,17 +349,9 @@ class EntityObject
             $data['deleted_at'] = $current->deleted_at;
         }
 
-        // Сам объект удалён — в его связях показываем и удалённые записи
-        // (например, у удалённой компании — удалённые машины). У живых
-        // объектов удалённые связи по-прежнему скрываются.
         $isTrashedCurrent = isset($current->deleted_at) && (bool) $current->deleted_at;
 
-        // Обработка полей модели
         foreach ($model_fields as $field) {
-            // Внешняя ссылка (аноним, без авторизации) не обладает ролями,
-            // поэтому поля с ограничением видимости по ролям (roles_read)
-            // скрываем целиком — для аноним-доступа perms не вычисляются, и
-            // иначе такие поля протекали во внешнюю ссылку (8460).
             if (!$isAuthenticated
                 && !empty($field->roles_read)
                 && !in_array(trim((string) $field->roles_read), ['', '[]', '0'], true)) {
@@ -369,6 +378,12 @@ class EntityObject
                         $relation_query = $relation_query->withTrashed();
                     }
                     $field_value = $relation_query->get()->pluck('id')->toArray();
+                    if ($slug == 'employees') {
+                        $field_value = array_values(array_unique(array_merge(
+                            $field_value,
+                            self::employeeReverseIds($field, $current->id, $isTrashedCurrent)
+                        )));
+                    }
                 }
                 if ($slug == 'routes' && $field->field == 'task_id' && $field->type == 'relation') {
                     $tasks_query = $current->tasks();
@@ -384,13 +399,8 @@ class EntityObject
                     !($settings[$slug]['perms'][$field->field]['write'] ?? 1) && !$isAdmin ? 0 : 1;
                 if ($slug == 'logistic_tasks' && $field->field == 'delivery_date' && $current->route_id && !$request->is_copy
                     && \App\Models\Route::whereKey($current->route_id)->exists()) {
-                    // Блокируем дату только если маршрут ЖИВ. Route использует
-                    // SoftDeletes: после удаления маршрута route_id у задачи
-                    // остаётся, но whereKey()->exists() удалённый не найдёт —
-                    // иначе поле навсегда серое у осиротевших задач.
                     $fields_data[$field->field]['can_edit'] = 0;
                 }
-                // Обработка значений полей
                 if ($request->is_copy) {
                     if ($field->field == 'created_at') {
                         $field_value = \Carbon\Carbon::now();
@@ -399,9 +409,6 @@ class EntityObject
                     } elseif ($field->field == 'user_id' && $isAuthenticated) {
                         $field_value = $user->id;
                     } elseif ($slug == 'logistic_tasks' && $field->field == 'route_id') {
-                        // При копировании задачи логистики не тащим привязанный маршрут:
-                        // иначе delivery_date пересчитается от маршрута и затрёт введённую
-                        // пользователем дату. Копия создаётся без маршрута.
                         $field_value = null;
                     }
                 }
@@ -411,7 +418,6 @@ class EntityObject
 
                 $fields_data[$field->field]['value'] = $field->field == 'password' ? '' : $field_value;
 
-                // Дополнительная обработка для специфичных типов полей
                 if ($field->type == 'file') {
                     if (!isset($field_value[0]) && $field_value) {
                         $fields_data[$field->field]['value'] = [$field_value];
@@ -437,9 +443,6 @@ class EntityObject
                                 $fields_data[$field->field]['value']['value'][] = $list_values[$val]['value'];
                                 $fields_data[$field->field]['value']['localOptions'][] = $list_values[$val];
                             } elseif(($table_option = self::listValueFromTable($field, $val))) {
-                                // Записи нет в list_values: либо она удалена
-                                // (а сам объект в корзине — pluck шёл withTrashed),
-                                // либо кэш настроек устарел. Собираем подпись из БД.
                                 $fields_data[$field->field]['value']['value'][] = $table_option['value'];
                                 $fields_data[$field->field]['value']['localOptions'][] = $table_option;
                             }
@@ -447,9 +450,6 @@ class EntityObject
                     }
                 } elseif($field->type == 'relation' && $field_value && !is_array($field_value)
                     && !$isTrashedCurrent && !self::relatedIsAlive($field, $field_value)) {
-                    // Связанная запись удалена, а сам объект жив — связь не
-                    // показываем (даже если она ещё числится в устаревшем
-                    // кэше list_values).
                     $fields_data[$field->field]['value'] = array(
                         'value' => array(),
                         'localOptions' => array()
@@ -464,10 +464,6 @@ class EntityObject
 
                 } elseif($field->type == 'relation' && $field_value && !is_array($field_value)
                     && ($table_option = self::listValueFromTable($field, $field_value))) {
-                    // Значения нет в list_values: у удалённого объекта это
-                    // удалённая связь (показываем), у живого — живая запись,
-                    // не попавшая в устаревший кэш (тоже показываем; удалённые
-                    // у живого отсечены веткой выше).
                     $fields_data[$field->field]['value'] = array(
                         'value' => array($table_option['value']),
                         'localOptions' => array($table_option)
@@ -503,17 +499,12 @@ class EntityObject
                         $field_values = array_slice($settings['list_values'][$field->id], 0, 10, true);
                         if($field->is_plural && isset($fields_data[$field->field]['value']['value'])) {
                             foreach($fields_data[$field->field]['value']['value'] as $field_val) {
-                                // У удалённого объекта value может содержать ID
-                                // удалённых записей — их нет в list_values.
                                 if(isset($settings['list_values'][$field->id][$field_val]))
                                     $field_values[$field_val] = $settings['list_values'][$field->id][$field_val];
                             }
                         } elseif($current->{$field->field} && isset($settings['list_values'][$field->id][$current->{$field->field}])) {
                             $field_values[$current->{$field->field}] = $settings['list_values'][$field->id][$current->{$field->field}];
                         }
-                        // Значение есть, но его нет в list_values — связанная
-                        // запись удалена (list_values строится с whereNull
-                        // deleted_at). Удалённые в опциях не показываем.
                     } else {
                         if(isset($settings[$slug]['options'][$field->field]))
                             $field_values = $settings[$slug]['options'][$field->field];
@@ -554,8 +545,6 @@ class EntityObject
                             } elseif($current->{$field->field} && isset($settings['list_values'][$field->id][$current->{$field->field}])) {
                                 $field_values[$current->{$field->field}] = $settings['list_values'][$field->id][$current->{$field->field}];
                             }
-                            // Удалённую связанную запись в опции не добавляем
-                            // (см. комментарий выше).
                         } else {
                             $field_values = $settings['list_values'][$field->id];
                         }
@@ -594,7 +583,6 @@ class EntityObject
                         }
                         if (isset($fields_data[$subfield->field])) {
                             $subfield_data = $fields_data[$subfield->field];
-                            //$subsection_data['fields'][] = $fields_data[$subfield->field];
                         } else {
                             $subfield_data = $settings[$slug]['field_data'][$subfield->field];
                         }
@@ -682,12 +670,10 @@ class EntityObject
             }
         }
 
-        // Обработка секций и скрытых полей
         $hidden_fields = \App\Models\Field::getHiddenFields($slug);
         $sections_1 = \App\Models\FieldSection::get($slug, 1);
         $sections_2 = \App\Models\FieldSection::get($slug, 2);
 
-        // Обработка секций
         foreach ([$sections_1, $sections_2] as $index => $sections) {
             $column_key = 'column_' . ($index + 1);
             foreach ($sections as $section) {
@@ -699,7 +685,6 @@ class EntityObject
                     'children' => []
                 ];
 
-                // Обработка полей секции
                 if ($section->fields && count($section->fields)) {
                     foreach ($section->fields as $field) {
                         if (isset($settings[$slug]['perms'][$field->field]['read']) &&
@@ -719,7 +704,6 @@ class EntityObject
                     }
                 }
 
-                // Обработка подсекций
                 if ($section->children) {
                     foreach ($section->children as $subsection) {
                         $subsection_data = [
@@ -757,7 +741,6 @@ class EntityObject
             }
         }
 
-        // Обработка скрытых полей
         $data['hidden_fields'] = [];
         foreach ($hidden_fields as $field) {
             if (isset($settings[$slug]['perms'][$field->field]['read']) &&
@@ -882,6 +865,12 @@ class EntityObject
                 if($field->type == 'relation' && $field->is_plural && $field->relation_table) {
                     $relation_table = $field->relation_table;
                     $field_value = $current->{$relation_table}->pluck('id')->toArray();
+                    if($slug == 'employees') {
+                        $field_value = array_values(array_unique(array_merge(
+                            $field_value,
+                            self::employeeReverseIds($field, $current->id)
+                        )));
+                    }
                 }
                 if($slug == 'routes' && $field->field == 'task_id' && $field->type == 'relation') {
                     $field_value = $current->tasks()->get()->pluck('id')->toArray();
@@ -895,10 +884,6 @@ class EntityObject
                 }
                 if ($slug == 'logistic_tasks' && $field->field == 'delivery_date' && $current->route_id && !$request->is_copy
                     && \App\Models\Route::whereKey($current->route_id)->exists()) {
-                    // Блокируем дату только если маршрут ЖИВ. Route использует
-                    // SoftDeletes: после удаления маршрута route_id у задачи
-                    // остаётся, но whereKey()->exists() удалённый не найдёт —
-                    // иначе поле навсегда серое у осиротевших задач.
                     $fields_data[$field->field]['can_edit'] = 0;
                 }
                 if($id && $permissions['update_p'] == 'Y' && $current->user_id != \Auth::user()->id && !\Auth::user()->is_admin && $slug != 'users' && \Auth::user()->id != $id ||
@@ -907,7 +892,6 @@ class EntityObject
                         $fields_data[$field->field]['can_edit'] = 0;
                 }
 
-                //$fields_data[$field->field]['can_edit'] = $field->only_read ? 0 : 1;//!$settings[$slug]['perms'][$field->field]['write'] ? 1 : 0;
                 if($request->is_copy && $field->field == 'created_at') {
                     $field_value = \Carbon\Carbon::now();
                 } elseif($request->is_copy && ($field->field == 'id' || $field->field == 'updated_at')) {
@@ -920,8 +904,6 @@ class EntityObject
                 if(is_array($guides) && isset($guides['fields'][$slug][$field->field]) && $show_hints)
                     $fields_data[$field->field]['guide'] = $guides['fields'][$slug][$field->field];
                 $fields_data[$field->field]['used_in_modules'] = $settings[$slug]['used_in_modules'][$field->field];
-                //$fields_data[$field->field]['comparison'] = $comparisons[$field->id] ?? null;
-                //$fields_data[$field->field]['editableFields']['model'] = $slug;
 
                 if($field->type == 'file' && !isset($field_value[0]) && $field_value) {
                     $fields_data[$field->field]['value'] = array($field_value);
@@ -966,12 +948,6 @@ class EntityObject
                     );
                 }
 
-                // if($field->type == 'relation') {
-                //     if($field->field == 'category_id' || $field->field == 'role_id')
-                //         $fields_data[$field->field]['can_create'] = 0;
-                //     else
-                //         $fields_data[$field->field]['can_create'] = 1;
-                // }
 
 
                 if($field->type == 'relation' && $field->field != 'role_id') {
@@ -981,8 +957,6 @@ class EntityObject
                     if($field->relation_table && isset($settings['models'][$field->relation_table]) && isset($permissions_all[$settings['models'][$field->relation_table]->id]['create_p']) && !\Auth::user()->is_admin)
 
                         $fields_data[$field->field]['can_create'] = $permissions_all[$settings['models'][$field->relation_table]->id]['create_p'] == 'N' ? 0 : 1;
-                    // if(isset($permissions_all[$settings['models'][$field->relation_table]->id]['update_p']) && !\Auth::user()->is_admin)
-                    //     $fields_data[$field->field]['can_edit'] = $permissions_all[$settings['models'][$field->relation_table]->id]['update_p'] == 'N' ? 0 : 1;
 
                 }
 
@@ -1002,8 +976,6 @@ class EntityObject
                         } elseif($current->{$field->field} && isset($settings['list_values'][$field->id][$current->{$field->field}])) {
                             $field_values[$current->{$field->field}] = $settings['list_values'][$field->id][$current->{$field->field}];
                         }
-                        // Значение есть, но его нет в list_values — связанная
-                        // запись удалена. Удалённые в опциях не показываем.
                     } else {
                         if(isset($settings[$slug]['options'][$field->field]))
                             $field_values = $settings[$slug]['options'][$field->field];
@@ -1044,36 +1016,14 @@ class EntityObject
                             } elseif($current->{$field->field} && isset($settings['list_values'][$field->id][$current->{$field->field}])) {
                                 $field_values[$current->{$field->field}] = $settings['list_values'][$field->id][$current->{$field->field}];
                             }
-                            // Удалённую связанную запись в опции не добавляем
-                            // (см. комментарий выше).
                         } else {
                             $field_values = $settings['list_values'][$field->id];
                         }
                         foreach($field_values as $k => $option) {
                             $simple_options[$k] = $option;
                             $values[] = $option;
-                            // $values[] = array(
-                            //     'label' => [
-                            //         'id' => $k,
-                            //         'sort' => is_array($option) && isset($option['sort']) ? $option['sort'] : $k,
-                            //         'file' => $avatar,
-                            //         'is_hidden' => 0,
-                            //         'field_id' => $field->id,
-                            //         'color' => isset($current->color) && !$current->color ? $current->getColor() : ($current->color ?? ''),
-                            //         'text' => is_array($option) ? $option['label'] : $option
-                            //     ],
-                            //     'value' => $k
-                            // );
-                            // $values[] = array(
-                            //     'value' => $k,
-                            //     'label' => is_array($option) ? $option['label'] : $option,
-                            //     'sort' => is_array($option) && isset($option['sort']) ? $option['sort'] : $k
-                            // );
                         }
                     }
-                    // $fields_data[$field->field]['editableFields']['values'] = $values;
-                    // if($field->type == 'status')
-                    //     $fields_data[$field->field]['editableFields']['statuses'] = $settings['list_values'][$field->id];
                 };
                 if($field->type == 'relation' && $t = json_decode($field->details, true)) {
                     if(isset($t['table']))
@@ -1084,7 +1034,6 @@ class EntityObject
                     $values = array();
                     $fields_data[$field->field]['options'] = array();
                     foreach($subfields as $subfield) {
-                        //$fields_data[$field->field]['options'][$subfield->id] = $subfield->title;
                         $values[] = array(
                             'value' => $subfield->id,
                             'label' => $subfield->title,
@@ -1121,11 +1070,9 @@ class EntityObject
                             $field_value = $current->{$relation_table}->pluck('id')->toArray();
                         }
                         $subfield_data['value'] = $field_value;
-                        //$subfield_data['value'] = $current->{$subfield->field};
                         $fields_data[$field->field]['fields'][] = $subfield_data;
                     }
                 }
-                // $fields_data[$field->field] = Field::getDataByObject($field, $slug, $current);
                 if($request->is_copy && $slug == 'companies' && ($field->field == 'employee_id' || $field->field == 'car_id' || $field->field == 'fine_id')) {
                     $fields_data[$field->field]['value'] = ['value' => [], 'localOptions' => []];
                 }
@@ -1140,16 +1087,12 @@ class EntityObject
             $fields_data['payment']['value']['id'] = $id;
             if(in_array($fields_data['number_doc']['value'], $success_payments))
                 $fields_data['payment']['value']['state'] = 1;
-            // $fields_data['payment']['value']['value'] = round($fields_data['payment']['value']['value']*\Modules\Gibdd\Entities\Module::getPriceKoef());
         }
 
         $fields_data_entity = array();
         foreach($entity_fields as $field) {
             if($field->module)
                 continue;
-            // if($field->type == 'status')
-            //     $fields_values[$field->field] = \App\Models\Field::getStatusesVisible($field->id);
-            // $field_colors[$field->field] = $field->label_color ? $field->label_color : null;
             if(!array_key_exists($field->field, $fields_data_entity)) {
                 $fields_data_entity[$field->field] = Field::getDataByObject($field, $slug, $current);
 
@@ -1173,9 +1116,6 @@ class EntityObject
             $volume+=(float)($product['volume'] ?? 0)*(int)$product['count'];
         }
 
-        // $history_days = \App\Models\History::where(['entity' => $slug, 'entity_id' => $current->id])->orderBy('created_at', 'DESC')->get()->groupBy(function ($val) {
-        //         return \Carbon\Carbon::parse($val->created_at)->format('d.m.Y');
-        //     });
         $users = \App\Models\User::get();
         foreach($users as $user) {
             $users_arr[$user->id] = $user;
@@ -1198,7 +1138,6 @@ class EntityObject
                 'id' => $section->id,
                 'name' => $section->name,
                 'is_short' => $section->is_short,
-                //'sort' => $section->sort,
                 'fields' => array_values($fields)
             );
         }
@@ -1217,7 +1156,6 @@ class EntityObject
                 'id' => $section->id,
                 'name' => $section->name,
                 'is_short' => $section->is_short,
-                //'sort' => $section->sort,
                 'fields' => array_values($fields)
             );
         }
@@ -1301,9 +1239,6 @@ class EntityObject
 
         $limit = $request->has('per_page') ? $request->per_page : $per_page;
         $page = $request->page ? $request->page : 1;
-        // Строку "null" (а равно пустую строку) трактуем как «сортировка не задана»
-        // и откатываемся к сохранённым настройкам таблицы. Без этого фронт мог
-        // прислать sort_field=null, и orderBy получал несуществующую колонку "null".
         $req_sort_field = $request->sort_field;
         if ($req_sort_field === 'null' || $req_sort_field === '' || $req_sort_field === null) {
             $req_sort_field = null;
@@ -1429,7 +1364,6 @@ class EntityObject
                 break;
             } elseif($field->field == $sort_field && $field->type == 'file') {
 
-                //if($sort_order == 'asc') {
                     $objects = $entity_class::select('id', $sort_field);
                     if($request->trashed)
                         $objects = $objects->onlyTrashed();
@@ -1457,23 +1391,10 @@ class EntityObject
 
                         return $value;
                     }, SORT_NATURAL, ($sort_order == 'asc' ? false : true))->pluck('id')->toArray();
-                    //$sorted_ids = $entity_class::select('id', $sort_field)->get()->sortBy($sort_field, SORT_NATURAL)->pluck('id')->toArray();
                     $sorted_values = implode(',', $sorted_ids);
                     $paginator = $entity_class::orderByRaw("FIELD(id, $sorted_values)");
-                // } else {
-                //      $sorted_ids = $entity_class::select('id', $sort_field)->get()->sortBy($sort_field, SORT_NATURAL, true)->pluck('id')->toArray();
-                //      $sorted_values = implode(',', $sorted_ids);
-                //      $paginator = $entity_class::orderByRaw("FIELD(id, $sorted_values)");
-                // }
                 break;
             } elseif($field->field == $sort_field) {
-                // if($sort_order == 'asc') {
-                //      $sorted_ids = $entity_class::select('id', $sort_field)->get()->sortBy($sort_field, SORT_NATURAL)->pluck('id')->toArray();
-                //      $sorted_values = implode(',', $sorted_ids);
-                //      $paginator = $entity_class::orderByRaw("FIELD(id, $sorted_values) ASC");
-                //      //$paginator = $entity_class::orderByRaw("$sort_field REGEXP '^-?[0-9\.]+$' AND LENGTH($sort_field) - LENGTH(REPLACE($sort_field, '.', '')) < 2 DESC, CAST($sort_field AS UNSIGNED), $sort_field");
-                // }
-                // else {
                 $arr = ['id', $sort_field];
                 if($sort_field == 'payment') {
                     $arr = array_merge($arr, ['sale_finish', 'discount_sum', 'sum']);
@@ -1493,7 +1414,6 @@ class EntityObject
                                 $value = $value['state'].' '.ceil($item->discount_sum / (100 - \Modules\Gibdd\Entities\Module::getPriceKoef()) * 100);
                             else
                                 $value = $value['state'].' '.ceil($item->sum / (100 - \Modules\Gibdd\Entities\Module::getPriceKoef()) * 100);
-                           // $value = $value['state'].' '.$value['value'];
                         } else {
                             $value = isset($value['value']) ? $value['value'] : (isset($value['text']) ? $value['text'] : '');
                         }
@@ -1501,12 +1421,9 @@ class EntityObject
 
                     return $value;
                 }, SORT_NATURAL, ($sort_order == 'asc' ? false : true))->pluck('id')->toArray();
-                // $sorted_ids = $entity_class::select('id', $sort_field)->get()->sortBy($sort_field, SORT_NATURAL, true)->pluck('id')->toArray();
                 $sorted_values = implode(',', $sorted_ids);
                 $paginator = $entity_class::orderByRaw("FIELD(id, $sorted_values)");
 
-                    //$paginator = $entity_class::orderByRaw("$sort_field REGEXP '^-?[0-9\.]+$' AND LENGTH($sort_field) - LENGTH(REPLACE($sort_field, '.', '')) < 2 DESC, CAST($sort_field AS UNSIGNED), $sort_field desc");
-                //}
                 break;
             }
         };
@@ -1522,8 +1439,6 @@ class EntityObject
         if($request->trashed) {
             $paginator = $paginator->onlyTrashed();
         } elseif($request->with_trashed && in_array(SoftDeletes::class, class_uses_recursive($entity_class))) {
-            // Вкладки связанных сущностей на деталке удалённого объекта:
-            // показываем и удалённые связанные записи.
             $paginator = $paginator->withTrashed();
         }
         if($request->ids) {
@@ -1534,10 +1449,6 @@ class EntityObject
             if ($slug == 'logistic_tasks' && isset($request->filter['route_id'])) {
                 $routeId = $request->filter['route_id'];
                 if ($routeId == 'null' || $routeId === null) {
-                    // «Задачи без актуального маршрута»: route_id пуст ЛИБО
-                    // маршрут удалён (в корзине). При удалении маршрута задачи
-                    // не отвязываются (restore должен вернуть состав), но в
-                    // таблице «Задачи логистики» они должны появиться снова.
                     $paginator = $paginator->where(function ($q) {
                         $q->whereNull('route_id')
                           ->orWhereNotExists(function ($sub) {
@@ -1557,11 +1468,6 @@ class EntityObject
             foreach($request->filter as $field => $val) {
                 if($val == 'null')
                     $val = null;
-                // route_id у logistic_tasks уже обработан спец-блоком выше
-                // (учитывает удалённые маршруты через orWhereNotExists).
-                // Повторная обработка в общем цикле навешивала бы AND
-                // route_id IS NULL и отменяла учёт удалённых маршрутов —
-                // задачи удалённого маршрута не попадали в «Задачи логистики».
                 if($slug == 'logistic_tasks' && $field == 'route_id')
                     continue;
                 if($slug == 'routes' && $field == 'car_id')
@@ -1588,7 +1494,6 @@ class EntityObject
                         $paginator = $paginator->whereDate($field, '<=', $val[1]);
                     } else {
                         $paginator = $paginator->whereDate($field, date('Y-m-d', strtotime($val)));
-                        //$paginator = $paginator->whereDate($field, date('Y-m-d', strtotime($val)));
                     }
                 } elseif($settings[$slug]['fields'][$field]->type == 'deal_stages') {
                     $vals = array_values(array_filter(
@@ -1639,26 +1544,21 @@ class EntityObject
                                 }
                             });
 
-                            //$paginator = $paginator->whereJsonContains($field, (int)$val);
                         } elseif($settings[$slug]['fields'][$field]->type == 'relation') {
                             $paginator = $paginator->whereJsonContains($field, (int)$val);
                         } elseif($settings[$slug]['fields'][$field]->type == 'multi_text') {
                             $paginator = $paginator->where($field, 'like', '%' . (is_array($val) ? implode('', array_slice($val, 0, 1)) : $val) . '%');
                         } else {
-                            //->whereRaw("json_contains(`client_id`, ?)", [15])->whereRaw('json_contains(`tip_tk`, \'"'.$str.'"\')')
 
-                            // Изменено на логику AND: запись должна содержать ВСЕ значения из переданного массива
                             if(is_array($val)) {
                                 foreach($val as $v) {
                                     if($v !== null && $v !== 'null') {
-                                        // Применяем whereRaw последовательно, что создает условия AND
                                         $paginator = $paginator->whereRaw('json_contains('.$field.', \''.$v.'\')');
                                     }
                                 }
                             } else {
                                 $paginator = $paginator->whereRaw('json_contains('.$field.', \''.$val.'\')');
                             }
-                            //$paginator = $paginator->whereRaw('json_contains('.$field.', \'"'.$val.'"\')');
                         }
                     } else {
                         if($field == 'category_id' && !$request->exclude_childs) {
@@ -1681,19 +1581,9 @@ class EntityObject
                             if(is_array($val))
                                 $paginator = $paginator->whereIntegerInRaw($field, $val);
                             else {
-                                // $paginator = $paginator->where(function ($query) use ($search_columns, $q) {
-                                //      foreach ($search_columns as $column) {
-                                //          $query->orWhere($column, 'like', "%{$q}%");
-                                //      }
-                                // });
 
                                 if($settings[$slug]['fields'][$field]->type == 'address')
-                                    //$paginator = $paginator->whereJsonContains('address', ['text' => $val]);
                                     $paginator = $paginator->where("{$field}->text",'like', "%{$val}%");
-                                    //$paginator = $paginator->whereJsonContains("address->text", $val);
-                                    //$paginator = $paginator->where($field, '%"text": "'.$val.'"%');
-                                    //$paginator = $paginator->whereRaw('json_contains('.$field.', \'"'.$val.'"\')');
-                                    //$paginator = $paginator->whereJsonContains($field, $val);
                                 elseif($settings[$slug]['fields'][$field]->type == 'text')
                                     $paginator->where(function ($query) use ($val, $field) {
                                         $query->where($field, 'like', "%{$val}%")
@@ -1711,7 +1601,6 @@ class EntityObject
             }
         }
 
-        // Filter logistic_tasks by route requirements
         if ($slug == 'logistic_tasks' && $request->filter) {
             $filter = $request->filter;
 
@@ -1762,50 +1651,7 @@ class EntityObject
             }
 
 
-            // // Weight filter
-            // if (isset($filter['weight']) && is_array($filter['weight'])) {
-            //     $wMin = $filter['weight'][0] ?? null;
-            //     $wMax = $filter['weight'][1] ?? null;
-            //     if ($wMin !== null || $wMax !== null) {
-            //         $paginator = $paginator->get()->filter(function($task) use ($wMin, $wMax) {
-            //             $products = json_decode($task->products, true);
-            //             $totalWeight = 0;
-            //             if (is_array($products)) {
-            //                 foreach ($products as $p) {
-            //                     $totalWeight += ($p['weight'] ?? 0) * ($p['count'] ?? 1);
-            //                 }
-            //             }
-            //             if ($wMin !== null && $totalWeight < (float)$wMin) return false;
-            //             if ($wMax !== null && $totalWeight > (float)$wMax) return false;
-            //             return true;
-            //         });
-            //         // Re-paginate after filtering
-            //         $total = $paginator->count();
-            //         $paginator = $paginator->forPage($request->page ?? 1, $request->per_page ?? 25);
-            //     }
-            // }
 
-            // // Volume filter (same logic if tasks have volume in products)
-            // if (isset($filter['volume']) && is_array($filter['volume'])) {
-            //     $vMin = $filter['volume'][0] ?? null;
-            //     $vMax = $filter['volume'][1] ?? null;
-            //     if ($vMin !== null || $vMax !== null) {
-            //         $paginator = $paginator->get()->filter(function($task) use ($vMin, $vMax) {
-            //             $products = json_decode($task->products, true);
-            //             $totalVolume = 0;
-            //             if (is_array($products)) {
-            //                 foreach ($products as $p) {
-            //                     $totalVolume += ($p['volume'] ?? 0) * ($p['count'] ?? 1);
-            //                 }
-            //             }
-            //             if ($vMin !== null && $totalVolume < (float)$vMin) return false;
-            //             if ($vMax !== null && $totalVolume > (float)$vMax) return false;
-            //             return true;
-            //         });
-            //         $total = $paginator->count();
-            //         $paginator = $paginator->forPage($request->page ?? 1, $request->per_page ?? 25);
-            //     }
-            // }
         }
 
         if($request->order_id && $slug == 'products') {
@@ -1858,7 +1704,6 @@ class EntityObject
                         'sort_field' => $sort_field,
                         'sort_order' => $sort_order
                     ];
-                    //return [];
                 }
             }
         };
@@ -1896,7 +1741,6 @@ class EntityObject
                         }
                     }
                     if($field->type == 'date' && strtotime($q)) {
-                        //($field, date('Y-m-d', strtotime($val)));
                         $date = date('Y-m-d', strtotime($q));
                         $query->orWhereDate($field->field, 'like', "%{$date}%");
                     }
@@ -1914,15 +1758,11 @@ class EntityObject
         }
 
         $paginator = $paginator->paginate(function($total) use ($limit){
-            // $limit может прийти пустой/нечисловой строкой (например при
-            // сортировке локальной таблицы задач на /product-stats), из-за чего
-            // paginate падал с «Unsupported operand types: string * int» (8584).
             if(!$limit || !is_numeric($limit)){
                 return $total;
             }
             return (int) $limit;
         });
-        //$paginator = $paginator->paginate($limit);
 
         $objects = array();
         $field_values = array();
@@ -1936,12 +1776,6 @@ class EntityObject
             }
         };
 
-        // Авторитетная проверка «жива ли связанная запись» для одиночных
-        // relation-полей страницы: list_values может быть прочитан из
-        // устаревшего кэша настроек (SettingsClearJob ещё в очереди), поэтому
-        // удалённость проверяем по БД — один запрос на поле на страницу.
-        // У живых строк удалённые связи скрываются, у строк в корзине —
-        // показываются (см. маппинг ниже).
         $relation_alive = array();
         foreach($model_fields as $field) {
             if($field->type != 'relation' || $field->is_plural)
@@ -1984,7 +1818,6 @@ class EntityObject
                         $relation_query = $item->{$relation_table}();
                         if (isset($item->deleted_at) && $item->deleted_at
                             && in_array(SoftDeletes::class, class_uses_recursive($relation_query->getRelated()))) {
-                            // Строка в корзине — показываем и удалённые связи
                             $relation_query = $relation_query->withTrashed();
                         }
                         $field_value = $relation_query->get()->pluck('id')->toArray();
@@ -2015,8 +1848,6 @@ class EntityObject
                                     $data[$field->field]['value'][] = $list_values[$val]['value'];
                                     $data[$field->field]['localOptions'][] = $list_values[$val];
                                 } elseif(($table_option = self::listValueFromTable($field, $val))) {
-                                    // Удалённая связь строки из корзины либо
-                                    // живая запись, не попавшая в устаревший кэш
                                     $data[$field->field]['value'][] = $table_option['value'];
                                     $data[$field->field]['localOptions'][] = $table_option;
                                 }
@@ -2028,14 +1859,11 @@ class EntityObject
                             ? ($relation_alive[$field->id][(int)$field_value] ?? null)
                             : null;
                         if($alive === false && !$row_trashed) {
-                            // Связанная запись удалена, строка живая — скрываем
-                            // (даже если запись ещё есть в устаревшем list_values)
                             $data[$field->field] = array(
                                 'value' => null,
                                 'localOptions' => null
                             );
                         } elseif($alive === false && ($table_option = self::listValueFromTable($field, $field_value))) {
-                            // Строка в корзине — показываем удалённую связь
                             $data[$field->field] = array(
                                 'value' => array($table_option['value']),
                                 'localOptions' => array($table_option)
@@ -2046,7 +1874,6 @@ class EntityObject
                                 'localOptions' => array($list_values[$field_value])
                             );
                         } elseif($alive === true && ($table_option = self::listValueFromTable($field, $field_value))) {
-                            // Живая запись, которой нет в (устаревшем) кэше
                             $data[$field->field] = array(
                                 'value' => array($table_option['value']),
                                 'localOptions' => array($table_option)
@@ -2086,7 +1913,6 @@ class EntityObject
                     $data['payment']['value'] = ceil($data['sum'] / (100 - \Modules\Gibdd\Entities\Module::getPriceKoef()) * 100);
                 if(in_array($data['number_doc'], $success_payments))
                     $data['payment']['state'] = 1;
-                //$data['payment']['value'] = round($data['payment']['value']*\Modules\Gibdd\Entities\Module::getPriceKoef());
             }
 
             $objects[$item->id] = $data;
@@ -2120,7 +1946,6 @@ class EntityObject
                 foreach($products as $num => $product) {
                     if(isset($product['id']) && isset($objects[$product['id']])) {
                         $data = $objects[$product['id']];
-                        //$data['product_name'] = isset($product['product_name']) ? $product['product_name'] : $product['name'];
                         $photo = $item->photo;
                         if($photo) {
                             $photo = json_decode($photo, true);
@@ -2162,26 +1987,46 @@ class EntityObject
                         $data['product_sum'] = $product['sum'];
                         $data['sort'] = $num;
                         $products_objects[] = $data;
+                    } elseif(empty($product['id'])) {
+                        $custom_name = isset($product['name']) && !is_array($product['name']) ? $product['name'] : '';
+                        $products_objects[] = array(
+                            'id' => null,
+                            'name' => $custom_name,
+                            'product_id' => array(
+                                'value' => array(null),
+                                'localOptions' => array(array(
+                                    'value' => null,
+                                    'label' => array(
+                                        'id' => null,
+                                        'sort' => 0,
+                                        'file' => '',
+                                        'is_hidden' => 0,
+                                        'field_id' => 0,
+                                        'color' => '',
+                                        'text' => $custom_name
+                                    )
+                                ))
+                            ),
+                            'product_name' => $custom_name,
+                            'product_price' => $product['price'] ?? null,
+                            'product_count' => $product['count'] ?? null,
+                            'product_weight' => $product['weight'] ?? null,
+                            'product_volume' => $product['volume'] ?? 0,
+                            'product_sum' => $product['sum'] ?? null,
+                            'sort' => $num,
+                        );
                     }
                 }
                 $objects = $products_objects;
             }
         };
-        // if($sort_order == 'asc' && $sort_field)
-        //      array_sort_by_column($objects, $sort_field, SORT_ASC, SORT_NATURAL);
-        // elseif($sort_field)
-        //      array_sort_by_column($objects, $sort_field, SORT_DESC, SORT_NATURAL);
         $fields_data[$field->field]['guide'] = null;
         if(is_array($guides) && isset($guides['fields'][$slug][$field->field]) && $show_hints)
                     $fields_data[$field->field]['guide'] = $guides['fields'][$slug][$field->field];
 
-        // Задача 14: столбцы связанных сущностей (Компания/Автопарк/Сотрудники),
-        // выведенные пользователем в таблицу Маршрутов. Ключ: rel__{slug}__{field}.
         if($slug == 'routes') {
             $rel_fk_map = ['companies' => 'company_id', 'cars' => 'car_id', 'employees' => 'employee_id'];
 
-            // Настройки таблицы Маршрутов: сначала пользователь, затем роль, затем
-            // глобальные — как в Table::get (rel-столбцы могут жить на любом уровне).
             $saved_fields = (isset($tables['routes']['fields']) && is_array($tables['routes']['fields'])) ? $tables['routes']['fields'] : null;
             if(empty($saved_fields)) {
                 $u = \Auth::user();
@@ -2243,12 +2088,8 @@ class EntityObject
                     }
                     return $v;
                 };
-                // Форматированные строки связанных сущностей — через self::list,
-                // чтобы значения выводились так же, как на странице объектов
-                // (связи → метки, файлы → url, статусы → метки, и т.д.).
                 $rel_formatted = array();
                 foreach(array_unique(array_column($rel_cols, 'slug')) as $rslug) {
-                    // self::list ожидает ключ настроек = name сущности (а не slug).
                     $rel_name = \DB::table('data_types')->where('slug', $rslug)->value('name') ?: $rslug;
                     $rel_field_defs = collect($settings[$rel_name]['fields'] ?? []);
                     foreach($rel_cols as $rci => $rc) {
@@ -2468,14 +2309,7 @@ class EntityObject
 
                 $h = \App\Models\History::saveForObject($relation_table, $related_rows);
 
-                // if($slug == 'companies')
-                //     \DB::table($relation_table)->whereIntegerInRaw('id', $old_values)->update([$model_fields[$field]->related_field => null, 'choosed_at' => null]);
 
-                // if(is_array($old_values))
-                //     $only_new_values = array_diff($new_values, $old_values);
-                // foreach($only_new_values as $sort => $v) {
-                //     \DB::table($relation_table)->where('id', $v)->update([$model_fields[$field]->related_field => $object->id, 'choosed_at' => now()->addSeconds($sort)]);
-                // }
                 $object->load($relation_table);
 
 
@@ -2491,7 +2325,6 @@ class EntityObject
                         unset($old_el_relations[array_search($object->id, $old_el_relations)]);
                         if($relation_table == 'companies')
                             $object->choosed_at = null;
-                        // \DB::table($slug)->whereIntegerInRaw('id', $old_values)->update([$model_fields[$field]->related_field => null, 'choosed_at' => null]);
                         $related_rows[] = array('id' => $object->{$model_fields[$field]->field}, $model_fields[$field]->related_field => $old_el_relations);
                     }
                 }
@@ -2506,9 +2339,6 @@ class EntityObject
 
 
             if(!is_array($value) && is_array(json_decode($value, true))) {
-                // Уже валидная JSON-строка (например, detail_text у type=redactor) —
-                // сохраняем как есть, иначе повторный json_encode давал двойное
-                // кодирование и ломал вывод статьи.
                 $object->{$field} = $value;
             } else {
                 $object->{$field} = $value;
