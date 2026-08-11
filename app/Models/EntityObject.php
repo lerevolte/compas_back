@@ -1489,12 +1489,12 @@ class EntityObject
                         $paginator = $paginator->where(function($query) use ($vals, $field) {
                             foreach ($vals as $v) {
                                 if (is_numeric($v)) {
-                                    $query->orWhereRaw(
+                                    $query->whereRaw(
                                         '(JSON_VALID('.$field.') AND (JSON_CONTAINS('.$field.', ?) OR JSON_CONTAINS('.$field.', ?)))',
                                         [json_encode(['id' => (int) $v]), json_encode(['id' => (string) $v])]
                                     );
                                 } else {
-                                    $query->orWhereRaw(
+                                    $query->whereRaw(
                                         '(JSON_VALID('.$field.') AND LOWER(CONVERT(JSON_EXTRACT('.$field.', \'$[*].name\') USING utf8mb4)) LIKE LOWER(?))',
                                         ['%'.$v.'%']
                                     );
