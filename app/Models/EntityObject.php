@@ -1709,43 +1709,94 @@ class EntityObject
 
         if($request->q) {
 
-            $q = $request->q;
-            $search_columns = $model_fields->filter(function ($field) {
-                                return ($field->type != 'relation' && $field->type != 'status' && $field->type != 'text_group');
-                            })->pluck('field')->toArray();
+            $q = trim($request->q);
 
+            $q_number = str_replace([' ', ','], ['', '.'], $q);
+            if(!is_numeric($q_number))
+                $q_number = null;
 
-            $paginator = $paginator->where(function ($query) use ($slug, $settings, $model_fields, $search_columns, $q) {
-                foreach ($search_columns as $column) {
-                    $query->orWhere(function ($subquery) use ($q, $column) {
-                        $subquery->where($column, 'like', "%{$q}%")
-                          ->orWhere("{$column}->value", 'like', "%{$q}%");
-                    });
-                }
+            $q_date = null;
+            $date_candidate = str_replace('/', '.', $q);
+            if(preg_match('/^(\d{1,2})\.(\d{1,2})(?:\.(\d{2,4}))?$/', $date_candidate, $m)) {
+                $year = isset($m[3]) && $m[3] !== '' ? $m[3] : date('Y');
+                if(strlen($year) == 2)
+                    $year = '20'.$year;
+                if(checkdate((int) $m[2], (int) $m[1], (int) $year))
+                    $q_date = sprintf('%04d-%02d-%02d', $year, $m[2], $m[1]);
+            } elseif(preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})$/', $date_candidate, $m)) {
+                if(checkdate((int) $m[2], (int) $m[3], (int) $m[1]))
+                    $q_date = sprintf('%04d-%02d-%02d', $m[1], $m[2], $m[3]);
+            }
+
+            $paginator = $paginator->where(function ($query) use ($slug, $settings, $model_fields, $q, $q_number, $q_date) {
                 foreach($model_fields as $field) {
+                    if(in_array($field->type, ['text_group', 'file', 'redactor', 'password']))
+                        continue;
+                    if($field->type == 'number') {
+                        if($q_number !== null) {
+                            $query->orWhere(function ($subquery) use ($field, $q_number) {
+                                $subquery->whereNotNull($field->field)
+                                  ->where($field->field, '!=', '')
+                                  ->whereRaw("CAST({$field->field} AS DECIMAL(20,6)) = ?", [$q_number]);
+                            });
+                        }
+                        continue;
+                    }
+                    if($field->type == 'date') {
+                        if($q_date)
+                            $query->orWhereDate($field->field, $q_date);
+                        continue;
+                    }
+                    if($field->type == 'address') {
+                        $query->orWhere("{$field->field}->text", 'like', "%{$q}%");
+                        continue;
+                    }
+                    if($field->type == 'json') {
+                        $query->orWhereRaw(
+                            '(JSON_VALID('.$field->field.') AND LOWER(CONVERT(JSON_EXTRACT('.$field->field.', \'$[*].name\', \'$[*].product_name\') USING utf8mb4)) LIKE LOWER(?))',
+                            ['%'.$q.'%']
+                        );
+                        continue;
+                    }
                     if($field->type == 'relation') {
-                        $relations = collect($settings['list_values'][$field->id])->filter(function ($item) use ($q) {
-                            return mb_stristr($item['label']['text'], $q);
+                        $relations = collect($settings['list_values'][$field->id] ?? [])->filter(function ($item) use ($q) {
+                            return isset($item['label']['text']) && mb_stristr($item['label']['text'], $q);
                         })->pluck('value')->toArray();
+                        if(Settings::lazy_table($settings, $field->id)) {
+                            foreach(Settings::search_list_values($settings, $field->id, $q, 100) as $option) {
+                                if(isset($option['label']['text']) && mb_stristr($option['label']['text'], $q))
+                                    $relations[] = $option['value'];
+                            }
+                            $relations = array_values(array_unique($relations));
+                        }
                         if(count($relations) && $field->is_plural) {
                             $query->orWhereHas($field->relation_table, function($subquery) use($relations) {
                                 $subquery->whereIntegerInRaw('id', $relations);
-                            })->get();
-                        } elseif(count($relations)) {
-                            $query->orWhere(function ($subquery) use ($field, $relations) {
-                               foreach ($relations as $id) {
-                                   $subquery->orWhere($field->field, $id);
-                               }
                             });
+                        } elseif(count($relations)) {
+                            $query->orWhereIn($field->field, $relations);
                         }
+                        continue;
                     }
-                    if($field->type == 'date' && strtotime($q)) {
-                        $date = date('Y-m-d', strtotime($q));
-                        $query->orWhereDate($field->field, 'like', "%{$date}%");
+                    if(in_array($field->type, ['status', 'select_dropdown', 'deal_stages'])) {
+                        $options = collect($settings['list_values'][$field->id] ?? [])->filter(function ($item) use ($q) {
+                            if(!is_array($item))
+                                return false;
+                            $text = isset($item['label']['text']) ? $item['label']['text']
+                                : (isset($item['label']) && is_string($item['label']) ? $item['label'] : null);
+                            return $text !== null && mb_stristr($text, $q);
+                        })->pluck('value')->toArray();
+                        if(count($options))
+                            $query->orWhereIn($field->field, $options);
+                        continue;
                     }
-                    if($slug == 'fines_gibdd' && $field->field == 'payment' && mb_strstr(mb_strtolower($q), 'оплат')) {
-                        $query->orWhere("payment->state", 0);
-                    }
+                    $query->orWhere(function ($subquery) use ($q, $field) {
+                        $subquery->where($field->field, 'like', "%{$q}%")
+                          ->orWhere("{$field->field}->value", 'like', "%{$q}%");
+                    });
+                }
+                if($slug == 'fines_gibdd' && mb_strstr(mb_strtolower($q), 'оплат')) {
+                    $query->orWhere("payment->state", 0);
                 }
             });
 
