@@ -16,11 +16,6 @@ class EntityObject
     protected static $relation_tables_cache = [];
     protected static $deleted_at_columns_cache = [];
     protected static $columns_cache = [];
-
-    /**
-     * Таблица, на которую смотрит relation-поле (details.table либо
-     * relation_table), или null, если таблицы нет.
-     */
     protected static function relationTableOf($field): ?string
     {
         $key = $field->id ?? ($field->field . ':' . ($field->relation_table ?? ''));
@@ -51,13 +46,6 @@ class EntityObject
         }
         return self::$columns_cache[$key];
     }
-
-    /**
-     * Жива ли (не удалена) связанная запись одиночного relation-поля.
-     * Проверяем по БД, а не по settings['list_values']: кэш настроек может
-     * быть устаревшим (SettingsClearJob в очереди), и удалённая запись в нём
-     * ещё числится живой.
-     */
     protected static function relatedIsAlive($field, $id): bool
     {
         if (!$id || is_array($id)) return true;
@@ -69,13 +57,6 @@ class EntityObject
         }
         return $q->exists();
     }
-
-    /**
-     * Построить опцию (как элемент list_values) для связанной записи прямо
-     * из таблицы (минуя SoftDeletes-scope и кэш настроек). Используется для
-     * удалённых связей удалённого объекта и для живых записей, которых ещё
-     * нет в (возможно устаревшем) кэше list_values.
-     */
     protected static function listValueFromTable($field, $id)
     {
         $table = self::relationTableOf($field);
@@ -887,7 +868,7 @@ class EntityObject
                     $fields_data[$field->field]['can_edit'] = 0;
                 }
                 if($id && $permissions['update_p'] == 'Y' && $current->user_id != \Auth::user()->id && !\Auth::user()->is_admin && $slug != 'users' && \Auth::user()->id != $id ||
-                    $id && $permissions['update_p'] == 'N' && !\Auth::user()->is_admin/* || $field->field == 'payment'*/ ||
+                    $id && $permissions['update_p'] == 'N' && !\Auth::user()->is_admin ||
                     $id && $permissions['update_p'] == 'E' && !\Auth::user()->is_admin && !self::currentEmployeeMatch($current)) {
                         $fields_data[$field->field]['can_edit'] = 0;
                 }
@@ -1476,10 +1457,6 @@ class EntityObject
                     continue;
                 if(!isset($settings[$slug]['fields'][$field]))
                     continue;
-                /*if($field == 'created_at' || $field == 'updated_at') {
-                    if(is_array($val)) {}
-                    $paginator = $paginator->whereDate($field, $val);
-                } else*/
                 if($settings[$slug]['fields'][$field]->type == 'date') {
                     if(!is_array($val) && strstr($val, ','))
                         $val = explode(',', $val);
@@ -1502,6 +1479,28 @@ class EntityObject
                     ));
                     if (count($vals)) {
                         $paginator = $paginator->whereIn($field, $vals);
+                    }
+                } elseif($settings[$slug]['fields'][$field]->type == 'json') {
+                    $vals = array_values(array_filter(
+                        is_array($val) ? $val : [$val],
+                        fn ($v) => $v !== null && $v !== '' && $v !== 'null'
+                    ));
+                    if (count($vals)) {
+                        $paginator = $paginator->where(function($query) use ($vals, $field) {
+                            foreach ($vals as $v) {
+                                if (is_numeric($v)) {
+                                    $query->orWhereRaw(
+                                        '(JSON_VALID('.$field.') AND (JSON_CONTAINS('.$field.', ?) OR JSON_CONTAINS('.$field.', ?)))',
+                                        [json_encode(['id' => (int) $v]), json_encode(['id' => (string) $v])]
+                                    );
+                                } else {
+                                    $query->orWhereRaw(
+                                        '(JSON_VALID('.$field.') AND LOWER(CONVERT(JSON_EXTRACT('.$field.', \'$[*].name\') USING utf8mb4)) LIKE LOWER(?))',
+                                        ['%'.$v.'%']
+                                    );
+                                }
+                            }
+                        });
                     }
                 } elseif($settings[$slug]['fields'][$field]->type == 'number' && $settings[$slug]['fields'][$field]->field != 'id') {
                     if(!is_array($val) && strstr($val, ','))

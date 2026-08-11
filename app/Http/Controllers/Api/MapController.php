@@ -102,7 +102,7 @@ class MapController extends Controller
             $lat = floatval($matches[1]);
             $lon = floatval($matches[2]);
             
-            $result = $dadata->geolocate($lat, $lon, 5, 30);
+            $result = $dadata->geolocate($lat, $lon, 5, 1);
 
             if (isset($result['suggestions'])) {
                 foreach ($result['suggestions'] as $item) {
