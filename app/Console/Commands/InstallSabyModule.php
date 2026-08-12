@@ -93,6 +93,7 @@ class InstallSabyModule extends Command
             'type' => 'relation',
             'title' => 'Получатель',
             'relation_table' => 'companies',
+            'details' => json_encode(['table' => 'companies'], JSON_UNESCAPED_UNICODE),
         ], 'text');
 
         $this->addField($db, 'routes', 'request_number', [
@@ -109,6 +110,7 @@ class InstallSabyModule extends Command
             'type' => 'waybills',
             'title' => 'Транспортные накладные',
             'only_read' => 1,
+            'visible_always' => 0,
         ], 'text');
 
         $this->addField($db, 'cars', 'ownership_type', [
@@ -202,7 +204,11 @@ class InstallSabyModule extends Command
             ->first();
 
         if ($existing) {
-            $this->line("      {$entity}.{$field} уже установлено (id {$existing->id})");
+            $patch = array_intersect_key($attrs, array_flip(['type', 'title', 'relation_table', 'details', 'only_read', 'visible_always']));
+            if (count($patch)) {
+                $db->table('data_rows')->where('id', $existing->id)->update($patch);
+            }
+            $this->line("      {$entity}.{$field} обновлено (id {$existing->id})");
             return;
         }
 
