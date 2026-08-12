@@ -451,6 +451,10 @@ Route::middleware([
         Route::delete('routes', [App\Http\Controllers\Api\RouteController::class, 'delete']);
         Route::get('routes/{id}/tasks', [App\Http\Controllers\Api\RouteController::class, 'tasks']);
         Route::put('routes/{id}/tasks', [App\Http\Controllers\Api\RouteController::class, 'update_tasks']);
+        Route::get('routes/{id}/saby-waybills', [App\Http\Controllers\Api\SabyWaybillController::class, 'index']);
+        Route::post('routes/{id}/saby-waybills', [App\Http\Controllers\Api\SabyWaybillController::class, 'store']);
+        Route::get('routes/{id}/saby-waybills/check', [App\Http\Controllers\Api\SabyWaybillController::class, 'check']);
+        Route::post('saby-waybills/{id}/refresh', [App\Http\Controllers\Api\SabyWaybillController::class, 'refresh']);
         Route::get('route-tasks-view/fields', [App\Http\Controllers\Api\RouteController::class, 'tasks_view_fields']);
         Route::put('route-tasks-view/fields', [App\Http\Controllers\Api\RouteController::class, 'save_tasks_view_fields']);
 
