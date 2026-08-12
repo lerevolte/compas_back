@@ -128,7 +128,7 @@ class SabyClient
                 ], JSON_UNESCAPED_UNICODE), 'application/json; charset=utf-8')
                 ->post($url);
         } catch (\Throwable $e) {
-            Log::channel('saby')->error('rpc transport error', [
+            $this->log('error', 'rpc transport error', [
                 'method' => $method,
                 'error' => $e->getMessage(),
             ]);
@@ -138,7 +138,7 @@ class SabyClient
         $body = json_decode($response->body(), true);
 
         if (!is_array($body)) {
-            Log::channel('saby')->error('rpc bad response', [
+            $this->log('error', 'rpc bad response', [
                 'method' => $method,
                 'status' => $response->status(),
                 'body' => mb_substr($response->body(), 0, 500),
@@ -147,7 +147,7 @@ class SabyClient
         }
 
         if (isset($body['error'])) {
-            Log::channel('saby')->warning('rpc error', [
+            $this->log('warning', 'rpc error', [
                 'method' => $method,
                 'status' => $response->status(),
                 'error' => $body['error'],
@@ -155,6 +155,14 @@ class SabyClient
         }
 
         return $body;
+    }
+
+    private function log(string $level, string $message, array $context = []): void
+    {
+        try {
+            Log::channel('saby')->{$level}($message, $context);
+        } catch (\Throwable $e) {
+        }
     }
 
     private function isAuthError(array $response): bool

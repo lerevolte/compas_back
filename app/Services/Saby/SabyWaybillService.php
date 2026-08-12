@@ -96,7 +96,7 @@ class SabyWaybillService
 
         $config->mergeParams(['waybill_counter' => (int) $number]);
 
-        Log::channel('saby')->info('waybill created', [
+        $this->log('info', 'waybill created', [
             'route_id' => $route->id,
             'doc_id' => $waybill->doc_id,
             'number' => $waybill->number,
@@ -126,6 +126,14 @@ class SabyWaybillService
         ]);
 
         return $waybill;
+    }
+
+    private function log(string $level, string $message, array $context = []): void
+    {
+        try {
+            Log::channel('saby')->{$level}($message, $context);
+        } catch (\Throwable $e) {
+        }
     }
 
     public function buildDocument(Route $route): array
