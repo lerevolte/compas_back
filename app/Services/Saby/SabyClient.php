@@ -112,7 +112,7 @@ class SabyClient
 
     private function rpc(string $url, string $method, array $params, ?string $sid = null): array
     {
-        $headers = ['Content-Type' => 'application/json; charset=UTF-8'];
+        $headers = [];
         if ($sid) {
             $headers['X-SBISSessionID'] = $sid;
         }
@@ -125,7 +125,7 @@ class SabyClient
                     'method' => $method,
                     'params' => $params,
                     'id' => 0,
-                ], JSON_UNESCAPED_UNICODE), 'application/json')
+                ], JSON_UNESCAPED_UNICODE), 'application/json; charset=utf-8')
                 ->post($url);
         } catch (\Throwable $e) {
             Log::channel('saby')->error('rpc transport error', [
