@@ -26,12 +26,8 @@ $s = isset($model_settings) ? $model_settings : get_settings();
 @if(isset($s['account']['yandex_api_key']))
 <script src="https://api-maps.yandex.ru/2.1/?apikey={{ $s['account']['yandex_api_key'] }}&lang=ru_RU" type="text/javascript">
 </script>
-<script src="{{ asset('js/paintOnMap.js') }}"></script>
-@else
-<script src="https://api-maps.yandex.ru/2.1/?apikey=ef7607ff-665a-4e98-a65b-c73d97c69005&lang=ru_RU" type="text/javascript">
-</script>
-<script src="{{ asset('js/paintOnMap.js') }}"></script>
 @endif
+<script src="{{ asset('js/paintOnMap.js') }}"></script>
 <script src="{{ asset('js/coloris.min.js?v=') }}<?=random_int(1, 20000)?>"></script>
 <script src="{{ asset('js/main.js?v=') }}<?=random_int(1, 20000)?>"></script>
 <script src="{{ asset('js/common.js?v=16') }}"></script>

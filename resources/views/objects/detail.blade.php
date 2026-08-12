@@ -45,9 +45,6 @@ $write_perm = isset($settings['pages']['perms']['write_'.$slug]) && $settings['p
 @if(isset($settings['account']['yandex_api_key']))
 <script src="https://api-maps.yandex.ru/2.1/?apikey={{ $settings['account']['yandex_api_key'] }}&lang=ru_RU" type="text/javascript">
 </script>
-@else
-<script src="https://api-maps.yandex.ru/2.1/?apikey=ef7607ff-665a-4e98-a65b-c73d97c69005&lang=ru_RU" type="text/javascript">
-</script>
 @endif
 <script src="{{ asset('js/main.js?v=') }}<?=random_int(1, 20000)?>"></script>
 
