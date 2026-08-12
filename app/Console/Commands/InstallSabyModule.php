@@ -186,6 +186,7 @@ class InstallSabyModule extends Command
                     `pdf_url` text,
                     `cabinet_url` text,
                     `archive_url` text,
+                    `qr_url` text,
                     `payload` longtext,
                     `error` text,
                     `user_id` bigint unsigned DEFAULT NULL,
@@ -196,6 +197,10 @@ class InstallSabyModule extends Command
                     KEY `saby_waybills_doc_id_index` (`doc_id`)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             ");
+        }
+
+        if (!$sb->hasColumn('saby_waybills', 'qr_url')) {
+            $db->statement("ALTER TABLE `saby_waybills` ADD COLUMN `qr_url` TEXT NULL");
         }
     }
 

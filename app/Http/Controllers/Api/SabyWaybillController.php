@@ -105,6 +105,7 @@ class SabyWaybillController extends Controller
             'status' => $waybill->status,
             'pdf_url' => $waybill->pdf_url,
             'cabinet_url' => $waybill->cabinet_url,
+            'qr_url' => $waybill->qr_url,
             'created_at' => optional($waybill->created_at)->format('d.m.Y H:i'),
         ];
     }

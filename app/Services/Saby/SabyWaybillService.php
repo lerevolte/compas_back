@@ -113,16 +113,18 @@ class SabyWaybillService
         }
 
         $document = $this->client->call('СБИС.ПрочитатьДокумент', [
-            'Документ' => ['Идентификатор' => $waybill->doc_id],
+            'Документ' => ['Идентификатор' => $waybill->doc_id, 'ДопПоля' => 'ЭПД'],
         ]);
 
         $attachment = $document['Вложение'][0] ?? [];
+        $qr = trim((string) ($document['QRLink'] ?? ''));
 
         $waybill->update([
             'status' => $document['Состояние']['Название'] ?? $waybill->status,
             'pdf_url' => $document['СсылкаНаPDF'] ?? $waybill->pdf_url,
             'cabinet_url' => $document['СсылкаДляНашаОрганизация'] ?? ($attachment['СсылкаВКабинет'] ?? $waybill->cabinet_url),
             'archive_url' => $document['СсылкаНаАрхив'] ?? $waybill->archive_url,
+            'qr_url' => $qr !== '' ? $qr : $waybill->qr_url,
         ]);
 
         return $waybill;
