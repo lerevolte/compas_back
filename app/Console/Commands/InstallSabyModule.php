@@ -113,6 +113,21 @@ class InstallSabyModule extends Command
             'visible_always' => 0,
         ], 'text');
 
+        $this->addField($db, 'companies', 'inn', [
+            'type' => 'text',
+            'title' => 'ИНН',
+        ], 'varchar(20)');
+
+        $this->addField($db, 'companies', 'kpp', [
+            'type' => 'text',
+            'title' => 'КПП',
+        ], 'varchar(20)');
+
+        $this->addField($db, 'companies', 'address', [
+            'type' => 'text',
+            'title' => 'Юридический адрес',
+        ], 'text');
+
         $this->addField($db, 'cars', 'ownership_type', [
             'type' => 'select_dropdown',
             'title' => 'Тип владения ТС',
