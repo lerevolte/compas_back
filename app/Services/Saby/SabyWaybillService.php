@@ -190,13 +190,16 @@ class SabyWaybillService
         ];
 
         $requestNumber = trim((string) $this->attr($route, 'request_number'));
-        if ($requestNumber !== '') {
-            $document['СодИнфГО']['НомЗак'] = $requestNumber;
-            $requestDate = $this->formatDate($this->attr($route, 'request_date'));
-            if ($requestDate !== '') {
-                $document['СодИнфГО']['ДатаЗак'] = $requestDate;
-            }
+        if ($requestNumber === '') {
+            $requestNumber = (string) $route->id;
         }
+        $document['СодИнфГО']['НомЗак'] = $requestNumber;
+
+        $requestDate = $this->formatDate($this->attr($route, 'request_date'));
+        if ($requestDate === '') {
+            $requestDate = $document['СодИнфГО']['ДатаТрН'];
+        }
+        $document['СодИнфГО']['ДатаЗак'] = $requestDate;
 
         $document['СодИнфГО']['СвПер'] = $this->party($shipper);
 

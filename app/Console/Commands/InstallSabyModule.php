@@ -128,6 +128,11 @@ class InstallSabyModule extends Command
             'title' => 'Юридический адрес',
         ], 'text');
 
+        $this->addField($db, 'cars', 'number', [
+            'type' => 'text',
+            'title' => 'Гос. номер',
+        ], 'varchar(32)');
+
         $this->addField($db, 'cars', 'ownership_type', [
             'type' => 'select_dropdown',
             'title' => 'Тип владения ТС',
