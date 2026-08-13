@@ -407,11 +407,6 @@ class Table
                         $table_columns[$field->field]['can_create'] = 1;
                         if($field->relation_table && isset($settings['models'][$field->relation_table]) && isset($permissions_all[$settings['models'][$field->relation_table]->id]['create_p']) && !\Auth::user()->is_admin)
                             $table_columns[$field->field]['can_create'] = $permissions_all[$settings['models'][$field->relation_table]->id]['create_p'] == 'N' ? 0 : 1;
-                        if($field->relation_table && isset($settings['models'][$field->relation_table]) && isset($permissions_all[$settings['models'][$field->relation_table]->id]['update_p']) && !\Auth::user()->is_admin) {
-                            $table_columns[$field->field]['can_edit'] = $permissions_all[$settings['models'][$field->relation_table]->id]['update_p'] == 'N' || !$table_columns[$field->field]['can_edit'] ? 0 : 1;
-                            if(!$table_columns[$field->field]['can_edit'])
-                                $table_columns[$field->field]['read_only'] = 1;
-                        }
 
                     }
                 } elseif($field->type != 'text_group' && $field->type != 'password' && (!isset($settings[$slug]['perms'][$field->field]['read']) || $settings[$slug]['perms'][$field->field]['read'])) {
@@ -462,11 +457,6 @@ class Table
                         $table_columns[$field->field]['can_create'] = 1;
                         if($field->relation_table && isset($settings['models'][$field->relation_table]) && isset($permissions_all[$settings['models'][$field->relation_table]->id]['create_p']) && !\Auth::user()->is_admin)
                             $table_columns[$field->field]['can_create'] = $permissions_all[$settings['models'][$field->relation_table]->id]['create_p'] == 'N' ? 0 : 1;
-                        if($field->relation_table && isset($settings['models'][$field->relation_table]) && isset($permissions_all[$settings['models'][$field->relation_table]->id]['update_p']) && !\Auth::user()->is_admin) {
-                            $table_columns[$field->field]['can_edit'] = $permissions_all[$settings['models'][$field->relation_table]->id]['update_p'] == 'N' || !$table_columns[$field->field]['can_edit'] ? 0 : 1;
-                            if(!$table_columns[$field->field]['can_edit'])
-                                $table_columns[$field->field]['read_only'] = 1;
-                        }
 
                         if($field->relation_table && isset($restrictions_tariff['objects'][$field->relation_table]['count'])) {
                             if($restrictions_tariff['objects'][$field->relation_table]['count'] <= \DB::table($field->relation_table)->whereNull('deleted_at')->count()) {
@@ -579,11 +569,6 @@ class Table
                         $table_columns[$field->field]['can_create'] = 1;
                         if($field->relation_table && isset($settings['models'][$field->relation_table]) && isset($permissions_all[$settings['models'][$field->relation_table]->id]['create_p']) && !\Auth::user()->is_admin)
                             $table_columns[$field->field]['can_create'] = $permissions_all[$settings['models'][$field->relation_table]->id]['create_p'] == 'N' ? 0 : 1;
-                        if($field->relation_table && isset($settings['models'][$field->relation_table]) && isset($permissions_all[$settings['models'][$field->relation_table]->id]['update_p']) && !\Auth::user()->is_admin) {
-                            $table_columns[$field->field]['can_edit'] = $permissions_all[$settings['models'][$field->relation_table]->id]['update_p'] == 'N' || !$table_columns[$field->field]['can_edit'] ? 0 : 1;
-                            if(!$table_columns[$field->field]['can_edit'])
-                                $table_columns[$field->field]['read_only'] = 1;
-                        }
 
 
                         if($field->relation_table && isset($restrictions_tariff['objects'][$field->relation_table]['count'])) {
@@ -1088,11 +1073,6 @@ class Table
                         if($field->relation_table && isset($settings['models'][$field->relation_table]) && isset($permissions_all[$settings['models'][$field->relation_table]->id]['create_p']) && !\Auth::user()->is_admin)
                             $table_columns[$field->field]['can_create'] = $permissions_all[$settings['models'][$field->relation_table]->id]['create_p'] == 'N' ? 0 : 1;
 
-                        if($field->relation_table && isset($settings['models'][$field->relation_table]) && isset($permissions_all[$settings['models'][$field->relation_table]->id]['update_p']) && !\Auth::user()->is_admin) {
-                            $table_columns[$field->field]['can_edit'] = $permissions_all[$settings['models'][$field->relation_table]->id]['update_p'] == 'N' || !$table_columns[$field->field]['can_edit'] ? 0 : 1;
-                            if(!$table_columns[$field->field]['can_edit'])
-                                $table_columns[$field->field]['read_only'] = 1;
-                        }
 
                     }
                 }
