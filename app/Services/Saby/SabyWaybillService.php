@@ -94,8 +94,6 @@ class SabyWaybillService
             'user_id' => auth()->id(),
         ]);
 
-        $config->mergeParams(['waybill_counter' => (int) $number]);
-
         $this->log('info', 'waybill created', [
             'route_id' => $route->id,
             'doc_id' => $waybill->doc_id,
@@ -162,7 +160,7 @@ class SabyWaybillService
             $errors[] = 'В задачах маршрута не заполнено поле «Состав»';
         }
 
-        $deliveryAddress = $this->deliveryAddress($tasks);
+        $deliveryAddress = $this->deliveryAddress($tasks, $receiver);
         if ($deliveryAddress === '') {
             $errors[] = 'В задачах маршрута не заполнен адрес доставки';
         }
@@ -200,11 +198,7 @@ class SabyWaybillService
             }
         }
 
-        $carrier = $this->party($shipper);
-        $document['СодИнфГО']['СвПер'] = $carrier['ИдСв'] + array_filter([
-            'Адрес' => $carrier['Адрес'] ?? null,
-            'Контакт' => $carrier['Контакт'] ?? null,
-        ]);
+        $document['СодИнфГО']['СвПер'] = $this->party($shipper);
 
         $driver = $this->driver($route);
         if ($driver) {
@@ -298,7 +292,7 @@ class SabyWaybillService
             $driver['ИННФЛ'] = $inn;
         }
 
-        $phone = trim((string) $employee->phone);
+        $phone = $this->phoneValue($employee->phone);
         if ($phone !== '') {
             $driver['Тлф'] = [['value' => $phone]];
         }
@@ -329,8 +323,12 @@ class SabyWaybillService
 
         $params = [];
         $mark = $car->mark;
-        if ($mark && trim((string) $mark->name) !== '') {
-            $params['Марка'] = (string) $mark->name;
+        $markName = $mark ? trim((string) $mark->name) : '';
+        if ($markName === '') {
+            $markName = trim((string) $car->name);
+        }
+        if ($markName !== '') {
+            $params['Марка'] = $markName;
         }
         $model = $car->model;
         if ($model && trim((string) $model->name) !== '') {
@@ -338,11 +336,11 @@ class SabyWaybillService
         }
         $capacity = $this->number($car->weight_max);
         if ($capacity > 0) {
-            $params['Грузопод'] = $this->format($capacity);
+            $params['Грузопод'] = $this->format($capacity / 1000, 3);
         }
         $volume = $this->number($car->volume_max);
         if ($volume > 0) {
-            $params['Вместим'] = $this->format($volume);
+            $params['Вместим'] = $this->format($volume / 1000, 3);
         }
         if (count($params)) {
             $vehicle['ПарТС'] = $params;
@@ -441,17 +439,38 @@ class SabyWaybillService
         return $value !== '' ? $value : $default;
     }
 
-    private function deliveryAddress($tasks): string
+    private function deliveryAddress($tasks, ?Company $receiver = null): string
     {
-        $address = '';
+        $named = '';
+        $any = '';
         foreach ($tasks as $task) {
             $text = $this->addressText($task->address);
-            if ($text !== '') {
-                $address = $text;
+            if ($text === '') {
+                continue;
+            }
+            $any = $text;
+            if (!$this->isCoordinates($text)) {
+                $named = $text;
             }
         }
 
-        return $address;
+        if ($named !== '') {
+            return $named;
+        }
+
+        if ($receiver) {
+            $fallback = $this->companyAddress($receiver, $this->requisite($receiver));
+            if ($fallback !== '') {
+                return $fallback;
+            }
+        }
+
+        return $any;
+    }
+
+    private function isCoordinates(string $text): bool
+    {
+        return (bool) preg_match('/^\s*-?\d+\.\d+\s*[,\s]\s*-?\d+\.\d+\s*$/', $text);
     }
 
     private function addressText($raw): string
@@ -514,13 +533,73 @@ class SabyWaybillService
     private function phone(Company $company): string
     {
         foreach (['phone', 'work_phone'] as $field) {
-            $value = trim((string) $this->attr($company, $field));
+            $value = $this->phoneValue($this->attr($company, $field));
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        foreach ($this->companyPhoneFields() as $field) {
+            $value = $this->phoneValue($this->attr($company, $field));
             if ($value !== '') {
                 return $value;
             }
         }
 
         return '';
+    }
+
+    private function companyPhoneFields(): array
+    {
+        static $fields = null;
+
+        if ($fields !== null) {
+            return $fields;
+        }
+
+        $fields = [];
+        try {
+            $typeId = \DB::table('data_types')->where('slug', 'companies')->value('id');
+            if ($typeId) {
+                $fields = \DB::table('data_rows')
+                    ->where('data_type_id', $typeId)
+                    ->where('title', 'LIKE', '%елефон%')
+                    ->pluck('field')
+                    ->all();
+            }
+        } catch (\Throwable $e) {
+            $fields = [];
+        }
+
+        return $fields;
+    }
+
+    private function phoneValue($raw): string
+    {
+        if (is_array($raw)) {
+            foreach ($raw as $item) {
+                $value = $this->phoneValue($item);
+                if ($value !== '') {
+                    return $value;
+                }
+            }
+
+            return '';
+        }
+
+        $value = trim((string) $raw);
+        if ($value === '') {
+            return '';
+        }
+
+        if (str_starts_with($value, '[') || str_starts_with($value, '{')) {
+            $decoded = json_decode($value, true);
+            if (is_array($decoded)) {
+                return $this->phoneValue($decoded['value'] ?? $decoded);
+            }
+        }
+
+        return $value;
     }
 
     private function splitName(?string $name): array
@@ -536,11 +615,9 @@ class SabyWaybillService
 
     private function nextNumber(Route $route): string
     {
-        $config = $this->client->config();
-        $prefix = trim((string) $config->param('number_prefix', ''));
-        $counter = (int) $config->param('waybill_counter', 0) + 1;
+        $prefix = trim((string) $this->client->config()->param('number_prefix', ''));
 
-        return $prefix !== '' ? $prefix . $counter : (string) $counter;
+        return $prefix !== '' ? $prefix . $route->id : (string) $route->id;
     }
 
     private function attr($model, string $field)
