@@ -136,14 +136,28 @@ class FixRelationHistoryLinks extends Command
 
         $name = null;
         try {
-            if ($db->getSchemaBuilder()->hasTable($slug)) {
-                $raw = $db->table($slug)->where('id', $id)->value('name');
+            $sb = $db->getSchemaBuilder();
+            if ($sb->hasTable($slug)) {
+                $columns = ['name'];
+                foreach (['last_name', 'middle_name'] as $extra) {
+                    if ($sb->hasColumn($slug, $extra)) {
+                        $columns[] = $extra;
+                    }
+                }
+                $row = $db->table($slug)->where('id', $id)->first($columns);
+                $raw = $row->name ?? null;
                 if ($raw !== null) {
                     $name = (string) $raw;
                     if ($name !== '' && ($name[0] === '{' || $name[0] === '[')) {
                         $decoded = json_decode($name, true);
                         if (is_array($decoded)) {
                             $name = (string) ($decoded['value'] ?? reset($decoded));
+                        }
+                    }
+                    foreach (['last_name', 'middle_name'] as $extra) {
+                        $part = trim((string) ($row->{$extra} ?? ''));
+                        if ($part !== '') {
+                            $name .= ' ' . $part;
                         }
                     }
                     $name = trim($name);
