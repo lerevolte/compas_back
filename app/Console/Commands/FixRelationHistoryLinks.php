@@ -148,7 +148,7 @@ class FixRelationHistoryLinks extends Command
                     }
                 }
                 $row = $db->table($slug)->where('id', $id)->first($columns);
-                $raw = trim((string) ($row->name ?? '')) !== '' ? $row->name : ($row->display_name ?? null);
+                $raw = trim((string) ($row->display_name ?? '')) !== '' ? $row->display_name : ($row->name ?? null);
                 if ($raw !== null) {
                     $name = (string) $raw;
                     if ($name !== '' && ($name[0] === '{' || $name[0] === '[')) {
