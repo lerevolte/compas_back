@@ -675,6 +675,11 @@ class Field extends Model
                     $res = '';
                 }
             } else {
+                if(is_string($value) && $value !== '' && ($value[0] === '[' || $value[0] === '{')) {
+                    $decoded = json_decode($value, true);
+                    if(is_array($decoded))
+                        $value = array_key_exists('value', $decoded) ? $decoded['value'] : $decoded;
+                }
                 if(is_array($value)) {
                     $value = array_pop($value);
                 }
