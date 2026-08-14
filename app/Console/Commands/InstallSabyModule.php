@@ -110,7 +110,7 @@ class InstallSabyModule extends Command
             'type' => 'waybills',
             'title' => 'Транспортные накладные',
             'only_read' => 1,
-            'visible_always' => 0,
+            'visible_always' => 1,
         ], 'text');
 
         $this->addField($db, 'companies', 'inn', [
