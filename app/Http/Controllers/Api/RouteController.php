@@ -1074,7 +1074,8 @@ class RouteController extends Controller
             return response()->json(['code' => 500, 'error' => 'Не удалось создать задачу'], 500);
         }
 
-        // Клиент — копируем напрямую в колонку созданной задачи (зеркало адреса).
+        \App\Models\ObjectRelation::link('addresses', $address->id, 'logistic_tasks', $newId);
+
         if ($address->client_id) {
             $task = Task::find($newId);
             if ($task) {

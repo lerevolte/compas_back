@@ -434,6 +434,8 @@ Route::middleware([
         Route::post('routes/task-from-address', [App\Http\Controllers\Api\RouteController::class, 'task_from_address'])->name('routes.task_from_address');
         Route::post('routes/task-from-warehouse', [App\Http\Controllers\Api\RouteController::class, 'task_from_warehouse'])->name('routes.task_from_warehouse');
         Route::get('routes/{id}/task_filter', [App\Http\Controllers\Api\RouteController::class, 'task_filter'])->name('routes.task_filter');
+        Route::post('object-relations', [App\Http\Controllers\Api\ObjectRelationController::class, 'store'])->name('object_relations.store');
+        Route::get('object-relations/{slug}/{id}', [App\Http\Controllers\Api\ObjectRelationController::class, 'tree'])->name('object_relations.tree');
         Route::get('routes/{id}/saby-waybills', [App\Http\Controllers\Api\SabyWaybillController::class, 'index'])->name('saby.waybills');
         Route::post('routes/{id}/saby-waybills', [App\Http\Controllers\Api\SabyWaybillController::class, 'store'])->name('saby.waybills.store');
         Route::get('routes/{id}/saby-waybills/check', [App\Http\Controllers\Api\SabyWaybillController::class, 'check'])->name('saby.waybills.check');
