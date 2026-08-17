@@ -931,6 +931,7 @@ class B24EntitySync
                     $model->user_id = $responsibleId;
                 }
             }
+            $this->applyCompanyRequisites($model, $b24Id);
             if (!$model->exists) {
                 $model->saveQuietly();
                 $this->writeSyncCreatedHistory('companies', $model->id);
@@ -942,6 +943,130 @@ class B24EntitySync
         } finally {
             self::$muted = false;
         }
+    }
+
+    private function companyRequisiteColumns(): array
+    {
+        return array_values(array_filter(
+            ['inn', 'kpp', 'address'],
+            fn ($field) => Schema::hasColumn('companies', $field)
+        ));
+    }
+
+    private function companyRequisiteCommands(string $companyB24Id): array
+    {
+        return [
+            'req'  => 'crm.requisite.list?filter[ENTITY_TYPE_ID]=4&filter[ENTITY_ID]=' . $companyB24Id
+                . '&select[]=ID&select[]=RQ_INN&select[]=RQ_KPP',
+            'addr' => 'crm.address.list?filter[ANCHOR_TYPE_ID]=4&filter[ANCHOR_ID]=' . $companyB24Id
+                . '&filter[TYPE_ID]=6',
+        ];
+    }
+
+    private function parseCompanyRequisites($reqRows, $addrRows): array
+    {
+        $out = ['inn' => null, 'kpp' => null, 'address' => null];
+        foreach ((is_array($reqRows) ? $reqRows : []) as $requisite) {
+            $inn = trim((string) ($requisite['RQ_INN'] ?? ''));
+            $kpp = trim((string) ($requisite['RQ_KPP'] ?? ''));
+            if ($out['inn'] === null && $inn !== '') {
+                $out['inn'] = $inn;
+            }
+            if ($out['kpp'] === null && $kpp !== '') {
+                $out['kpp'] = $kpp;
+            }
+        }
+        foreach ((is_array($addrRows) ? $addrRows : []) as $address) {
+            $parts = [];
+            foreach (['POSTAL_CODE', 'COUNTRY', 'PROVINCE', 'REGION', 'CITY', 'ADDRESS_1', 'ADDRESS_2'] as $key) {
+                $value = trim((string) ($address[$key] ?? ''));
+                if ($value !== '') {
+                    $parts[] = $value;
+                }
+            }
+            if (count($parts)) {
+                $out['address'] = implode(', ', $parts);
+                break;
+            }
+        }
+        return $out;
+    }
+
+    private function applyCompanyRequisites(Company $model, string $b24Id): void
+    {
+        $columns = $this->companyRequisiteColumns();
+        if (!count($columns)) {
+            return;
+        }
+        try {
+            $res = $this->b24Batch($this->companyRequisiteCommands($b24Id));
+            $requisites = $this->parseCompanyRequisites($res['req'] ?? null, $res['addr'] ?? null);
+        } catch (\Throwable $e) {
+            Log::channel('bitrix24')->warning('entity-sync: company requisites fetch failed', [
+                'b24_id' => $b24Id,
+                'error'  => $e->getMessage(),
+            ]);
+            return;
+        }
+        foreach ($columns as $column) {
+            if ($requisites[$column] !== null) {
+                $model->{$column} = $requisites[$column];
+            }
+        }
+    }
+
+    public function backfillCompanyRequisites(): array
+    {
+        $out = ['checked' => 0, 'updated' => 0];
+        if (!Schema::hasTable('companies') || !Schema::hasColumn('companies', 'b24_id')) {
+            return $out;
+        }
+        $columns = $this->companyRequisiteColumns();
+        if (!count($columns)) {
+            return $out;
+        }
+        $companies = Company::whereNotNull('b24_id')
+            ->where('b24_id', '!=', '')
+            ->where(function ($q) use ($columns) {
+                foreach ($columns as $column) {
+                    $q->orWhereNull($column)->orWhere($column, '');
+                }
+            })
+            ->get();
+        $out['checked'] = count($companies);
+
+        self::$muted = true;
+        try {
+            foreach ($companies->chunk(25) as $chunk) {
+                $cmd = [];
+                foreach ($chunk as $company) {
+                    foreach ($this->companyRequisiteCommands((string) $company->b24_id) as $key => $command) {
+                        $cmd[$key . '_' . $company->id] = $command;
+                    }
+                }
+                $res = $this->b24Batch($cmd);
+                foreach ($chunk as $company) {
+                    $requisites = $this->parseCompanyRequisites(
+                        $res['req_' . $company->id] ?? null,
+                        $res['addr_' . $company->id] ?? null
+                    );
+                    foreach ($columns as $column) {
+                        $current = trim((string) ($company->{$column} ?? ''));
+                        if ($current === '' && $requisites[$column] !== null) {
+                            $company->{$column} = $requisites[$column];
+                        }
+                    }
+                    if ($company->isDirty()) {
+                        $this->writeSyncFieldHistory('companies', $company->id, $company->getDirty());
+                        $company->saveQuietly();
+                        $out['updated']++;
+                    }
+                }
+            }
+        } finally {
+            self::$muted = false;
+        }
+        return $out;
     }
 
     private function multiFieldValues($items): array
