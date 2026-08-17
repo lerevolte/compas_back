@@ -677,8 +677,12 @@ class Table
                         "mask" => "",
                         'is_another_title' => 0
                     );
+                    if(in_array($field->type, ['select_dropdown', 'status']) && isset($settings['list_values'][$field->id]))
+                        $table_columns[$field->field]['options'] = array_values($settings['list_values'][$field->id]);
                 } elseif(array_key_exists($field->field, $table_columns)) {
                     $table_columns[$field->field]['read_only'] = 1;
+                    if(in_array($field->type, ['select_dropdown', 'status']) && !isset($table_columns[$field->field]['options']) && isset($settings['list_values'][$field->id]))
+                        $table_columns[$field->field]['options'] = array_values($settings['list_values'][$field->id]);
                 }
             }
             if(!isset($table_columns['product_id'])) {
