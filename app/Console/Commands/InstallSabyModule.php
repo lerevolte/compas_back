@@ -451,6 +451,18 @@ class InstallSabyModule extends Command
             $db->statement("ALTER TABLE `saby_waybills` ADD COLUMN `qr_url` TEXT NULL");
         }
 
+        if (!$sb->hasTable('logistic_task_contact')) {
+            $db->statement("
+                CREATE TABLE `logistic_task_contact` (
+                    `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+                    `logistic_task_id` bigint unsigned NOT NULL,
+                    `contact_id` bigint unsigned NOT NULL,
+                    PRIMARY KEY (`id`),
+                    UNIQUE KEY `logistic_task_contact_pair_unique` (`logistic_task_id`, `contact_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ");
+        }
+
         if (!$sb->hasColumn('saby_waybills', 'task_id')) {
             $db->statement("ALTER TABLE `saby_waybills` ADD COLUMN `task_id` BIGINT UNSIGNED NULL");
             $db->statement("ALTER TABLE `saby_waybills` ADD INDEX `saby_waybills_task_id_index` (`task_id`)");

@@ -352,7 +352,7 @@ class EntityObject
                     ? json_decode($val, true)
                     : $val;
 
-                if ($field->type == 'relation' && $field->is_plural && $field->relation_table) {
+                if ($field->type == 'relation' && $field->is_plural && $field->relation_table && method_exists($current, $field->relation_table)) {
                     $relation_table = $field->relation_table;
                     $relation_query = $current->{$relation_table}();
                     if ($isTrashedCurrent && in_array(SoftDeletes::class, class_uses_recursive($relation_query->getRelated()))) {
@@ -587,7 +587,7 @@ class EntityObject
                         }
                         $val = (string)$current->{$subfield->field};
                         $field_value = ValueHelper::isJson($val) && $subfield->field != 'products' && is_array(json_decode($val, true)) ? json_decode($val, true) : $val;
-                        if($subfield->type == 'relation' && $subfield->is_plural && $subfield->relation_table) {
+                        if($subfield->type == 'relation' && $subfield->is_plural && $subfield->relation_table && method_exists($current, $subfield->relation_table)) {
                             $relation_table = $subfield->relation_table;
                             $field_value = $current->{$relation_table}->pluck('id')->toArray();
 
@@ -843,7 +843,7 @@ class EntityObject
 
                 $val = (string)$current->{$field->field};
                 $field_value = ValueHelper::isJson($val) && $field->field != 'products' && is_array(json_decode($val, true)) ? json_decode($val, true) : $val;
-                if($field->type == 'relation' && $field->is_plural && $field->relation_table) {
+                if($field->type == 'relation' && $field->is_plural && $field->relation_table && method_exists($current, $field->relation_table)) {
                     $relation_table = $field->relation_table;
                     $field_value = $current->{$relation_table}->pluck('id')->toArray();
                     if($slug == 'employees') {
@@ -1046,7 +1046,7 @@ class EntityObject
                         }
                         $val = (string)$current->{$subfield->field};
                         $field_value = ValueHelper::isJson($val) && $subfield->field != 'products' && is_array(json_decode($val, true)) ? json_decode($val, true) : $val;
-                        if($subfield->type == 'relation' && $subfield->is_plural && $subfield->relation_table) {
+                        if($subfield->type == 'relation' && $subfield->is_plural && $subfield->relation_table && method_exists($current, $subfield->relation_table)) {
                             $relation_table = $subfield->relation_table;
                             $field_value = $current->{$relation_table}->pluck('id')->toArray();
                         }
@@ -1863,7 +1863,7 @@ class EntityObject
                     if($field->field == 'products') {
                         $field_value = $item->getHtmlProducts();
                     }
-                    if($field->type == 'relation' && $field->is_plural && $field->relation_table) {
+                    if($field->type == 'relation' && $field->is_plural && $field->relation_table && method_exists($item, $field->relation_table)) {
                         $relation_table = $field->relation_table;
                         $relation_query = $item->{$relation_table}();
                         if (isset($item->deleted_at) && $item->deleted_at

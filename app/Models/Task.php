@@ -197,6 +197,11 @@ class Task extends Model
         return $this->belongsToMany(Client::class, 'logistic_task_client');
     }
 
+    public function contacts()
+    {
+        return $this->belongsToMany(\App\Models\Contact::class, 'logistic_task_contact', 'logistic_task_id', 'contact_id');
+    }
+
     public function employees()
     {
         return $this->belongsToMany(Employee::class, 'logistic_task_employee', 'logistic_task_id', 'employee_id');
