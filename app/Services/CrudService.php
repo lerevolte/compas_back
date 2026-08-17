@@ -455,11 +455,22 @@ class CrudService
                 }
             }
             foreach($model_fields as $mf) {
-                if($mf->type == 'relation' && !$mf->is_plural) {
+                if($mf->type == 'relation') {
                     $value = $ob->{$mf->field};
                     if(is_array($value) || (is_string($value) && strlen($value) && $value[0] === '[')) {
-                        $ids = \App\Models\Route::parseIdList($value);
-                        $ob->{$mf->field} = count($ids) ? $ids[0] : null;
+                        static $column_types = [];
+                        $key = $ob->getTable().'.'.$mf->field;
+                        if(!array_key_exists($key, $column_types)) {
+                            try {
+                                $column_types[$key] = \Schema::getColumnType($ob->getTable(), $mf->field);
+                            } catch (\Throwable $e) {
+                                $column_types[$key] = 'text';
+                            }
+                        }
+                        if(in_array($column_types[$key], ['integer', 'bigint', 'smallint'], true)) {
+                            $ids = \App\Models\Route::parseIdList($value);
+                            $ob->{$mf->field} = count($ids) ? $ids[0] : null;
+                        }
                     }
                 }
                 if($mf->type == 'status' && ($ob->{$mf->field} === null || $ob->{$mf->field} === '')) {
