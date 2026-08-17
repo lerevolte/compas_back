@@ -68,7 +68,31 @@ https://github.com/lerevolte/compas_f
    Страница модулей будет дёргать именно эти команды — не завязывать
    установку/удаление на ручной SQL или шаги вне команд. Существующие пары:
    deals (`entity:install-deals`/`entity:uninstall-deals`),
-   contacts (`entity:install-contacts`/`entity:uninstall-contacts`).
+   contacts (`entity:install-contacts`/`entity:uninstall-contacts`),
+   saby (`saby:install`/`saby:uninstall`).
+7. **Модуль обязан прописываться во вкладку «Модули» деталки.** Пользователь
+   должен видеть, какие поля сущностей использует модуль. Эталон — модуль
+   логистики (`logistic:sync-module-fields`), рабочий пример в install/uninstall —
+   `saby:install`. Установка делает пять вещей (все идемпотентно):
+   - строка в `modules` (`slug`, `name`, `enabled=1`), если её нет;
+   - в каждой затронутой сущности — `field_sections` с `page=<slug сущности>`,
+     `module=<slug модуля>`, `name='Используемые поля в модуле'`;
+   - у каждого используемого поля в `data_rows`: `module` — JSON-массив слагов
+     модулей (добавляем свой, не затирая чужие), `module_section_id` — JSON-массив
+     id секций (так же);
+   - порядок полей внутри вкладки — строки `section_fields_sort`
+     (`section_id`, `field_id`, `sort`);
+   - в `settings` (`type='menu'`, `entity=<slug сущности>`) — вкладка `modules`
+     с `component.name='AsyncComponentWrapper'` и дочерним пунктом
+     `{title, alias: '<slug модуля>', enabled: 1}`.
+   Удаление снимает ровно это: отвязывает поля (убирает свой слаг и id секций,
+   чужие модули не трогает), удаляет `section_fields_sort` и секции модуля,
+   вычищает дочерний пункт меню по `alias` и строку из `modules`.
+   Отдельного кода на фронте и в API не нужно: вкладку отдаёт общий эндпоинт
+   `objects/{model}/{id}/{module}/compose` → `EntityObject::detail_module`,
+   который берёт поля по слагу модуля.
+   После мутаций — `Settings::clear_cache()` и бамп `local_cache` по
+   `url = "fields/{slug}"`, иначе пользователи увидят стейл.
 
 ## Структура кода
 

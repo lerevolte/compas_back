@@ -78,6 +78,28 @@ section_fields_sort, modules, …` (с сохранением id).
 - `module` у `data_rows` и `field_sections` — slug модуля (например `logistic`),
   чтобы поля показывались в разделе «Используемые поля в модуле».
 
+### 2а. Если ставится МОДУЛЬ, а не сущность
+
+Модуль обязан прописать себя во вкладку «Модули» деталки каждой сущности,
+поля которой использует. Эталон — `logistic:sync-module-fields`, компактный
+пример прямо в install/uninstall — `saby:install` / `saby:uninstall`.
+
+| Что | Где |
+|---|---|
+| строка модуля | `modules` (`slug`, `name`, `enabled=1`) |
+| раздел полей | `field_sections`: `page=<slug сущности>`, `module=<slug модуля>`, `name='Используемые поля в модуле'` |
+| привязка поля | `data_rows.module` += slug модуля, `data_rows.module_section_id` += id раздела (оба — JSON-массивы, чужие значения не затирать) |
+| порядок полей | `section_fields_sort` (`section_id`, `field_id`, `sort`) |
+| пункт меню | `settings(type=menu, entity=<slug>)`: вкладка `modules` с `component.name='AsyncComponentWrapper'` и дочерним `{title, alias: '<slug модуля>', enabled: 1}` |
+
+Кода на фронте и отдельного эндпоинта не требуется: вкладку отдаёт общий
+`objects/{model}/{id}/{module}/compose` → `EntityObject::detail_module`.
+Команда удаления обязана снять всё перечисленное: отвязать поля (убрать свой
+slug и id разделов, не трогая другие модули), удалить `section_fields_sort` и
+разделы модуля, вычистить дочерний пункт меню по `alias`, удалить строку из
+`modules`. После мутаций — `Settings::clear_cache()` и бамп `local_cache`
+по `url = "fields/{slug}"`.
+
 ### 3. Фронтенд-метаданные (репозиторий ../compas)
 
 - `entities.json` — добавить/проверить запись `{slug, title_singular,
@@ -113,6 +135,9 @@ php artisan entity:install-addresses all-tenants
 - [ ] `data_rows` — все поля; верные `section_id` и `module_section_id` (`[id]`);
 - [ ] `sidebar_items` — пункт меню (slug, link `/objects/<slug>`, enabled=1);
 - [ ] `settings(menu)` — вкладки карточки;
+- [ ] для модуля: строка в `modules`, разделы `module=<slug>`, привязка полей
+      (`module` + `module_section_id`), `section_fields_sort`, пункт меню
+      `alias=<slug>` — и всё это снимается командой удаления;
 - [ ] модель `App\Models\<Name>` существует и `$table` совпадает со slug;
 - [ ] фронт: `entities.json` + `meta.json`;
 - [ ] поставить в admin_seeds → проверить на admin_test4 → раскатать на все.
