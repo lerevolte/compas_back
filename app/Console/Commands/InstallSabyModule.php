@@ -27,6 +27,18 @@ class InstallSabyModule extends Command
         ['value' => 'NE', 'label' => 'NE — Без упаковки'],
     ];
 
+    public const MODULE_SLUG = 'saby';
+    public const MODULE_NAME = 'Транспортные накладные';
+
+    private const MODULE_FIELDS = [
+        'routes' => ['saby_waybills', 'receiver_company_id', 'request_number', 'request_date', 'company_id', 'car_id', 'employee_id', 'date'],
+        'companies' => ['name', 'inn', 'kpp', 'address'],
+        'employees' => ['name', 'phone', 'inn'],
+        'cars' => ['name', 'number', 'ownership_type', 'osago_mark', 'osago_model', 'weight_max', 'volume_max'],
+        'logistic_tasks' => ['products', 'address'],
+        'products' => ['name', 'packing_method', 'tare_type', 'weight', 'volume'],
+    ];
+
     private const OWNERSHIP_TYPES = [
         ['value' => '1', 'label' => 'Собственность'],
         ['value' => '2', 'label' => 'Совместная собственность супругов'],
@@ -155,9 +167,211 @@ class InstallSabyModule extends Command
             'details' => json_encode(['options' => self::TARE_TYPES], JSON_UNESCAPED_UNICODE),
         ], 'text');
 
+        $this->installModuleTab($db, $label);
+
         $this->clearCache();
 
         $this->line("    [{$label}] модуль установлен");
+    }
+
+    private function installModuleTab(ConnectionInterface $db, string $label): void
+    {
+        $now = now();
+
+        if (!$db->table('modules')->where('slug', self::MODULE_SLUG)->exists()) {
+            $db->table('modules')->insert([
+                'name' => self::MODULE_NAME,
+                'config' => '',
+                'entities' => '',
+                'slug' => self::MODULE_SLUG,
+                'enabled' => 1,
+            ]);
+            $this->line("      добавлена запись модуля " . self::MODULE_SLUG . " в modules");
+        }
+
+        foreach (self::MODULE_FIELDS as $entity => $fields) {
+            $typeId = $db->table('data_types')->where('slug', $entity)->value('id');
+            if (!$typeId) {
+                continue;
+            }
+
+            $sectionId = $db->table('field_sections')
+                ->where('page', $entity)
+                ->where('module', self::MODULE_SLUG)
+                ->value('id');
+
+            if (!$sectionId) {
+                $sectionId = $db->table('field_sections')->insertGetId([
+                    'sort' => 0, 'name' => 'Используемые поля в модуле', 'domain_key' => null, 'page' => $entity,
+                    'created_at' => $now, 'updated_at' => $now, 'account_id' => null, 'hide' => 0,
+                    'column_id' => 1, 'module' => self::MODULE_SLUG, 'parent_id' => null, '_lft' => 0, '_rgt' => 0, 'is_short' => null,
+                ]);
+            }
+
+            $names = $fields;
+            if ($entity === 'companies') {
+                $names = array_merge($names, $this->phoneFields($db, $typeId));
+            }
+
+            $rows = $db->table('data_rows')
+                ->where('data_type_id', $typeId)
+                ->where('is_remove', 0)
+                ->whereIn('field', $names)
+                ->get(['id', 'field', 'module', 'module_section_id']);
+
+            $ordered = [];
+            foreach ($names as $name) {
+                $row = $rows->firstWhere('field', $name);
+                if (!$row) {
+                    continue;
+                }
+                $ordered[] = $row->id;
+                $this->attachField($db, $row, (int) $sectionId);
+            }
+
+            $this->syncSectionSort($db, (int) $sectionId, $ordered);
+            $this->syncMenu($db, $entity);
+
+            $db->table('local_cache')->where('url', "fields/{$entity}")->update(['updated_at' => $now]);
+
+            $this->line("      [{$entity}] секция модуля #{$sectionId}, полей: " . count($ordered));
+        }
+    }
+
+    private function phoneFields(ConnectionInterface $db, int $typeId): array
+    {
+        return $db->table('data_rows')
+            ->where('data_type_id', $typeId)
+            ->where('is_remove', 0)
+            ->where('title', 'LIKE', '%елефон%')
+            ->pluck('field')
+            ->all();
+    }
+
+    private function attachField(ConnectionInterface $db, $row, int $sectionId): void
+    {
+        $modules = $this->decodeJsonList($row->module);
+        $sections = array_map('intval', $this->decodeJsonList($row->module_section_id));
+
+        $changed = false;
+        if (!in_array(self::MODULE_SLUG, $modules, true)) {
+            $modules[] = self::MODULE_SLUG;
+            $changed = true;
+        }
+        if (!in_array($sectionId, $sections, true)) {
+            $sections[] = $sectionId;
+            $changed = true;
+        }
+
+        if ($changed) {
+            $db->table('data_rows')->where('id', $row->id)->update([
+                'module' => json_encode(array_values($modules)),
+                'module_section_id' => json_encode(array_values($sections)),
+            ]);
+        }
+    }
+
+    private function syncSectionSort(ConnectionInterface $db, int $sectionId, array $ordered): void
+    {
+        $db->table('section_fields_sort')->where('section_id', $sectionId)->delete();
+
+        if (!$ordered) {
+            return;
+        }
+
+        $insert = [];
+        foreach ($ordered as $i => $fieldId) {
+            $insert[] = ['section_id' => $sectionId, 'field_id' => $fieldId, 'sort' => $i];
+        }
+        $db->table('section_fields_sort')->insert($insert);
+    }
+
+    private function syncMenu(ConnectionInterface $db, string $entity): void
+    {
+        $child = ['title' => self::MODULE_NAME, 'sort' => 2, 'enabled' => 1, 'id' => 0, 'alias' => self::MODULE_SLUG];
+
+        $menus = $db->table('settings')->where(['type' => 'menu', 'entity' => $entity])->get();
+
+        if ($menus->isEmpty()) {
+            $db->table('settings')->insert([
+                'key' => 'menu', 'display_name' => null,
+                'value' => json_encode([
+                    ['title' => 'Общие', 'tab' => 'order', 'sort' => 0, 'enabled' => 1, 'id' => 0],
+                    [
+                        'title' => 'Модули', 'tab' => 'modules', 'sort' => 1, 'enabled' => 1, 'id' => 1,
+                        'childs' => [$child],
+                        'component' => ['name' => 'AsyncComponentWrapper'],
+                        'roles_read' => [], 'has_roles_read' => false,
+                    ],
+                    ['title' => 'История изменений', 'tab' => 'history', 'sort' => 3, 'enabled' => true, 'id' => 3, 'has_roles_read' => false, 'roles_read' => null],
+                ], JSON_UNESCAPED_SLASHES),
+                'type' => 'menu', 'entity' => $entity, 'user_id' => null,
+            ]);
+            return;
+        }
+
+        foreach ($menus as $menu) {
+            $tabs = json_decode($menu->value, true);
+            if (!is_array($tabs)) {
+                continue;
+            }
+
+            $modulesKey = null;
+            foreach ($tabs as $k => $tab) {
+                if (($tab['tab'] ?? null) === 'modules') {
+                    $modulesKey = $k;
+                    break;
+                }
+            }
+
+            if ($modulesKey === null) {
+                $maxSort = 0;
+                $maxId = 0;
+                foreach ($tabs as $tab) {
+                    $maxSort = max($maxSort, (int) ($tab['sort'] ?? 0));
+                    $maxId = max($maxId, (int) ($tab['id'] ?? 0));
+                }
+                $tabs[] = [
+                    'title' => 'Модули', 'tab' => 'modules', 'sort' => $maxSort + 1, 'enabled' => 1, 'id' => $maxId + 1,
+                    'childs' => [$child],
+                    'component' => ['name' => 'AsyncComponentWrapper'],
+                    'roles_read' => [], 'has_roles_read' => false,
+                ];
+            } else {
+                $tabs[$modulesKey]['enabled'] = 1;
+                $childs = $tabs[$modulesKey]['childs'] ?? [];
+                $exists = false;
+                foreach ($childs as $ck => $item) {
+                    if (($item['alias'] ?? null) === self::MODULE_SLUG) {
+                        $childs[$ck]['enabled'] = 1;
+                        $childs[$ck]['title'] = self::MODULE_NAME;
+                        $exists = true;
+                    }
+                }
+                if (!$exists) {
+                    $childs[] = $child;
+                }
+                $tabs[$modulesKey]['childs'] = array_values($childs);
+            }
+
+            $db->table('settings')->where('id', $menu->id)->update([
+                'value' => json_encode($tabs, JSON_UNESCAPED_SLASHES),
+            ]);
+        }
+    }
+
+    private function decodeJsonList($value): array
+    {
+        if ($value === null || $value === '') {
+            return [];
+        }
+
+        $decoded = json_decode((string) $value, true);
+        if (is_array($decoded)) {
+            return array_values(array_filter($decoded, fn ($v) => $v !== null && $v !== ''));
+        }
+
+        return [(string) $value];
     }
 
     private function ensureTables(ConnectionInterface $db): void

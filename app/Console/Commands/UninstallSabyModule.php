@@ -68,6 +68,8 @@ class UninstallSabyModule extends Command
 
     private function uninstallFrom(ConnectionInterface $db, string $label): void
     {
+        $this->removeModuleTab($db, $label);
+
         foreach (self::FIELDS as $entity => $fields) {
             $dataType = $db->table('data_types')->where('slug', $entity)->first();
             if (!$dataType) {
@@ -96,5 +98,91 @@ class UninstallSabyModule extends Command
             \App\Models\Settings::clear_cache();
         } catch (\Throwable $e) {
         }
+    }
+
+    private function removeModuleTab(ConnectionInterface $db, string $label): void
+    {
+        $slug = InstallSabyModule::MODULE_SLUG;
+
+        $sections = $db->table('field_sections')->where('module', $slug)->get(['id', 'page']);
+        $sectionIds = $sections->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        if (count($sectionIds)) {
+            $rows = $db->table('data_rows')
+                ->where(function ($q) use ($slug) {
+                    $q->where('module', 'LIKE', "%\"{$slug}\"%")->orWhere('module', $slug);
+                })
+                ->orWhere(function ($q) use ($sectionIds) {
+                    foreach ($sectionIds as $id) {
+                        $q->orWhere('module_section_id', 'LIKE', "%{$id}%");
+                    }
+                })
+                ->get(['id', 'module', 'module_section_id']);
+
+            $detached = 0;
+            foreach ($rows as $row) {
+                $modules = $this->decodeJsonList($row->module);
+                $rowSections = array_map('intval', $this->decodeJsonList($row->module_section_id));
+
+                $newSections = array_values(array_diff($rowSections, $sectionIds));
+                $newModules = array_values(array_filter($modules, fn ($m) => $m !== $slug));
+
+                if ($newSections === $rowSections && $newModules === $modules) {
+                    continue;
+                }
+
+                $db->table('data_rows')->where('id', $row->id)->update([
+                    'module' => $newModules ? json_encode($newModules) : null,
+                    'module_section_id' => $newSections ? json_encode($newSections) : null,
+                ]);
+                $detached++;
+            }
+
+            $db->table('section_fields_sort')->whereIn('section_id', $sectionIds)->delete();
+            $db->table('field_sections')->whereIn('id', $sectionIds)->delete();
+
+            $this->line("    [{$label}] отвязано полей: {$detached}, удалено секций модуля: " . count($sectionIds));
+        }
+
+        foreach ($db->table('settings')->where('type', 'menu')->get() as $menu) {
+            $tabs = json_decode($menu->value, true);
+            if (!is_array($tabs)) {
+                continue;
+            }
+
+            $changed = false;
+            foreach ($tabs as $k => $tab) {
+                if (($tab['tab'] ?? null) !== 'modules' || !isset($tab['childs'])) {
+                    continue;
+                }
+                $childs = array_values(array_filter($tab['childs'], fn ($child) => ($child['alias'] ?? null) !== $slug));
+                if (count($childs) !== count($tab['childs'])) {
+                    $tabs[$k]['childs'] = $childs;
+                    $changed = true;
+                }
+            }
+
+            if ($changed) {
+                $db->table('settings')->where('id', $menu->id)->update([
+                    'value' => json_encode($tabs, JSON_UNESCAPED_SLASHES),
+                ]);
+            }
+        }
+
+        $db->table('modules')->where('slug', $slug)->delete();
+    }
+
+    private function decodeJsonList($value): array
+    {
+        if ($value === null || $value === '') {
+            return [];
+        }
+
+        $decoded = json_decode((string) $value, true);
+        if (is_array($decoded)) {
+            return array_values(array_filter($decoded, fn ($v) => $v !== null && $v !== ''));
+        }
+
+        return [(string) $value];
     }
 }
