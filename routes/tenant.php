@@ -436,9 +436,9 @@ Route::middleware([
         Route::get('routes/{id}/task_filter', [App\Http\Controllers\Api\RouteController::class, 'task_filter'])->name('routes.task_filter');
         Route::post('object-relations', [App\Http\Controllers\Api\ObjectRelationController::class, 'store'])->name('object_relations.store');
         Route::get('object-relations/{slug}/{id}', [App\Http\Controllers\Api\ObjectRelationController::class, 'tree'])->name('object_relations.tree');
-        Route::get('routes/{id}/saby-waybills', [App\Http\Controllers\Api\SabyWaybillController::class, 'index'])->name('saby.waybills');
-        Route::post('routes/{id}/saby-waybills', [App\Http\Controllers\Api\SabyWaybillController::class, 'store'])->name('saby.waybills.store');
-        Route::get('routes/{id}/saby-waybills/check', [App\Http\Controllers\Api\SabyWaybillController::class, 'check'])->name('saby.waybills.check');
+        Route::get('logistic_tasks/{id}/saby-waybills', [App\Http\Controllers\Api\SabyWaybillController::class, 'index'])->name('saby.waybills');
+        Route::post('logistic_tasks/{id}/saby-waybills', [App\Http\Controllers\Api\SabyWaybillController::class, 'store'])->name('saby.waybills.store');
+        Route::get('logistic_tasks/{id}/saby-waybills/check', [App\Http\Controllers\Api\SabyWaybillController::class, 'check'])->name('saby.waybills.check');
         Route::post('saby-waybills/{id}/refresh', [App\Http\Controllers\Api\SabyWaybillController::class, 'refresh'])->name('saby.waybills.refresh');
         // Настройки полей вкладки «Маршрут списком» (общие на портал).
         Route::get('route-tasks-view/fields', [App\Http\Controllers\Api\RouteController::class, 'tasks_view_fields'])->name('routes.tasks_view_fields');

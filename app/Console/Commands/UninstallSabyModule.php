@@ -16,6 +16,7 @@ class UninstallSabyModule extends Command
 
     private const FIELDS = [
         'routes' => ['receiver_company_id', 'request_number', 'request_date', 'saby_waybills'],
+        'logistic_tasks' => ['company_id', 'contact_id', 'saby_waybills'],
         'companies' => ['inn', 'kpp', 'address'],
         'cars' => ['ownership_type', 'number'],
         'employees' => ['inn'],

@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Route;
+use App\Models\Task;
 use App\Models\SabyWaybill;
 use App\Services\Saby\SabyException;
 use App\Services\Saby\SabyValidationException;
@@ -18,7 +18,7 @@ class SabyWaybillController extends Controller
             return response()->json(['enabled' => false, 'data' => []]);
         }
 
-        $waybills = SabyWaybill::where('route_id', $id)
+        $waybills = SabyWaybill::where('task_id', $id)
             ->orderByDesc('id')
             ->get()
             ->map(fn ($item) => $this->present($item));
@@ -36,13 +36,13 @@ class SabyWaybillController extends Controller
             return response()->json(['message' => 'Модуль Saby не настроен'], 422);
         }
 
-        $route = Route::find($id);
-        if (!$route) {
-            return response()->json(['message' => 'Маршрут не найден'], 404);
+        $task = Task::find($id);
+        if (!$task) {
+            return response()->json(['message' => 'Задача не найдена'], 404);
         }
 
         try {
-            $waybill = $service->create($route);
+            $waybill = $service->create($task);
         } catch (SabyValidationException $e) {
             return response()->json([
                 'message' => $e->getMessage(),
@@ -62,14 +62,14 @@ class SabyWaybillController extends Controller
             return response()->json(['enabled' => false, 'errors' => []]);
         }
 
-        $route = Route::find($id);
-        if (!$route) {
-            return response()->json(['message' => 'Маршрут не найден'], 404);
+        $task = Task::find($id);
+        if (!$task) {
+            return response()->json(['message' => 'Задача не найдена'], 404);
         }
 
         return response()->json([
             'enabled' => true,
-            'errors' => $service->validate($route),
+            'errors' => $service->validate($task),
         ]);
     }
 
@@ -98,6 +98,7 @@ class SabyWaybillController extends Controller
     {
         return [
             'id' => $waybill->id,
+            'task_id' => $waybill->task_id,
             'route_id' => $waybill->route_id,
             'doc_id' => $waybill->doc_id,
             'number' => $waybill->number,

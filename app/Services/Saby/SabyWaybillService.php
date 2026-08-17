@@ -7,6 +7,7 @@ use App\Models\Company;
 use App\Models\Employee;
 use App\Models\Requisite;
 use App\Models\Route;
+use App\Models\Task;
 use App\Models\SabyWaybill;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -37,12 +38,12 @@ class SabyWaybillService
         return SabyClient::ready();
     }
 
-    public function create(Route $route): SabyWaybill
+    public function create(Task $task): SabyWaybill
     {
-        $document = $this->buildDocument($route);
+        $document = $this->buildDocument($task);
         $config = $this->client->config();
 
-        $number = $this->nextNumber($route);
+        $number = $this->nextNumber($task);
         $document['СодИнфГО']['НомерТрН'] = $number;
 
         $generated = $this->client->call('СБИС.СгенерироватьВложение', [
@@ -80,7 +81,8 @@ class SabyWaybillService
         $attachment = $written['Вложение'][0] ?? [];
 
         $waybill = SabyWaybill::create([
-            'route_id' => $route->id,
+            'task_id' => $task->id,
+            'route_id' => $task->route_id,
             'doc_id' => $written['Идентификатор'] ?? null,
             'attachment_id' => $attachment['Идентификатор'] ?? null,
             'number' => $written['Номер'] ?? $number,
@@ -95,7 +97,7 @@ class SabyWaybillService
         ]);
 
         $this->log('info', 'waybill created', [
-            'route_id' => $route->id,
+            'task_id' => $task->id,
             'doc_id' => $waybill->doc_id,
             'number' => $waybill->number,
             'flc_errors' => $attachment['КоличествоОшибок'] ?? null,
@@ -136,33 +138,30 @@ class SabyWaybillService
         }
     }
 
-    public function buildDocument(Route $route): array
+    public function buildDocument(Task $task): array
     {
         $errors = [];
 
-        $shipper = $this->companyOf($route, 'company_id');
+        $route = $task->route_id ? Route::find($task->route_id) : null;
+
+        $shipper = $route ? $this->companyOf($route, 'company_id') : null;
         if (!$shipper) {
-            $errors[] = 'В маршруте не заполнено поле «Компания» (отправитель)';
+            $errors[] = 'У маршрута задачи не заполнено поле «Компания» (грузоотправитель)';
         }
 
-        $receiver = $this->companyOf($route, 'receiver_company_id');
+        $receiver = $this->companyOf($task, 'company_id');
         if (!$receiver) {
-            $errors[] = 'В маршруте не заполнено поле «Получатель»';
+            $errors[] = 'В задаче не заполнено поле «Компания» (грузополучатель)';
         }
 
-        $tasks = $route->logistic_tasks()->get();
-        if ($tasks->isEmpty()) {
-            $errors[] = 'К маршруту не привязано ни одной задачи логистики';
-        }
-
-        $cargo = $this->cargo($tasks);
+        $cargo = $this->cargo([$task]);
         if (!count($cargo)) {
-            $errors[] = 'В задачах маршрута не заполнено поле «Состав»';
+            $errors[] = 'В задаче не заполнено поле «Состав»';
         }
 
-        $deliveryAddress = $this->deliveryAddress($tasks, $receiver);
+        $deliveryAddress = $this->taskAddress($task, $receiver);
         if ($deliveryAddress === '') {
-            $errors[] = 'В задачах маршрута не заполнен адрес доставки';
+            $errors[] = 'В задаче не заполнен адрес доставки';
         }
 
         if ($shipper && $this->inn($shipper) === '') {
@@ -178,8 +177,8 @@ class SabyWaybillService
 
         $document = [
             'СодИнфГО' => [
-                'ДатаТрН' => $this->formatDate($route->date) ?: now()->format('d.m.Y'),
-                'НомерТрН' => (string) $route->id,
+                'ДатаТрН' => $this->formatDate($task->delivery_date) ?: ($route ? $this->formatDate($route->date) : '') ?: now()->format('d.m.Y'),
+                'НомерТрН' => (string) $task->id,
                 'СвГО' => ['РекИдентГО' => $this->party($shipper)],
                 'СвГП' => [
                     'РекИдентГП' => $this->party($receiver),
@@ -189,26 +188,17 @@ class SabyWaybillService
             ],
         ];
 
-        $requestNumber = trim((string) $this->attr($route, 'request_number'));
-        if ($requestNumber === '') {
-            $requestNumber = (string) $route->id;
-        }
-        $document['СодИнфГО']['НомЗак'] = $requestNumber;
-
-        $requestDate = $this->formatDate($this->attr($route, 'request_date'));
-        if ($requestDate === '') {
-            $requestDate = $document['СодИнфГО']['ДатаТрН'];
-        }
-        $document['СодИнфГО']['ДатаЗак'] = $requestDate;
+        $document['СодИнфГО']['НомЗак'] = (string) $task->id;
+        $document['СодИнфГО']['ДатаЗак'] = $document['СодИнфГО']['ДатаТрН'];
 
         $document['СодИнфГО']['СвПер'] = $this->party($shipper);
 
-        $driver = $this->driver($route);
+        $driver = $this->driver($task);
         if ($driver) {
             $document['СодИнфГО']['СвВодит'] = $driver;
         }
 
-        $vehicle = $this->vehicle($route);
+        $vehicle = $route ? $this->vehicle($route) : null;
         if ($vehicle) {
             $document['СодИнфГО']['СвТС'] = ['ТС' => $vehicle];
         }
@@ -216,10 +206,10 @@ class SabyWaybillService
         return $document;
     }
 
-    public function validate(Route $route): array
+    public function validate(Task $task): array
     {
         try {
-            $this->buildDocument($route);
+            $this->buildDocument($task);
         } catch (SabyValidationException $e) {
             return $e->errors();
         }
@@ -276,9 +266,15 @@ class SabyWaybillService
         return $party;
     }
 
-    private function driver(Route $route): ?array
+    private function driver(Task $task): ?array
     {
-        $employeeId = $route->firstEmployeeId();
+        $ids = Route::parseIdList($this->attr($task, 'employee_id'));
+        $employeeId = count($ids) ? $ids[0] : null;
+
+        if (!$employeeId && \Schema::hasTable('logistic_task_employee')) {
+            $employeeId = \DB::table('logistic_task_employee')->where('logistic_task_id', $task->id)->value('employee_id');
+        }
+
         if (!$employeeId) {
             return null;
         }
@@ -442,24 +438,15 @@ class SabyWaybillService
         return $value !== '' ? $value : $default;
     }
 
-    private function deliveryAddress($tasks, ?Company $receiver = null): string
+    private function taskAddress(Task $task, ?Company $receiver = null): string
     {
-        $named = '';
-        $any = '';
-        foreach ($tasks as $task) {
-            $text = $this->addressText($task->address);
-            if ($text === '') {
-                continue;
-            }
-            $any = $text;
-            if (!$this->isCoordinates($text)) {
-                $named = $text;
-            }
+        $text = $this->addressText($task->address);
+
+        if ($text !== '' && !$this->isCoordinates($text)) {
+            return $text;
         }
 
-        if ($named !== '') {
-            return $named;
-        }
+        $any = $text;
 
         if ($receiver) {
             $fallback = $this->companyAddress($receiver, $this->requisite($receiver));
@@ -493,9 +480,9 @@ class SabyWaybillService
         return trim($raw);
     }
 
-    private function companyOf(Route $route, string $field): ?Company
+    private function companyOf($model, string $field): ?Company
     {
-        $value = $this->attr($route, $field);
+        $value = $this->attr($model, $field);
         $ids = Route::parseIdList($value);
         $id = count($ids) ? $ids[0] : null;
 
@@ -616,11 +603,11 @@ class SabyWaybillService
         ], fn ($v) => $v !== '');
     }
 
-    private function nextNumber(Route $route): string
+    private function nextNumber(Task $task): string
     {
         $prefix = trim((string) $this->client->config()->param('number_prefix', ''));
 
-        return $prefix !== '' ? $prefix . $route->id : (string) $route->id;
+        return $prefix !== '' ? $prefix . $task->id : (string) $task->id;
     }
 
     private function attr($model, string $field)

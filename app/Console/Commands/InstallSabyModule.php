@@ -31,12 +31,16 @@ class InstallSabyModule extends Command
     public const MODULE_NAME = 'Транспортные накладные';
 
     private const MODULE_FIELDS = [
-        'routes' => ['saby_waybills', 'receiver_company_id', 'request_number', 'request_date', 'company_id', 'car_id', 'employee_id', 'date'],
+        'logistic_tasks' => ['saby_waybills', 'company_id', 'contact_id', 'employee_id', 'address', 'products', 'delivery_date'],
+        'routes' => ['company_id', 'car_id'],
         'companies' => ['name', 'inn', 'kpp', 'address'],
         'employees' => ['name', 'phone', 'inn'],
         'cars' => ['name', 'number', 'ownership_type', 'osago_mark', 'osago_model', 'weight_max', 'volume_max'],
-        'logistic_tasks' => ['products', 'address'],
         'products' => ['name', 'packing_method', 'tare_type', 'weight', 'volume'],
+    ];
+
+    private const OBSOLETE_FIELDS = [
+        'routes' => ['receiver_company_id', 'request_number', 'request_date', 'saby_waybills'],
     ];
 
     private const OWNERSHIP_TYPES = [
@@ -101,24 +105,24 @@ class InstallSabyModule extends Command
 
         $this->ensureTables($db);
 
-        $this->addField($db, 'routes', 'receiver_company_id', [
+        $this->removeObsoleteFields($db);
+
+        $this->addField($db, 'logistic_tasks', 'company_id', [
             'type' => 'relation',
-            'title' => 'Получатель',
+            'title' => 'Компания',
             'relation_table' => 'companies',
             'details' => json_encode(['table' => 'companies'], JSON_UNESCAPED_UNICODE),
         ], 'text');
 
-        $this->addField($db, 'routes', 'request_number', [
-            'type' => 'text',
-            'title' => 'Номер заявки',
+        $this->addField($db, 'logistic_tasks', 'contact_id', [
+            'type' => 'relation',
+            'title' => 'Контакт',
+            'relation_table' => 'contacts',
+            'details' => json_encode(['table' => 'contacts'], JSON_UNESCAPED_UNICODE),
+            'is_plural' => 1,
         ], 'text');
 
-        $this->addField($db, 'routes', 'request_date', [
-            'type' => 'date',
-            'title' => 'Дата заявки',
-        ], 'text');
-
-        $this->addField($db, 'routes', 'saby_waybills', [
+        $this->addField($db, 'logistic_tasks', 'saby_waybills', [
             'type' => 'waybills',
             'title' => 'Транспортные накладные',
             'only_read' => 1,
@@ -172,6 +176,31 @@ class InstallSabyModule extends Command
         $this->clearCache();
 
         $this->line("    [{$label}] модуль установлен");
+    }
+
+    private function removeObsoleteFields(ConnectionInterface $db): void
+    {
+        foreach (self::OBSOLETE_FIELDS as $entity => $fields) {
+            $typeId = $db->table('data_types')->where('slug', $entity)->value('id');
+            if (!$typeId) {
+                continue;
+            }
+
+            $rows = $db->table('data_rows')
+                ->where('data_type_id', $typeId)
+                ->whereIn('field', $fields)
+                ->get(['id', 'field']);
+
+            if ($rows->isEmpty()) {
+                continue;
+            }
+
+            $ids = $rows->pluck('id')->all();
+            $db->table('section_fields_sort')->whereIn('field_id', $ids)->delete();
+            $db->table('data_rows')->whereIn('id', $ids)->delete();
+
+            $this->line("      удалены устаревшие поля {$entity}: " . $rows->pluck('field')->implode(', '));
+        }
     }
 
     private function installModuleTab(ConnectionInterface $db, string $label): void
@@ -420,6 +449,11 @@ class InstallSabyModule extends Command
 
         if (!$sb->hasColumn('saby_waybills', 'qr_url')) {
             $db->statement("ALTER TABLE `saby_waybills` ADD COLUMN `qr_url` TEXT NULL");
+        }
+
+        if (!$sb->hasColumn('saby_waybills', 'task_id')) {
+            $db->statement("ALTER TABLE `saby_waybills` ADD COLUMN `task_id` BIGINT UNSIGNED NULL");
+            $db->statement("ALTER TABLE `saby_waybills` ADD INDEX `saby_waybills_task_id_index` (`task_id`)");
         }
     }
 
