@@ -455,6 +455,13 @@ class CrudService
                 }
             }
             foreach($model_fields as $mf) {
+                if($mf->type == 'relation' && !$mf->is_plural) {
+                    $value = $ob->{$mf->field};
+                    if(is_array($value) || (is_string($value) && strlen($value) && $value[0] === '[')) {
+                        $ids = \App\Models\Route::parseIdList($value);
+                        $ob->{$mf->field} = count($ids) ? $ids[0] : null;
+                    }
+                }
                 if($mf->type == 'status' && ($ob->{$mf->field} === null || $ob->{$mf->field} === '')) {
                     $default_status = \App\Models\Field::getDefaultStatusValue($mf->id);
                     if($default_status)
