@@ -727,7 +727,7 @@ class Settings extends Model
 		                        $settings['list_values'][$field->id] = $settings[$models[$model_id]]['options'][$field->field];
 		                    }
 		                    if($field->type == 'select_dropdown' || $field->type == 'relation' || $field->type == 'deal_stages')
-		                        $settings['list_values'][$field->id] = isset($field_values[$field->id]) ? $field_values[$field->id] : null;
+		                        $settings['list_values'][$field->id] = isset($field_values[$field->id]) ? self::mark_occupied($field->id, $field_values[$field->id]) : null;
 		                    $settings[$models[$model_id]]['colors'][$field->field] = $field->label_color ?? '';
 		                    $settings[$models[$model_id]]['perms'][$field->field] = array(
 		                        'read' => $permissions[$model_id]['read'][$field->field],
@@ -872,7 +872,84 @@ class Settings extends Model
             $result[$object->id] = self::option_from_object($object, $field_id, $table, $sort);
             $sort++;
         }
-        return $result;
+        return self::mark_occupied($field_id, $result);
+    }
+
+    public static function mirror_single_column($field_id)
+    {
+        static $cache = array();
+        if(array_key_exists($field_id, $cache))
+            return $cache[$field_id];
+
+        $cache[$field_id] = null;
+        try {
+            $field = \DB::table('data_rows')->where('id', $field_id)->first(['data_type_id', 'field', 'relation_table']);
+            if(!$field || !$field->relation_table) {
+                return null;
+            }
+            $ownSlug = \DB::table('data_types')->where('id', $field->data_type_id)->value('slug');
+            $relatedTypeId = \DB::table('data_types')->where('slug', $field->relation_table)->value('id');
+            if(!$ownSlug || !$relatedTypeId) {
+                return null;
+            }
+            $mirror = \DB::table('data_rows')
+                ->where('data_type_id', $relatedTypeId)
+                ->where('type', 'relation')
+                ->where('relation_table', $ownSlug)
+                ->where('is_plural', 0)
+                ->where('is_remove', 0)
+                ->value('field');
+            if($mirror && \Schema::hasColumn($field->relation_table, $mirror)) {
+                $cache[$field_id] = array('table' => $field->relation_table, 'column' => $mirror);
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return $cache[$field_id];
+    }
+
+    public static function mark_occupied($field_id, $options)
+    {
+        if(!is_array($options) || !count($options))
+            return $options;
+
+        $mirror = self::mirror_single_column($field_id);
+        if(!$mirror)
+            return $options;
+
+        $ids = array();
+        foreach($options as $option) {
+            if(isset($option['value']) && is_numeric($option['value']))
+                $ids[] = (int) $option['value'];
+        }
+        if(!count($ids))
+            return $options;
+
+        try {
+            $owners = \DB::table($mirror['table'])
+                ->whereIn('id', $ids)
+                ->whereNotNull($mirror['column'])
+                ->where($mirror['column'], '!=', '')
+                ->pluck($mirror['column'], 'id')
+                ->toArray();
+        } catch (\Throwable $e) {
+            return $options;
+        }
+
+        foreach($options as $key => $option) {
+            $id = isset($option['value']) ? (int) $option['value'] : 0;
+            if(!$id || !isset($owners[$id]))
+                continue;
+            $owner = $owners[$id];
+            if(is_string($owner) && $owner !== '' && ($owner[0] === '[' || $owner[0] === '{')) {
+                $decoded = json_decode($owner, true);
+                $owner = is_array($decoded) ? (is_array(reset($decoded)) ? null : reset($decoded)) : $owner;
+            }
+            if(is_numeric($owner) && (int) $owner)
+                $options[$key]['label']['occupied_by'] = (int) $owner;
+        }
+
+        return $options;
     }
 
     public static function option_from_object($object, $field_id, $table, $sort = 0)
