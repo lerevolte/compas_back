@@ -377,30 +377,37 @@ class CrudService
                         $ob->{$relation_table}()->sync($sync_values);
                     }
                     $old_values = $ob->{$relation_table}->pluck('id')->toArray();
-                    $old = array_diff($old_values, $new_values);
-                    $new = array_diff($new_values, $old_values);
-                    $related_rows = array();
-                    foreach($old as $o_item) {
-                        $related_rows[] = array('id' => $o_item, $model_fields[$field]->related_field => null);
-                    }
-                    foreach($new as $n_item) {
-                        $related_rows[] = array('id' => $n_item, $model_fields[$field]->related_field => $ob->id);
-                    }
+                    if($model_fields[$field]->related_field) {
+                        $old = array_diff($old_values, $new_values);
+                        $new = array_diff($new_values, $old_values);
+                        $related_rows = array();
+                        foreach($old as $o_item) {
+                            $related_rows[] = array('id' => $o_item, $model_fields[$field]->related_field => null);
+                        }
+                        foreach($new as $n_item) {
+                            $related_rows[] = array('id' => $n_item, $model_fields[$field]->related_field => $ob->id);
+                        }
 
-                    if(!($slug == 'routes' && in_array($field, ['car_id', 'employee_id'])))
-                        $h = \App\Models\History::saveForObject($relation_table, $related_rows);//for companies delete
-                    if($slug == 'companies')
-                        \DB::table($relation_table)->whereIntegerInRaw('id', $old_values)->update([$model_fields[$field]->related_field => null/*, 'choosed_at' => null*/]);
+                        if(!($slug == 'routes' && in_array($field, ['car_id', 'employee_id'])))
+                            $h = \App\Models\History::saveForObject($relation_table, $related_rows);//for companies delete
+                        if($slug == 'companies')
+                            \DB::table($relation_table)->whereIntegerInRaw('id', $old_values)->update([$model_fields[$field]->related_field => null/*, 'choosed_at' => null*/]);
 
 
-                    if($slug != 'companies') {
-                        if(is_array($old_values)) 
-                            $only_new_values = array_diff($new_values, $old_values);
+                        if($slug != 'companies') {
+                            if(is_array($old_values))
+                                $only_new_values = array_diff($new_values, $old_values);
+                            foreach($only_new_values as $sort => $v) {
+                                \DB::table($relation_table)->where('id', $v)->update([$model_fields[$field]->related_field => $ob->id, 'choosed_at' => now()->addSeconds($sort)]);
+                            }
+                        }
+                        \DB::table($relation_table)->whereIntegerInRaw('id', $new_values)->update([$model_fields[$field]->related_field => $ob->id]);
+                    } elseif(\Schema::hasColumn($relation_table, 'choosed_at')) {
+                        $only_new_values = array_diff($new_values, is_array($old_values) ? $old_values : []);
                         foreach($only_new_values as $sort => $v) {
-                            \DB::table($relation_table)->where('id', $v)->update([$model_fields[$field]->related_field => $ob->id, 'choosed_at' => now()->addSeconds($sort)]);
+                            \DB::table($relation_table)->where('id', $v)->update(['choosed_at' => now()->addSeconds($sort)]);
                         }
                     }
-                    \DB::table($relation_table)->whereIntegerInRaw('id', $new_values)->update([$model_fields[$field]->related_field => $ob->id]);
                     $ob->load($relation_table);
                     
                     
@@ -438,7 +445,8 @@ class CrudService
                         $new_el_relations[] = $ob->id;
                         $related_rows[] = array('id' => $value, $model_fields[$field]->related_field => $new_el_relations);
                     }
-                    if(!($slug == 'routes' && in_array($field, ['car_id', 'employee_id']))
+                    if($model_fields[$field]->related_field
+                        && !($slug == 'routes' && in_array($field, ['car_id', 'employee_id']))
                         && !($slug == 'users' && $field == 'employee_id')
                         && !($slug == 'employees' && $field == 'related_user_id'))
                         $h = \App\Models\History::saveForObject($relation_table, $related_rows);
