@@ -260,6 +260,9 @@ class Bitrix24Controller extends Controller
             'input'  => $request->all(),
         ]);
 
+        Log::channel('bitrix24')->info('deal-hook: disabled, задачи создаются «на основании» из синхронизированных сделок');
+        return response('deal-hook disabled', 200);
+
         $config = Config::first();
         if (!$config || !$config->webhook) {
             Log::channel('bitrix24')->warning('deal-hook: webhook is not configured (bitrix24_config пуст)');
