@@ -881,7 +881,7 @@ class Settings extends Model
         $cache[$field_id] = null;
         try {
             $field = \DB::table('data_rows')->where('id', $field_id)->first(['data_type_id', 'field', 'relation_table']);
-            if(!$field || !$field->relation_table) {
+            if(!$field || !$field->relation_table || $field->field === 'user_id') {
                 return null;
             }
             $ownSlug = \DB::table('data_types')->where('id', $field->data_type_id)->value('slug');
@@ -895,6 +895,7 @@ class Settings extends Model
                 ->where('relation_table', $ownSlug)
                 ->where('is_plural', 0)
                 ->where('is_remove', 0)
+                ->where('field', '!=', 'user_id')
                 ->value('field');
             if($mirror && \Schema::hasColumn($field->relation_table, $mirror)) {
                 $cache[$field_id] = array('table' => $field->relation_table, 'column' => $mirror);
