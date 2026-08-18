@@ -626,7 +626,7 @@ class User extends \TCG\Voyager\Models\User
     public function writeEmployeeLinkHistory(int $employeeId, bool $added)
     {
         $user_id = \Auth::user() ? \Auth::user()->id : 1;
-        $name = $this->name ?: 'Пользователь #'.$this->id;
+        $name = \App\Helpers\ValueHelper::personName($this->name, $this->last_name) ?: 'Пользователь #'.$this->id;
         $link = "<span data-slug='users' data-id='{$this->id}'>{$name}</span>";
 
         $base = [

@@ -8,6 +8,19 @@ class ValueHelper
         return strtoupper($string);
     }
 
+    public static function personName($name, $last_name = null): string
+    {
+        foreach (['name', 'last_name'] as $var) {
+            $val = $$var;
+            if (is_string($val) && self::isJson($val)) {
+                $decoded = json_decode($val, true);
+                $val = isset($decoded['value']) ? $decoded['value'] : '';
+            }
+            $$var = trim((string) ($val ?? ''));
+        }
+        return trim($last_name . ' ' . $name);
+    }
+
     public static function checkVal($param) {
 	    if ($param && $param != 'null' && $param != null) {
 	        return 1;

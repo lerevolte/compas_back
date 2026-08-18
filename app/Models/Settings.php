@@ -624,12 +624,9 @@ class Settings extends Model
 		                        		$name = json_decode($object->name, true)['value'];
 		                        	}
 
-		                        	$last_name = '';
+		                        	$text = $name;
 		                        	if($details['table'] == 'users' && isset($object->last_name)) {
-		                        		$last_name = $object->last_name;
-		                        		if(ValueHelper::isJson($last_name)) {
-		                        			$last_name = json_decode($object->last_name, true)['value'] ?? '';
-		                        		}
+		                        		$text = ValueHelper::personName($object->name, $object->last_name);
 		                        	}
 		                        	$obj_arr = $object->toArray();
 
@@ -640,7 +637,7 @@ class Settings extends Model
 												'is_hidden' => 0,
 												'field_id' => $field->id,
 												'color' => $resolveDisplayColor(array_key_exists('color', $obj_arr) && !$object->color ? $object->getColor() : ($object->color ?? '')),
-												'text' => trim($name.($last_name ? ' '.$last_name : '')),
+												'text' => $text,
 											];
 											// Для товаров подкидываем цену/вес/количество — фронт
 											// (getRow в Body.vue) подхватывает их при выборе товара
@@ -977,12 +974,7 @@ class Settings extends Model
             $text = isset($decoded['value']) ? $decoded['value'] : $text;
         }
         if($table == 'users' && isset($object->last_name) && $object->last_name) {
-            $last_name = $object->last_name;
-            if(ValueHelper::isJson($last_name)) {
-                $decoded = json_decode($last_name, true);
-                $last_name = isset($decoded['value']) ? $decoded['value'] : '';
-            }
-            $text = trim($text.' '.$last_name);
+            $text = ValueHelper::personName($object->name ?? $text, $object->last_name);
         }
         $color = isset($object->color) ? $object->color : '';
         if($color !== '' && $color !== null && is_numeric($color)) {

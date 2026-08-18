@@ -242,14 +242,14 @@ class Field extends Model
                     } elseif(isset($object->first_name)) {
                         $field_values[$object->id] = array(
                             'value' => $object->id,
-                            'label' => $object->first_name.' '.$object->last_name,
+                            'label' => trim(($object->last_name ?? '').' '.$object->first_name),
                             'color' => isset($object->color) ? $object->color : '',
                             'file' => isset($object->avatar) ? $object->avatar : '',
                         );
                     } elseif(isset($object->name)) {
                         $field_values[$object->id] = array(
                             'value' => $object->id,
-                            'label' => $object->name.(isset($object->last_name) ? ' '.$object->last_name:''),
+                            'label' => isset($object->last_name) ? \App\Helpers\ValueHelper::personName($object->name, $object->last_name) : $object->name,
                             'color' => isset($object->color) ? $object->getColor() : '',
                             'file' => isset($object->avatar) ? $object->avatar : '',
                         );
@@ -261,10 +261,6 @@ class Field extends Model
                             'file' => isset($object->avatar) ? $object->avatar : '',
                         );
                     }
-                    // if(isset($object->last_name))
-                    //     $field_values[$object->id] = $field_values[$object->id].' '.$object->last_name;//." ($object->id)";
-                    // else
-                    //     $field_values[$object->id] = $field_values[$object->id];//." ($object->id)";
                 }
             } elseif(isset($details['options'])) {
                 foreach($details['options'] as $k => $option) {
@@ -661,7 +657,10 @@ class Field extends Model
                             if(!$new_ob) {
                                 unset($res[$k]);
                             } else {
-                                $v = "<span data-slug='$field->relation_table' data-id='$val'>$new_ob->name</span>";
+                                $ob_name = isset($new_ob->last_name)
+                                    ? \App\Helpers\ValueHelper::personName($new_ob->name, $new_ob->last_name)
+                                    : $new_ob->name;
+                                $v = "<span data-slug='$field->relation_table' data-id='$val'>$ob_name</span>";
                                 $res[$k] = $v;
                                 $values_res[] = $val;
                             }
@@ -689,9 +688,13 @@ class Field extends Model
                 if($v === '' && $field->type == 'relation' && $field->relation_table && $value) {
                     $rel_ob = \DB::table($field->relation_table)->where('id', $value)->first();
                     if($rel_ob && isset($rel_ob->name)) {
-                        $v = $rel_ob->name;
-                        if(is_string($v) && ($decoded = json_decode($v, true)) && isset($decoded['value']))
-                            $v = $decoded['value'];
+                        if(isset($rel_ob->last_name)) {
+                            $v = \App\Helpers\ValueHelper::personName($rel_ob->name, $rel_ob->last_name);
+                        } else {
+                            $v = $rel_ob->name;
+                            if(is_string($v) && ($decoded = json_decode($v, true)) && isset($decoded['value']))
+                                $v = $decoded['value'];
+                        }
                     }
                 }
                 $v = $v ? $v : $value;

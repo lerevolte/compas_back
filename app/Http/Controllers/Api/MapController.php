@@ -135,6 +135,14 @@ class MapController extends Controller
 
             if (isset($result['suggestions'])) {
                 foreach ($result['suggestions'] as $item) {
+                    $d = isset($item['data']) ? $item['data'] : array();
+                    $unknownHouse = !empty($d['house'])
+                        && empty($d['house_fias_id'])
+                        && empty($d['house_kladr_id'])
+                        && (!isset($d['qc_geo']) || (int) $d['qc_geo'] !== 0);
+                    if ($unknownHouse) {
+                        continue;
+                    }
                     $data[] = array(
                         'text' => $item['value'],
                         'coords' => array(

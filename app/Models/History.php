@@ -84,28 +84,25 @@ class History extends Model
                        
                     }
                 }
-                $name = $last_name = $user_name = '';
+                $name = $last_name = '';
                 if($users[$item->user_id]->name) {
                     if(ValueHelper::isJson($users[$item->user_id]->name)) {
                         $name_arr = json_decode($users[$item->user_id]->name, true);
-                        $user_name = $name_arr['value'];
                         $name = mb_substr($name_arr['value'],0,1);
                     } else {
-                        $user_name = $users[$item->user_id]->name;
                         $name = mb_substr($users[$item->user_id]->name,0,1);
                     }
                 }
                 if($users[$item->user_id]->last_name) {
                     if(ValueHelper::isJson($users[$item->user_id]->last_name)) {
                         $last_name_arr = json_decode($users[$item->user_id]->last_name, true);
-                        $user_name.= ' '.$last_name_arr['value'];
                         $last_name = mb_substr($last_name_arr['value'],0,1);
                     } else {
                         $last_name = mb_substr($users[$item->user_id]->last_name,0,1);
-                        $user_name.= ' '.$users[$item->user_id]->last_name;
                     }
                 }
-                $user_color = $users[$item->user_id]->color;//$users[$item->user_id]->getColor();
+                $user_name = ValueHelper::personName($users[$item->user_id]->name, $users[$item->user_id]->last_name);
+                $user_color = $users[$item->user_id]->color;
                 $user = ucfirst($name).ucfirst($last_name);
             }
             $text = explode(': ', $item->text);

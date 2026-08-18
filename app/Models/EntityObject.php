@@ -74,13 +74,9 @@ class EntityObject
             $text = $decoded['value'] ?? $text;
         }
         if (isset($object->first_name)) {
-            $text = trim($object->first_name . ' ' . ($object->last_name ?? ''));
+            $text = trim(($object->last_name ?? '') . ' ' . $object->first_name);
         } elseif ($table == 'users' && isset($object->last_name) && $object->last_name) {
-            $last_name = $object->last_name;
-            if (ValueHelper::isJson($last_name)) {
-                $last_name = json_decode($last_name, true)['value'] ?? '';
-            }
-            $text = trim($text . ' ' . $last_name);
+            $text = \App\Helpers\ValueHelper::personName($object->name ?? $text, $object->last_name);
         }
 
         $avatar = $object->avatar ?? ($object->photo ?? '');
@@ -486,6 +482,11 @@ class EntityObject
                         } elseif($current->{$field->field} && isset($settings['list_values'][$field->id][$current->{$field->field}])) {
                             $field_values[$current->{$field->field}] = $settings['list_values'][$field->id][$current->{$field->field}];
                         }
+                        foreach($field_values as $fv_key => $fv_option) {
+                            if(isset($fv_option['label']['occupied_by']))
+                                unset($field_values[$fv_key]['label']['occupied_by']);
+                        }
+                        $field_values = Settings::mark_occupied($field->id, $field_values);
                     } else {
                         if(isset($settings[$slug]['options'][$field->field]))
                             $field_values = $settings[$slug]['options'][$field->field];
@@ -957,6 +958,11 @@ class EntityObject
                         } elseif($current->{$field->field} && isset($settings['list_values'][$field->id][$current->{$field->field}])) {
                             $field_values[$current->{$field->field}] = $settings['list_values'][$field->id][$current->{$field->field}];
                         }
+                        foreach($field_values as $fv_key => $fv_option) {
+                            if(isset($fv_option['label']['occupied_by']))
+                                unset($field_values[$fv_key]['label']['occupied_by']);
+                        }
+                        $field_values = Settings::mark_occupied($field->id, $field_values);
                     } else {
                         if(isset($settings[$slug]['options'][$field->field]))
                             $field_values = $settings[$slug]['options'][$field->field];
