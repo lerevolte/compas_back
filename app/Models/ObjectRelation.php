@@ -48,6 +48,70 @@ class ObjectRelation extends Model
         self::ensureTab($targetSlug);
     }
 
+    public static function copyProducts(string $sourceSlug, $sourceId, string $targetSlug, $targetId, bool $dryRun = false): bool
+    {
+        if (!$sourceId || !$targetId) {
+            return false;
+        }
+
+        try {
+            $target = self::objectWithProducts($targetSlug, (int) $targetId);
+            if (!$target || !method_exists($target, 'setProducts')) {
+                return false;
+            }
+            if (self::decodeProducts($target->products)) {
+                return false;
+            }
+
+            $source = self::objectWithProducts($sourceSlug, (int) $sourceId);
+            if (!$source) {
+                return false;
+            }
+
+            $products = self::decodeProducts($source->products);
+            if (!$products) {
+                return false;
+            }
+
+            if (!$dryRun) {
+                $target->setProducts($products);
+            }
+
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    private static function objectWithProducts(string $slug, int $id)
+    {
+        if (!Schema::hasTable($slug) || !Schema::hasColumn($slug, 'products')) {
+            return null;
+        }
+
+        $class = \DB::table('data_types')->where('slug', $slug)->value('model_name');
+        if (!$class || !class_exists($class)) {
+            return null;
+        }
+
+        return $class::find($id);
+    }
+
+    private static function decodeProducts($value): array
+    {
+        if (is_array($value)) {
+            $products = $value;
+        } else {
+            $products = json_decode((string) $value, true);
+        }
+
+        if (!is_array($products)) {
+            return [];
+        }
+
+        return array_values(array_filter($products, 'is_array'));
+    }
+
     public static function ensureTab(string $slug, $db = null, bool $remove = false): bool
     {
         $db = $db ?: \DB::connection();

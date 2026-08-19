@@ -25,7 +25,14 @@ class ObjectRelationController extends Controller
 
         ObjectRelation::link($data['source_slug'], $data['source_id'], $data['target_slug'], $data['target_id']);
 
-        return response()->json(['ok' => true]);
+        $productsCopied = ObjectRelation::copyProducts(
+            $data['source_slug'],
+            $data['source_id'],
+            $data['target_slug'],
+            $data['target_id']
+        );
+
+        return response()->json(['ok' => true, 'products_copied' => $productsCopied]);
     }
 
     public function tree($slug, $id)
