@@ -94,6 +94,23 @@ class SabyWaybillController extends Controller
         return response()->json(['data' => $this->present($waybill)]);
     }
 
+    public function destroy($waybillId)
+    {
+        $waybill = SabyWaybill::find($waybillId);
+        if (!$waybill) {
+            return response()->json(['message' => 'Накладная не найдена'], 404);
+        }
+
+        $service = SabyWaybillService::make();
+        if ($service) {
+            $service->delete($waybill);
+        } else {
+            $waybill->delete();
+        }
+
+        return response()->json(['success' => true]);
+    }
+
     private function present(SabyWaybill $waybill): array
     {
         return [

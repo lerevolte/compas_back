@@ -450,6 +450,11 @@ class CrudService
                         && !($slug == 'users' && $field == 'employee_id')
                         && !($slug == 'employees' && $field == 'related_user_id'))
                         $h = \App\Models\History::saveForObject($relation_table, $related_rows);
+                } elseif ($model_fields[$field]->type == 'relation' && $value && $model_fields[$field]->relation_table) {
+                    $relation_table = $model_fields[$field]->relation_table;
+                    $rel_id = is_array($value) ? end($value) : $value;
+                    if($rel_id && \Schema::hasColumn($relation_table, 'choosed_at'))
+                        \DB::table($relation_table)->where('id', $rel_id)->update(['choosed_at' => now()]);
                 }
 
 

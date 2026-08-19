@@ -42,6 +42,9 @@ class SabyWaybillService
     {
         $document = $this->buildDocument($task);
         $config = $this->client->config();
+        $route = $task->route_id ? Route::find($task->route_id) : null;
+        $shipper = $route ? $this->companyOf($route, 'company_id') : null;
+        $receiver = $this->companyOf($task, 'company_id');
 
         $number = $this->nextNumber($task);
         $document['СодИнфГО']['НомерТрН'] = $number;
@@ -69,6 +72,9 @@ class SabyWaybillService
                 'Тип' => self::DOC_TYPE,
                 'Регламент' => ['Название' => self::REGULATION],
                 'НашаОрганизация' => $this->ourOrganization(),
+                'Грузоотправитель' => $this->counterparty($shipper),
+                'Грузополучатель' => $this->counterparty($receiver),
+                'ТранспортнаяКомпания' => $this->counterparty($shipper),
                 'Вложение' => [
                     ['Файл' => [
                         'ДвоичныеДанные' => $file['ДвоичныеДанные'],
@@ -104,6 +110,25 @@ class SabyWaybillService
         ]);
 
         return $waybill;
+    }
+
+    public function delete(SabyWaybill $waybill): void
+    {
+        if ($waybill->doc_id) {
+            try {
+                $this->client->call('СБИС.УдалитьДокумент', [
+                    'Документ' => ['Идентификатор' => $waybill->doc_id],
+                ]);
+            } catch (\Throwable $e) {
+                $this->log('warning', 'waybill delete in saby failed', [
+                    'doc_id' => $waybill->doc_id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $this->log('info', 'waybill deleted', ['task_id' => $waybill->task_id, 'doc_id' => $waybill->doc_id]);
+        $waybill->delete();
     }
 
     public function refresh(SabyWaybill $waybill): SabyWaybill
@@ -264,6 +289,26 @@ class SabyWaybillService
         }
 
         return $party;
+    }
+
+    private function counterparty(Company $company): array
+    {
+        $inn = $this->inn($company);
+        if (strlen($inn) > 10) {
+            $name = $this->splitName($company->name);
+            return ['СвФЛ' => array_filter([
+                'ИНН' => $inn,
+                'Фамилия' => $name['Фамилия'] ?? null,
+                'Имя' => $name['Имя'] ?? null,
+                'Отчество' => $name['Отчество'] ?? null,
+            ])];
+        }
+
+        return ['СвЮЛ' => array_filter([
+            'ИНН' => $inn,
+            'КПП' => $this->kpp($company),
+            'Название' => (string) $company->name,
+        ])];
     }
 
     private function driver(Task $task): ?array
@@ -594,7 +639,8 @@ class SabyWaybillService
 
     private function splitName(?string $name): array
     {
-        $parts = preg_split('/\s+/u', trim((string) $name)) ?: [];
+        $clean = preg_replace('/^\s*(ИП|Индивидуальный предприниматель)\s+/iu', '', trim((string) $name));
+        $parts = preg_split('/\s+/u', trim((string) $clean)) ?: [];
 
         return array_filter([
             'Фамилия' => $parts[0] ?? '',

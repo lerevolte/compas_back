@@ -10,13 +10,10 @@ class InstallRelationsTab extends Command
 {
     protected $signature = 'relations:install-tab
         {target=avixo : seeds | all-tenants | <tenant_id>}
-        {--entities=deals,addresses : слаги сущностей через запятую}
+        {--entities=deals,addresses,logistic_tasks : слаги сущностей через запятую}
         {--remove : убрать вкладку вместо установки}';
 
     protected $description = 'Добавить вкладку «Связанные документы» в карточку сущностей';
-
-    public const TAB = 'relations';
-    public const TITLE = 'Связанные документы';
 
     public function handle(): int
     {
@@ -70,49 +67,8 @@ class InstallRelationsTab extends Command
                 continue;
             }
 
-            $menus = $db->table('settings')->where(['type' => 'menu', 'entity' => $entity])->get();
-            if ($menus->isEmpty()) {
-                $this->warn("    [{$label}] {$entity}: меню карточки не найдено");
-                continue;
-            }
-
-            foreach ($menus as $menu) {
-                $tabs = json_decode($menu->value, true);
-                if (!is_array($tabs)) {
-                    continue;
-                }
-
-                $filtered = array_values(array_filter($tabs, fn ($tab) => ($tab['tab'] ?? null) !== self::TAB));
-
-                if (!$remove) {
-                    $maxSort = 0;
-                    $maxId = 0;
-                    foreach ($filtered as $tab) {
-                        $maxSort = max($maxSort, (int) ($tab['sort'] ?? 0));
-                        $maxId = max($maxId, (int) ($tab['id'] ?? 0));
-                    }
-                    $filtered[] = [
-                        'title' => self::TITLE,
-                        'tab' => self::TAB,
-                        'sort' => $maxSort + 1,
-                        'enabled' => 1,
-                        'id' => $maxId + 1,
-                        'has_roles_read' => false,
-                        'roles_read' => null,
-                    ];
-                }
-
-                $db->table('settings')->where('id', $menu->id)->update([
-                    'value' => json_encode(array_values($filtered), JSON_UNESCAPED_SLASHES),
-                ]);
-            }
-
-            $this->line("    [{$label}] {$entity}: вкладка " . ($remove ? 'убрана' : 'добавлена'));
-        }
-
-        try {
-            \App\Models\Settings::clear_cache();
-        } catch (\Throwable $e) {
+            $changed = \App\Models\ObjectRelation::ensureTab($entity, $db, $remove);
+            $this->line("    [{$label}] {$entity}: вкладка " . ($remove ? 'убрана' : 'добавлена') . ($changed ? '' : ' (без изменений)'));
         }
     }
 }

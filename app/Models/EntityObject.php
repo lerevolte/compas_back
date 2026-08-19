@@ -1500,10 +1500,21 @@ class EntityObject
                                         [json_encode(['id' => (int) $v]), json_encode(['id' => (string) $v])]
                                     );
                                 } else {
-                                    $query->whereRaw(
-                                        '(JSON_VALID('.$field.') AND LOWER(CONVERT(JSON_EXTRACT('.$field.', \'$[*].name\') USING utf8mb4)) LIKE LOWER(?))',
-                                        ['%'.$v.'%']
-                                    );
+                                    $escaped = fn ($text) => str_replace('\\', '\\\\', trim(json_encode($text), '"'));
+                                    $needles = array_unique([
+                                        '%'.$v.'%',
+                                        '%'.$escaped($v).'%',
+                                        '%'.$escaped(mb_strtolower($v)).'%',
+                                    ]);
+                                    $query->where(function($sub) use ($field, $v, $needles) {
+                                        $sub->whereRaw(
+                                            '(JSON_VALID('.$field.') AND LOWER(CONVERT(JSON_EXTRACT('.$field.', \'$[*].name\') USING utf8mb4)) LIKE LOWER(?))',
+                                            ['%'.$v.'%']
+                                        );
+                                        foreach ($needles as $needle) {
+                                            $sub->orWhereRaw('LOWER('.$field.') LIKE LOWER(?)', [$needle]);
+                                        }
+                                    });
                                 }
                             }
                         });
@@ -1762,6 +1773,10 @@ class EntityObject
                             '(JSON_VALID('.$field->field.') AND LOWER(CONVERT(JSON_EXTRACT('.$field->field.', \'$[*].name\', \'$[*].product_name\') USING utf8mb4)) LIKE LOWER(?))',
                             ['%'.$q.'%']
                         );
+                        $escaped = fn ($text) => str_replace('\\', '\\\\', trim(json_encode($text), '"'));
+                        foreach (array_unique(['%'.$q.'%', '%'.$escaped($q).'%', '%'.$escaped(mb_strtolower($q)).'%']) as $needle) {
+                            $query->orWhereRaw('LOWER('.$field->field.') LIKE LOWER(?)', [$needle]);
+                        }
                         continue;
                     }
                     if($field->type == 'relation') {
