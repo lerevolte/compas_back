@@ -2389,8 +2389,11 @@ class EntityObject
                 $relation_table = $model_fields[$field]->relation_table;
                 $entity_relation = $settings['models'][$relation_table];
                 $entity_relation_class = $entity_relation->model_name;
-                if($object->{$model_fields[$field]->field}) {
-                    $old_el_relations = $entity_relation_class::where('id', $object->{$model_fields[$field]->field})->first()->{$slug}()->pluck('id')->toArray();
+                $old_el = $object->{$model_fields[$field]->field}
+                    ? $entity_relation_class::where('id', $object->{$model_fields[$field]->field})->first()
+                    : null;
+                if($old_el && method_exists($old_el, $slug)) {
+                    $old_el_relations = $old_el->{$slug}()->pluck('id')->toArray();
 
                     if(in_array($object->id, $old_el_relations)) {
                         unset($old_el_relations[array_search($object->id, $old_el_relations)]);
@@ -2400,8 +2403,9 @@ class EntityObject
                     }
                 }
 
-                if($value) {
-                    $new_el_relations = $entity_relation_class::where('id',$value)->first()->{$slug}()->pluck('id')->toArray();
+                $new_el = $value ? $entity_relation_class::where('id', $value)->first() : null;
+                if($new_el && method_exists($new_el, $slug)) {
+                    $new_el_relations = $new_el->{$slug}()->pluck('id')->toArray();
                     $new_el_relations[] = $object->id;
                     $related_rows[] = array('id' => $value, $model_fields[$field]->related_field => $new_el_relations);
                 }
