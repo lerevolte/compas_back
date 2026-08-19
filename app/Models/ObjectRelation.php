@@ -83,6 +83,49 @@ class ObjectRelation extends Model
         }
     }
 
+    public static function copyB24Id(string $sourceSlug, $sourceId, string $targetSlug, $targetId, bool $dryRun = false): bool
+    {
+        if (!$sourceId || !$targetId) {
+            return false;
+        }
+
+        try {
+            if (!Schema::hasTable($sourceSlug) || !Schema::hasColumn($sourceSlug, 'b24_id')
+                || !Schema::hasTable($targetSlug) || !Schema::hasColumn($targetSlug, 'b24_id')) {
+                return false;
+            }
+
+            $current = \DB::table($targetSlug)->where('id', (int) $targetId)->value('b24_id');
+            if ($current !== null && $current !== '') {
+                return false;
+            }
+
+            $sourceColumns = ['b24_id'];
+            if (Schema::hasColumn($sourceSlug, 'crm_link')) {
+                $sourceColumns[] = 'crm_link';
+            }
+            $source = \DB::table($sourceSlug)->where('id', (int) $sourceId)->first($sourceColumns);
+            if (!$source || $source->b24_id === null || $source->b24_id === '') {
+                return false;
+            }
+
+            if (!$dryRun) {
+                $update = ['b24_id' => $source->b24_id];
+                if (Schema::hasColumn($targetSlug, 'crm_link') && ($source->crm_link ?? null)) {
+                    $currentLink = \DB::table($targetSlug)->where('id', (int) $targetId)->value('crm_link');
+                    if ($currentLink === null || $currentLink === '') {
+                        $update['crm_link'] = $source->crm_link;
+                    }
+                }
+                \DB::table($targetSlug)->where('id', (int) $targetId)->update($update);
+            }
+
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     private static function objectWithProducts(string $slug, int $id)
     {
         if (!Schema::hasTable($slug) || !Schema::hasColumn($slug, 'products')) {
