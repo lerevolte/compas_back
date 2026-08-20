@@ -48,6 +48,11 @@ class FieldService
                 'is_external_link' => $dto->is_external_link,
             ]);
             
+            \DB::table('data_rows')->where('id', $group_id)->update([
+                'field' => $key.'_'.$group_id,
+            ]);
+            $key = $key.'_'.$group_id;
+
             if(count($dto->subfields)) {
                 foreach($dto->subfields as $k => $subfield) {
                     \DB::table('data_rows')->where('id', $subfield)->update(['group_id' => $group_id, 'sort' => $k]);
@@ -119,20 +124,10 @@ class FieldService
             ]);
             $key = $key.'_'.$field_id;
         }
-        if($type == 'file')
+        if(!\Schema::hasColumn($dto->entity, $key))
             \Schema::table($dto->entity, function($table) use ($key) {
                 $table->text($key)->nullable();
             });
-        else {
-            if($dto->is_plural)
-                \Schema::table($dto->entity, function($table) use ($key) {
-                    $table->text($key)->nullable();
-                });
-            else
-                \Schema::table($dto->entity, function($table) use ($key) {
-                    $table->text($key)->nullable();
-                });
-        }
 
 
         \App\Models\Settings::clear_cache();
@@ -379,7 +374,7 @@ class FieldService
         $data['mask'] = isset($dto->mask) ? $dto->mask : $field->mask;
 
         if($field->type == 'text_group') {
-            $field_group = \DB::table('data_rows')->where('field', $field->field)->first();
+            $field_group = \DB::table('data_rows')->where('id', $field->id)->first();
             $fields_by_group = \DB::table('data_rows')->where('group_id', $field_group->id)->get();
             $fields_saved = array();
 
