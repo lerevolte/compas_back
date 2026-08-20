@@ -151,6 +151,7 @@ class SpaController extends Controller
             "https://compas.pro/docs",
             "https://compas.pro/docs/license",
             "https://compas.pro/docs/politics",
+            "https://compas.pro/docs/personal-data",
             "https://compas.pro/guides",
             "https://compas.pro/guides-category",
             "https://compas.pro/articles",
