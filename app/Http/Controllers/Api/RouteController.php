@@ -1049,6 +1049,15 @@ class RouteController extends Controller
         // Скалярные/JSON-поля копируем через CrudService (история + field_values).
         // client_id (плюральная связь) обрабатываем отдельно ниже, чтобы не
         // зависеть от формата хранения у адреса.
+        $companyId = $address->company_id;
+        if (is_string($companyId) && is_array($decodedCompany = json_decode($companyId, true))) {
+            $companyId = $decodedCompany[0] ?? null;
+        }
+        $contactIds = array_values(array_map('intval', array_filter(
+            (array) json_decode((string) $address->contact_id, true),
+            'is_numeric'
+        )));
+
         $crud = app(\App\Services\CrudService::class);
         $row = [
             'id'                    => 0,
@@ -1065,6 +1074,8 @@ class RouteController extends Controller
             'contact'               => $address->contact,
             'weight'                => $address->weight ?? null,
             'delivery_price'        => $address->delivery_price ?? null,
+            'company_id'            => $companyId,
+            'contact_id'            => $contactIds,
         ];
 
         $result = $crud->batch('logistic_tasks', [$row]);
@@ -1109,6 +1120,15 @@ class RouteController extends Controller
         }
 
         $routeId = $request->route_id ? (int) $request->route_id : null;
+
+        $companyId = $address->company_id;
+        if (is_string($companyId) && is_array($decodedCompany = json_decode($companyId, true))) {
+            $companyId = $decodedCompany[0] ?? null;
+        }
+        $contactIds = array_values(array_map('intval', array_filter(
+            (array) json_decode((string) $address->contact_id, true),
+            'is_numeric'
+        )));
 
         $crud = app(\App\Services\CrudService::class);
         $row = [

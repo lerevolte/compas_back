@@ -351,6 +351,11 @@ class CrudService
                 if($model_fields[$field]->type == 'relation' && $model_fields[$field]->is_plural && $model_fields[$field]->relation_table) {
                     $relation_table = $model_fields[$field]->relation_table;
                     if (!method_exists($ob, $relation_table)) {
+                        if(is_array($value)) {
+                            $ob->{$field} = json_encode(array_values(array_map('intval', array_filter($value, 'is_numeric'))));
+                        } else {
+                            $ob->{$field} = $value;
+                        }
                         continue;
                     }
                     if(!is_array($value))
@@ -437,11 +442,14 @@ class CrudService
                     if($value && $relation_table == 'companies')
                         $ob->choosed_at = now();
                     if($value) {
+                        $new_el_relations = array();
                         $rel_obj = $entity_relation_class::where('id',$value)->first();
-                        $rel_obj->choosed_at = now();
-                        $rel_obj->saveQuietly();
+                        if($rel_obj) {
+                            $rel_obj->choosed_at = now();
+                            $rel_obj->saveQuietly();
+                        }
                         if($rel_obj && method_exists($rel_obj, $slug))
-                            $new_el_relations = $entity_relation_class::where('id',$value)->first()->{$slug}()->pluck('id')->toArray();
+                            $new_el_relations = $rel_obj->{$slug}()->pluck('id')->toArray();
                         $new_el_relations[] = $ob->id;
                         $related_rows[] = array('id' => $value, $model_fields[$field]->related_field => $new_el_relations);
                     }
@@ -463,6 +471,8 @@ class CrudService
                         $value,
                         fn ($v) => $v !== null && $v !== ''
                     )), JSON_UNESCAPED_UNICODE);
+                } elseif($model_fields[$field]->type == 'relation' && $model_fields[$field]->is_plural && is_array($value)) {
+                    $ob->{$field} = json_encode(array_values(array_map('intval', array_filter($value, 'is_numeric'))));
                 } else {
                     $ob->{$field} = $value;
                 }

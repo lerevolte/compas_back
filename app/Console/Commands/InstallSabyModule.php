@@ -392,6 +392,8 @@ class InstallSabyModule extends Command
         'employees' => ['name', 'phone', 'inn', 'snils', 'driver_license'],
         'cars' => ['name', 'number', 'vehicle_type', 'trailer_number', 'osago_mark', 'osago_model', 'weight_max', 'volume_max'],
         'products' => ['name', 'packing_method', 'tare_type', 'weight', 'volume'],
+        'addresses' => ['company_id', 'contact_id', 'address', 'weight'],
+        'warehouses' => ['company_id', 'contact_id', 'address', 'weight'],
     ];
 
     private const OBSOLETE_FIELDS = [

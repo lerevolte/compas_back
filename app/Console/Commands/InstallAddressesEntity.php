@@ -42,6 +42,7 @@ class InstallAddressesEntity extends Command
         'id', 'created_at', 'updated_at', 'name', 'photo', 'service_time',
         'address', 'phone', 'time', 'car_requirements', 'employee_requirements',
         'client_id', 'user_id', 'comment', 'contact', 'weight', 'delivery_price',
+        'company_id', 'contact_id',
     ];
 
     public function handle(): int
@@ -201,6 +202,11 @@ class InstallAddressesEntity extends Command
                 $arr['module_section_id'] = $this->isNonEmptyJsonArray($arr['module_section_id'] ?? null)
                     ? '['.$moduleSecId.']'
                     : ($arr['module_section_id'] ?? null);
+                if (in_array($row->field, ['company_id', 'contact_id'], true)) {
+                    $arr['module'] = '';
+                    $arr['module_section_id'] = null;
+                    $arr['required'] = 0;
+                }
                 $db->table('data_rows')->insert($arr);
                 $cloned[$row->field] = true;
             }
@@ -269,6 +275,8 @@ class InstallAddressesEntity extends Command
             'contact'               => $base(['field' => 'contact', 'type' => 'text', 'title' => 'Контактное лицо', 'sort' => 51]),
             'weight'                => $base(['field' => 'weight', 'type' => 'number', 'title' => 'Вес', 'unit' => 'кг', 'sort' => 52]),
             'delivery_price'        => $base(['field' => 'delivery_price', 'type' => 'number', 'title' => 'Цена доставки', 'unit' => 'руб', 'sort' => 53]),
+            'company_id'            => $base(['field' => 'company_id', 'type' => 'relation', 'title' => 'Компания', 'sort' => 54, 'details' => '{"table":"companies"}', 'relation_table' => 'companies']),
+            'contact_id'            => $base(['field' => 'contact_id', 'type' => 'relation', 'title' => 'Контакт', 'sort' => 55, 'is_plural' => 1, 'details' => '{"table":"contacts"}', 'relation_table' => 'contacts']),
         ];
     }
 
@@ -317,8 +325,16 @@ CREATE TABLE IF NOT EXISTS `addresses` (
   `contact` text DEFAULT NULL,
   `weight` text DEFAULT NULL,
   `delivery_price` text DEFAULT NULL,
+  `company_id` text DEFAULT NULL,
+  `contact_id` text DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL);
+        $sb = $db->getSchemaBuilder();
+        foreach (['company_id', 'contact_id'] as $col) {
+            if (!$sb->hasColumn('addresses', $col)) {
+                $db->statement("ALTER TABLE `addresses` ADD COLUMN `$col` TEXT NULL");
+            }
+        }
     }
 }
