@@ -25,6 +25,8 @@ class B24ProductSync
 
     private const LINK_PROPERTY = 'PROPERTY_132';
     private const WEIGHT_PROPERTY = 'PROPERTY_134';
+    private const TYPE_PROPERTY = 'PROPERTY_180';
+    private const TYPE_SERVICE_ENUM = '131';
 
     public static function make(): ?self
     {
@@ -207,7 +209,7 @@ class B24ProductSync
             'select' => [
                 'ID', 'NAME', 'PRICE', 'SECTION_ID', 'CATALOG_ID', 'TIMESTAMP_X',
                 'PREVIEW_PICTURE', 'DETAIL_PICTURE',
-                self::LINK_PROPERTY, self::WEIGHT_PROPERTY,
+                self::LINK_PROPERTY, self::WEIGHT_PROPERTY, self::TYPE_PROPERTY,
             ],
             'order'  => $since ? ['TIMESTAMP_X' => 'ASC'] : ['ID' => 'ASC'],
         ], $limit);
@@ -314,6 +316,9 @@ class B24ProductSync
             }
             if (array_key_exists(self::WEIGHT_PROPERTY, $row)) {
                 $model->weight = (float) $this->propertyValue($row[self::WEIGHT_PROPERTY]);
+            }
+            if (Schema::hasColumn('products', 'product_type') && array_key_exists(self::TYPE_PROPERTY, $row)) {
+                $model->product_type = $this->propertyValue($row[self::TYPE_PROPERTY]) === self::TYPE_SERVICE_ENUM ? '1' : '0';
             }
             if (array_key_exists('SECTION_ID', $row)) {
                 $model->category_id = $row['SECTION_ID']

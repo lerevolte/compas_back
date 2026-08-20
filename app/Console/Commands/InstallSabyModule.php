@@ -386,8 +386,8 @@ class InstallSabyModule extends Command
     public const MODULE_NAME = 'Транспортные накладные';
 
     private const MODULE_FIELDS = [
-        'logistic_tasks' => ['saby_waybills', 'company_id', 'contact_id', 'employee_id', 'address', 'products', 'delivery_date'],
-        'routes' => ['company_id', 'car_id'],
+        'logistic_tasks' => ['saby_waybills', 'shipment_company_id', 'company_id', 'contact_id', 'employee_id', 'address', 'products', 'weight', 'delivery_date'],
+        'routes' => ['car_id'],
         'companies' => ['name', 'inn', 'kpp', 'address'],
         'employees' => ['name', 'phone', 'inn', 'snils', 'driver_license'],
         'cars' => ['name', 'number', 'vehicle_type', 'trailer_number', 'osago_mark', 'osago_model', 'weight_max', 'volume_max'],
@@ -464,6 +464,14 @@ class InstallSabyModule extends Command
         $this->ensureTables($db);
 
         $this->removeObsoleteFields($db);
+
+        $this->addField($db, 'logistic_tasks', 'shipment_company_id', [
+            'type' => 'relation',
+            'title' => 'Компания отгрузки',
+            'relation_table' => 'companies',
+            'details' => json_encode(['table' => 'companies'], JSON_UNESCAPED_UNICODE),
+            'required' => 1,
+        ], 'text');
 
         $this->addField($db, 'logistic_tasks', 'company_id', [
             'type' => 'relation',
@@ -862,7 +870,7 @@ class InstallSabyModule extends Command
             ->first();
 
         if ($existing) {
-            $patch = array_intersect_key($attrs, array_flip(['type', 'title', 'relation_table', 'details', 'only_read', 'visible_always']));
+            $patch = array_intersect_key($attrs, array_flip(['type', 'title', 'relation_table', 'details', 'only_read', 'visible_always', 'required']));
             if (count($patch)) {
                 $db->table('data_rows')->where('id', $existing->id)->update($patch);
             }

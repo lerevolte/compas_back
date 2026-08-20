@@ -448,6 +448,47 @@ class ObjectController extends Controller
             $permissions = $this->getPermissions($user, $slug, $dataTypeId);
         }
 
+        $lockEdit = function () use (&$detail) {
+            $detail['readonly'] = true;
+            if (isset($detail['columns']) && is_array($detail['columns'])) {
+                foreach ($detail['columns'] as $ck => $col) {
+                    foreach ($col as $si => $section) {
+                        if (!empty($section['fields'])) {
+                            foreach ($section['fields'] as $fi => $f) {
+                                $detail['columns'][$ck][$si]['fields'][$fi]['can_edit'] = 0;
+                                if (is_array($f) && ($f['type'] ?? null) == 'text_group' && !empty($f['fields'])) {
+                                    foreach ($f['fields'] as $gi => $gf) {
+                                        $detail['columns'][$ck][$si]['fields'][$fi]['fields'][$gi]['can_edit'] = 0;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        if (!$user) {
+            $lockEdit();
+        } elseif (!$user->is_admin && $id && $id !== '0') {
+            $canUpdate = true;
+            $up = $permissions['update_p'] ?? null;
+            if ($up === 'N') {
+                $canUpdate = false;
+            } elseif ($up === 'Y') {
+                $ownerId = \Schema::hasColumn($slug, 'user_id')
+                    ? DB::table($slug)->where('id', $id)->value('user_id')
+                    : null;
+                $canUpdate = $ownerId !== null && (int) $ownerId === (int) $user->id;
+            } elseif ($up === 'E') {
+                $canUpdate = $this->hasEmployeeBinding($slug)
+                    && $this->isUserEmployeeObject($slug, $id, $user);
+            }
+            if (!$canUpdate) {
+                $lockEdit();
+            }
+        }
+
         // Связанные сущности модуля
         $moduleModel = Module::where('slug', $module)->firstOrFail();
 

@@ -42,8 +42,7 @@ class SabyWaybillService
     {
         $document = $this->buildDocument($task);
         $config = $this->client->config();
-        $route = $task->route_id ? Route::find($task->route_id) : null;
-        $shipper = $route ? $this->companyOf($route, 'company_id') : null;
+        $shipper = $this->companyOf($task, 'shipment_company_id');
         $receiver = $this->companyOf($task, 'company_id');
 
         $number = $this->nextNumber($task);
@@ -169,9 +168,9 @@ class SabyWaybillService
 
         $route = $task->route_id ? Route::find($task->route_id) : null;
 
-        $shipper = $route ? $this->companyOf($route, 'company_id') : null;
+        $shipper = $this->companyOf($task, 'shipment_company_id');
         if (!$shipper) {
-            $errors[] = 'У маршрута задачи не заполнено поле «Компания» (грузоотправитель)';
+            $errors[] = 'В задаче не заполнено поле «Компания отгрузки» (грузоотправитель)';
         }
 
         $receiver = $this->companyOf($task, 'company_id');
@@ -217,6 +216,26 @@ class SabyWaybillService
         $document['СодИнфГО']['ДатаЗак'] = $document['СодИнфГО']['ДатаТрН'];
 
         $document['СодИнфГО']['СвПер'] = $this->party($shipper);
+
+        $loading = [];
+        $gross = $this->number($this->attr($task, 'weight'));
+        if ($gross > 0) {
+            $loading['МасБрутОтгр'] = $this->format($gross);
+        }
+        $places = 0.0;
+        foreach ($cargo as $entry) {
+            $places += (float) ($entry['КолМестГр'] ?? 0);
+        }
+        if ($places > 0) {
+            $loading['КолМестПрием'] = $this->format($places);
+        }
+        if (count($loading)) {
+            $shipperAddress = $this->companyAddress($shipper, $this->requisite($shipper));
+            if ($shipperAddress !== '') {
+                $loading['ФАдресПогр'] = ['АдресИнф' => ['АдрТекст' => $shipperAddress, 'КодСтр' => '643']];
+            }
+            $document['СодИнфГО']['СвПогруз'] = $loading;
+        }
 
         $driver = $this->driver($task);
         if ($driver) {
@@ -455,6 +474,9 @@ class SabyWaybillService
                 if ($name === '') {
                     continue;
                 }
+                if ($this->isService($product['id'] ?? null)) {
+                    continue;
+                }
                 $key = ($product['id'] ?? null) ? 'id:' . $product['id'] : 'name:' . mb_strtolower($name);
                 if (!isset($items[$key])) {
                     $items[$key] = [
@@ -517,6 +539,20 @@ class SabyWaybillService
         $decoded = json_decode($raw, true);
 
         return is_array($decoded) ? $decoded : [];
+    }
+
+    private function isService($productId): bool
+    {
+        if (!$productId || !Schema::hasColumn('products', 'product_type')) {
+            return false;
+        }
+
+        $raw = \DB::table('products')->where('id', $productId)->value('product_type');
+        if (is_string($raw) && is_array($decoded = json_decode($raw, true))) {
+            $raw = $decoded[0] ?? null;
+        }
+
+        return trim((string) $raw) === '1';
     }
 
     private function productAttr($productId, string $field, string $default): string
