@@ -42,7 +42,9 @@ class SabyWaybillService
     {
         $document = $this->buildDocument($task);
         $config = $this->client->config();
+        $route = $task->route_id ? Route::find($task->route_id) : null;
         $shipper = $this->companyOf($task, 'shipment_company_id');
+        $carrier = $route ? $this->companyOf($route, 'company_id') : null;
         $receiver = $this->companyOf($task, 'company_id');
 
         $number = $this->nextNumber($task);
@@ -73,7 +75,7 @@ class SabyWaybillService
                 'НашаОрганизация' => $this->ourOrganization(),
                 'Грузоотправитель' => $this->counterparty($shipper),
                 'Грузополучатель' => $this->counterparty($receiver),
-                'ТранспортнаяКомпания' => $this->counterparty($shipper),
+                'ТранспортнаяКомпания' => $this->counterparty($carrier ?: $shipper),
                 'Вложение' => [
                     ['Файл' => [
                         'ДвоичныеДанные' => $file['ДвоичныеДанные'],
@@ -173,6 +175,14 @@ class SabyWaybillService
             $errors[] = 'В задаче не заполнено поле «Компания отгрузки» (грузоотправитель)';
         }
 
+        $carrier = $route ? $this->companyOf($route, 'company_id') : null;
+        if (!$carrier) {
+            $errors[] = 'У маршрута задачи не заполнено поле «Компания» (перевозчик)';
+        }
+        if ($carrier && $this->inn($carrier) === '') {
+            $errors[] = 'У перевозчика «' . $carrier->name . '» не заполнен ИНН';
+        }
+
         $receiver = $this->companyOf($task, 'company_id');
         if (!$receiver) {
             $errors[] = 'В задаче не заполнено поле «Компания» (грузополучатель)';
@@ -215,7 +225,7 @@ class SabyWaybillService
         $document['СодИнфГО']['НомЗак'] = (string) $task->id;
         $document['СодИнфГО']['ДатаЗак'] = $document['СодИнфГО']['ДатаТрН'];
 
-        $document['СодИнфГО']['СвПер'] = $this->party($shipper);
+        $document['СодИнфГО']['СвПер'] = $this->party($carrier);
 
         $loading = [];
         $gross = $this->number($this->attr($task, 'weight'));

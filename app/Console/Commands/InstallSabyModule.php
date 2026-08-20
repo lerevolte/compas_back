@@ -387,7 +387,7 @@ class InstallSabyModule extends Command
 
     private const MODULE_FIELDS = [
         'logistic_tasks' => ['saby_waybills', 'shipment_company_id', 'company_id', 'contact_id', 'employee_id', 'address', 'products', 'weight', 'delivery_date'],
-        'routes' => ['car_id'],
+        'routes' => ['company_id', 'car_id'],
         'companies' => ['name', 'inn', 'kpp', 'address'],
         'employees' => ['name', 'phone', 'inn', 'snils', 'driver_license'],
         'cars' => ['name', 'number', 'vehicle_type', 'trailer_number', 'osago_mark', 'osago_model', 'weight_max', 'volume_max'],
