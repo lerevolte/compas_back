@@ -487,7 +487,7 @@ class B24EntitySync
             $crmLink = 'https://crm6.ru/crm/deal/details/' . $dealId . '/';
             $model->crm_link = $crmLink;
             $model->name = json_encode([
-                'value'         => (string) ($deal['TITLE'] ?? $dealId),
+                'value'         => (string) $dealId,
                 'external_link' => $crmLink,
             ], JSON_UNESCAPED_UNICODE);
 
@@ -919,6 +919,10 @@ class B24EntitySync
             if (!$model) {
                 $model = new Company();
                 $model->name = $title !== '' ? $title : ('Компания #' . $b24Id);
+                $meta = $this->companyTypeMeta();
+                if ($meta) {
+                    $model->{$meta->field} = $meta->is_plural ? json_encode([$meta->value]) : $meta->value;
+                }
             } elseif ($model->trashed()) {
                 $model->deleted_at = null;
             }
@@ -943,6 +947,41 @@ class B24EntitySync
         } finally {
             self::$muted = false;
         }
+    }
+
+    private $companyTypeMeta = null;
+
+    private function companyTypeMeta(): ?object
+    {
+        if ($this->companyTypeMeta === null) {
+            $this->companyTypeMeta = false;
+            $typeId = DB::table('data_types')->where('slug', 'companies')->value('id');
+            $row = $typeId ? DB::table('data_rows')
+                ->where('data_type_id', $typeId)
+                ->where('type', 'select_dropdown')
+                ->where('title', 'Тип компании')
+                ->where('is_remove', 0)
+                ->first() : null;
+            if ($row && Schema::hasColumn('companies', $row->field)) {
+                $value = null;
+                $details = json_decode($row->details ?? '', true);
+                foreach ((is_array($details) ? ($details['options'] ?? []) : []) as $option) {
+                    if (is_array($option) && mb_strtolower(trim((string) ($option['label'] ?? ''))) === 'клиент') {
+                        $value = $option['value'];
+                        break;
+                    }
+                }
+                if ($value !== null) {
+                    $this->companyTypeMeta = (object) [
+                        'field' => $row->field,
+                        'value' => $value,
+                        'is_plural' => (bool) $row->is_plural,
+                    ];
+                }
+            }
+        }
+
+        return $this->companyTypeMeta ?: null;
     }
 
     private function companyRequisiteColumns(): array

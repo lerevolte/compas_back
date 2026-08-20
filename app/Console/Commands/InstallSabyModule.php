@@ -389,20 +389,23 @@ class InstallSabyModule extends Command
         'logistic_tasks' => ['saby_waybills', 'company_id', 'contact_id', 'employee_id', 'address', 'products', 'delivery_date'],
         'routes' => ['company_id', 'car_id'],
         'companies' => ['name', 'inn', 'kpp', 'address'],
-        'employees' => ['name', 'phone', 'inn'],
-        'cars' => ['name', 'number', 'ownership_type', 'osago_mark', 'osago_model', 'weight_max', 'volume_max'],
+        'employees' => ['name', 'phone', 'inn', 'snils', 'driver_license'],
+        'cars' => ['name', 'number', 'vehicle_type', 'trailer_number', 'osago_mark', 'osago_model', 'weight_max', 'volume_max'],
         'products' => ['name', 'packing_method', 'tare_type', 'weight', 'volume'],
     ];
 
     private const OBSOLETE_FIELDS = [
         'routes' => ['receiver_company_id', 'request_number', 'request_date', 'saby_waybills'],
+        'cars' => ['ownership_type'],
     ];
 
-    private const OWNERSHIP_TYPES = [
-        ['value' => '1', 'label' => 'Собственность'],
-        ['value' => '2', 'label' => 'Совместная собственность супругов'],
-        ['value' => '3', 'label' => 'Аренда'],
-        ['value' => '4', 'label' => 'Лизинг'],
+    private const VEHICLE_TYPES = [
+        ['value' => '1', 'label' => 'Легковой'],
+        ['value' => '2', 'label' => 'Грузовой'],
+        ['value' => '3', 'label' => 'Тягач'],
+        ['value' => '4', 'label' => 'Автопоезд'],
+        ['value' => '5', 'label' => 'Специальный'],
+        ['value' => '6', 'label' => 'Автобус'],
     ];
 
     public function handle(): int
@@ -504,16 +507,31 @@ class InstallSabyModule extends Command
             'title' => 'Гос. номер',
         ], 'varchar(32)');
 
-        $this->addField($db, 'cars', 'ownership_type', [
+        $this->addField($db, 'cars', 'vehicle_type', [
             'type' => 'select_dropdown',
-            'title' => 'Тип владения ТС',
-            'details' => json_encode(['options' => self::OWNERSHIP_TYPES], JSON_UNESCAPED_UNICODE),
+            'title' => 'Тип ТС',
+            'details' => json_encode(['options' => self::VEHICLE_TYPES], JSON_UNESCAPED_UNICODE),
         ], 'text');
+
+        $this->addField($db, 'cars', 'trailer_number', [
+            'type' => 'text',
+            'title' => 'Госномер прицепа',
+        ], 'varchar(32)');
 
         $this->addField($db, 'employees', 'inn', [
             'type' => 'text',
             'title' => 'ИНН',
         ], 'text');
+
+        $this->addField($db, 'employees', 'snils', [
+            'type' => 'text',
+            'title' => 'СНИЛС',
+        ], 'varchar(20)');
+
+        $this->addField($db, 'employees', 'driver_license', [
+            'type' => 'text',
+            'title' => 'Водительское удостоверение',
+        ], 'varchar(64)');
 
         $this->addField($db, 'products', 'packing_method', [
             'type' => 'text',

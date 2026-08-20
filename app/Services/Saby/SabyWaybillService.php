@@ -336,6 +336,16 @@ class SabyWaybillService
             $driver['ИННФЛ'] = $inn;
         }
 
+        $snils = trim((string) $this->attr($employee, 'snils'));
+        if ($snils !== '') {
+            $driver['СНИЛС'] = $snils;
+        }
+
+        $license = trim((string) $this->attr($employee, 'driver_license'));
+        if ($license !== '') {
+            $driver['ВодУдост'] = $license;
+        }
+
         $phone = $this->phoneValue($employee->phone);
         if ($phone !== '') {
             $driver['Тлф'] = [['value' => $phone]];
@@ -362,8 +372,7 @@ class SabyWaybillService
             $vehicle['РегНомер'] = $number;
         }
 
-        $ownership = trim((string) $this->attr($car, 'ownership_type'));
-        $vehicle['ТипВлад'] = $ownership !== '' ? $ownership : '1';
+        $vehicle['ТипВлад'] = '1';
 
         $params = [];
         $mark = $car->mark;
@@ -374,9 +383,13 @@ class SabyWaybillService
         if ($markName !== '') {
             $params['Марка'] = $markName;
         }
-        $model = $car->model;
-        if ($model && trim((string) $model->name) !== '') {
-            $params['Тип'] = (string) $model->name;
+        $type = $this->fieldOptionLabel('cars', 'vehicle_type', $this->attr($car, 'vehicle_type'));
+        if ($type === '') {
+            $model = $car->model;
+            $type = $model ? trim((string) $model->name) : '';
+        }
+        if ($type !== '') {
+            $params['Тип'] = $type;
         }
         $capacity = $this->number($car->weight_max);
         if ($capacity > 0) {
@@ -390,7 +403,42 @@ class SabyWaybillService
             $vehicle['ПарТС'] = $params;
         }
 
-        return count($vehicle) ? $vehicle : null;
+        if (!count($vehicle)) {
+            return null;
+        }
+
+        $trailerNumber = trim((string) $this->attr($car, 'trailer_number'));
+        if ($trailerNumber !== '') {
+            return [$vehicle, ['РегНомер' => $trailerNumber, 'ТипВлад' => '1']];
+        }
+
+        return $vehicle;
+    }
+
+    private function fieldOptionLabel(string $entity, string $field, $value): string
+    {
+        $raw = is_array($value) ? ($value[0] ?? null) : $value;
+        if (is_string($raw) && is_array($decoded = json_decode($raw, true))) {
+            $raw = $decoded[0] ?? null;
+        }
+        if ($raw === null || trim((string) $raw) === '') {
+            return '';
+        }
+
+        $row = \DB::table('data_rows')
+            ->join('data_types', 'data_rows.data_type_id', '=', 'data_types.id')
+            ->where('data_types.slug', $entity)
+            ->where('data_rows.field', $field)
+            ->value('data_rows.details');
+        $details = $row ? json_decode($row, true) : null;
+        foreach ((is_array($details) ? ($details['options'] ?? []) : []) as $option) {
+            if (is_array($option) && (string) ($option['value'] ?? '') === (string) $raw) {
+                $label = $option['label'] ?? '';
+                return trim((string) (is_array($label) ? ($label['text'] ?? '') : $label));
+            }
+        }
+
+        return '';
     }
 
     private function cargo($tasks): array

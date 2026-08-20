@@ -9,7 +9,8 @@ class InstallCompanyTypeField extends Command
 {
     protected $signature = 'companies:install-type-field
         {target=avixo : seeds | all-tenants | <tenant_id>}
-        {--dry-run : показать план без изменений}';
+        {--dry-run : показать план без изменений}
+        {--backfill-client : проставить «Клиент» компаниям без типа}';
 
     protected $description = 'Добавить поле «Тип компании» (select_dropdown: Клиент/Поставщик/Перевозчик) в сущность companies';
 
@@ -80,6 +81,7 @@ class InstallCompanyTypeField extends Command
             } else {
                 $this->line("    [{$label}] поле уже установлено (id {$existing->id}), пропуск");
             }
+            $this->backfillClient($db, $label, $existing, $dry);
             return;
         }
 
@@ -126,6 +128,53 @@ class InstallCompanyTypeField extends Command
 
         $this->line("    [{$label}] создано поле {$field} (id {$id})");
         $this->clearCache();
+
+        $row = $db->table('data_rows')->where('id', $id)->first();
+        $this->backfillClient($db, $label, $row, false);
+    }
+
+    private function backfillClient($db, string $label, $row, bool $dry): void
+    {
+        if (!$this->option('backfill-client') || !$row) {
+            return;
+        }
+
+        $sb = $db->getSchemaBuilder();
+        if (!$sb->hasColumn('companies', $row->field)) {
+            return;
+        }
+
+        $clientValue = null;
+        $details = json_decode($row->details ?? '', true);
+        foreach ((is_array($details) ? ($details['options'] ?? []) : []) as $option) {
+            if (is_array($option) && mb_strtolower(trim((string) ($option['label'] ?? ''))) === 'клиент') {
+                $clientValue = $option['value'];
+                break;
+            }
+        }
+        if ($clientValue === null) {
+            $this->warn("    [{$label}] в опциях поля нет варианта «Клиент», бэкфилл пропущен");
+            return;
+        }
+
+        $stored = $row->is_plural ? json_encode([$clientValue]) : (string) $clientValue;
+
+        $query = $db->table('companies')
+            ->where(fn ($q) => $q->whereNull($row->field)
+                ->orWhere($row->field, '')
+                ->orWhere($row->field, '[]')
+                ->orWhere($row->field, 'null'));
+
+        if ($dry) {
+            $this->line("    [{$label}] бэкфилл «Клиент» затронет " . $query->count() . " компаний");
+            return;
+        }
+
+        $filled = $query->update([$row->field => $stored]);
+        if ($filled) {
+            $this->line("    [{$label}] тип «Клиент» проставлен {$filled} компаниям");
+            $this->clearCache();
+        }
     }
 
     private function clearCache(): void

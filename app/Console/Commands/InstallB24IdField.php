@@ -10,9 +10,10 @@ class InstallB24IdField extends Command
     protected $signature = 'b24:install-id-field
         {target=avixo : seeds | all-tenants | <tenant_id>}
         {--entities=deals,logistic_tasks : слаги сущностей через запятую}
-        {--remove : убрать поле из data_rows (колонка и данные сохраняются)}';
+        {--remove : убрать поле из data_rows (колонка и данные сохраняются)}
+        {--rename-deals : проставить сделкам название = b24_id}';
 
-    protected $description = 'Показать пользователям поле «ID Bitrix24» (b24_id): системная строка в data_rows + колонка и бэкфилл из crm_link';
+    protected $description = 'Поле «ID Bitrix24» (b24_id, скрытое от пользователей): системная строка в data_rows + колонка и бэкфилл из crm_link';
 
     public function handle(): int
     {
@@ -104,16 +105,16 @@ class InstallB24IdField extends Command
 
             if ($row) {
                 $update = [
-                    'hide' => 0,
+                    'hide' => 1,
                     'only_read' => 1,
                     'is_permanent' => 1,
-                    'is_default' => 1,
+                    'is_default' => 0,
                 ];
                 if (!$sectionIds->contains((int) $row->section_id)) {
                     $update['section_id'] = $firstSectionId;
                 }
                 $db->table('data_rows')->where('id', $row->id)->update($update);
-                $this->line("  [{$label}] {$slug}: строка b24_id обновлена (hide=0, is_permanent=1, is_default=1)");
+                $this->line("  [{$label}] {$slug}: строка b24_id обновлена (hide=1, is_permanent=1)");
             } else {
                 $maxSort = (int) $db->table('data_rows')
                     ->where('data_type_id', $type->id)
@@ -124,12 +125,12 @@ class InstallB24IdField extends Command
                     'title' => 'ID Bitrix24', 'required' => 0, 'details' => null,
                     'visible_always' => 0, 'label_color' => '', 'section_id' => $firstSectionId,
                     'group_id' => null, 'sort' => $maxSort + 1, 'button_name' => 'Загрузить',
-                    'show_file_image' => 0, 'hide' => 0, 'is_plural' => 0, 'roles_read' => '',
+                    'show_file_image' => 0, 'hide' => 1, 'is_plural' => 0, 'roles_read' => '',
                     'roles_write' => '', 'is_remove' => 0, 'mobile_pages' => '',
                     'display_parent_name' => null, 'rules' => null, 'only_read' => 1,
                     'is_permanent' => 1, 'show_file_name' => 0, 'external_link' => '',
                     'is_external_link' => 0, 'module' => '', 'is_link' => 0, 'unit' => '',
-                    'module_section_id' => null, 'is_default' => 1, 'is_inactive' => 0,
+                    'module_section_id' => null, 'is_default' => 0, 'is_inactive' => 0,
                     'blocked_changes' => 0, 'mask' => null, 'permanent_required' => 0,
                     'permanent_name' => 0, 'relation_table' => null, 'options' => null,
                     'set_color' => 0, 'related_field' => null, 'is_unique' => 0,
@@ -151,6 +152,23 @@ class InstallB24IdField extends Command
                     ]);
                 if ($filled) {
                     $this->line("  [{$label}] {$slug}: b24_id заполнен из crm_link у {$filled} записей");
+                }
+            }
+
+            if ($slug === 'deals' && $this->option('rename-deals')) {
+                $renamedJson = $db->table('deals')
+                    ->whereNotNull('b24_id')->where('b24_id', '!=', '')
+                    ->whereRaw('JSON_VALID(`name`)')
+                    ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(`name`, '$.value')) != `b24_id`")
+                    ->update(['name' => $db->raw("JSON_SET(`name`, '$.value', `b24_id`)")]);
+                $renamedPlain = $db->table('deals')
+                    ->whereNotNull('b24_id')->where('b24_id', '!=', '')
+                    ->whereRaw('NOT JSON_VALID(`name`)')
+                    ->whereColumn('name', '!=', 'b24_id')
+                    ->update(['name' => $db->raw('`b24_id`')]);
+                $renamed = (int) $renamedJson + (int) $renamedPlain;
+                if ($renamed) {
+                    $this->line("  [{$label}] deals: название заменено на b24_id у {$renamed} записей");
                 }
             }
 
