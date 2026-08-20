@@ -764,6 +764,28 @@ class InstallSabyModule extends Command
                 $tabs[$modulesKey]['childs'] = array_values($childs);
             }
 
+            if ($entity === 'logistic_tasks') {
+                $hasCompanyTab = false;
+                foreach ($tabs as $tab) {
+                    if (($tab['tab'] ?? null) === 'company_id') {
+                        $hasCompanyTab = true;
+                        break;
+                    }
+                }
+                if (!$hasCompanyTab) {
+                    $maxSort = 0;
+                    $maxId = 0;
+                    foreach ($tabs as $tab) {
+                        $maxSort = max($maxSort, (int) ($tab['sort'] ?? 0));
+                        $maxId = max($maxId, (int) ($tab['id'] ?? 0));
+                    }
+                    $tabs[] = [
+                        'title' => 'Компания', 'tab' => 'company_id', 'slug' => 'companies',
+                        'sort' => $maxSort + 1, 'enabled' => 1, 'id' => $maxId + 1,
+                    ];
+                }
+            }
+
             $db->table('settings')->where('id', $menu->id)->update([
                 'value' => json_encode($tabs, JSON_UNESCAPED_SLASHES),
             ]);

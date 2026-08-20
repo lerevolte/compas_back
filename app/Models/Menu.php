@@ -51,28 +51,30 @@ class Menu
             if($field->type == 'relation' && $field->is_plural && $field->field != 'role_id' && $field->field != 'category_id') {
                 $need_create = true;
                 
+                $details = json_decode($field->details, true);
+                $tab_slug = $field->relation_table ?: ($details['table'] ?? null);
+
                 foreach($menu as $k => $menu_item) {
                     if($menu_item['tab'] == $field->field) {
                         if($menu_item['title'] != $field->title) {
                             $menu[$k]['title'] = $field->title;
-                            //unset($menu[$k]);
-                            //$count_new++;
-                            $need_create = false;
-                        } else {
-                            $need_create = false;
+                            $count_new++;
                         }
+                        if($tab_slug && (!isset($menu_item['slug']) || $menu_item['slug'] != $tab_slug)) {
+                            $menu[$k]['slug'] = $tab_slug;
+                            $count_new++;
+                        }
+                        $need_create = false;
                         break;
                     }
                 }
                 if($need_create) {
-                    $details = json_decode($field->details, true);
-                    if(isset($details['table'])) {
+                    if($tab_slug) {
                         $max_id++;
                         $menu[] = array(
                             'title' => $field->title,
                             'tab' => $field->field,
-                            'slug' => $field->relation_table,
-                            //'slug' => $details['table'],
+                            'slug' => $tab_slug,
                             'sort' => $max_id,
                             'enabled' => 1,
                             'id' => $max_id
