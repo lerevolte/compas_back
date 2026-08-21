@@ -440,6 +440,7 @@ Route::middleware([
         Route::get('logistic_tasks/{id}/saby-waybills', [App\Http\Controllers\Api\SabyWaybillController::class, 'index'])->name('saby.waybills');
         Route::post('logistic_tasks/{id}/saby-waybills', [App\Http\Controllers\Api\SabyWaybillController::class, 'store'])->name('saby.waybills.store');
         Route::get('logistic_tasks/{id}/saby-waybills/check', [App\Http\Controllers\Api\SabyWaybillController::class, 'check'])->name('saby.waybills.check');
+        Route::get('logistic_tasks/{id}/saby-waybills/route-tasks', [App\Http\Controllers\Api\SabyWaybillController::class, 'routeTasks'])->name('saby.waybills.route_tasks');
         Route::post('saby-waybills/{id}/refresh', [App\Http\Controllers\Api\SabyWaybillController::class, 'refresh'])->name('saby.waybills.refresh');
         Route::delete('saby-waybills/{id}', [App\Http\Controllers\Api\SabyWaybillController::class, 'destroy'])->name('saby.waybills.destroy');
         // Настройки полей вкладки «Маршрут списком» (общие на портал).

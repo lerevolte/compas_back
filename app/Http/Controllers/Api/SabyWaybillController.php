@@ -29,7 +29,7 @@ class SabyWaybillController extends Controller
         ]);
     }
 
-    public function store($id)
+    public function store($id, Request $request)
     {
         $service = SabyWaybillService::make();
         if (!$service) {
@@ -41,8 +41,19 @@ class SabyWaybillController extends Controller
             return response()->json(['message' => 'Задача не найдена'], 404);
         }
 
+        $loadingTask = null;
+        if ($request->loading_task_id) {
+            $loadingTask = Task::find($request->loading_task_id);
+            if (!$loadingTask) {
+                return response()->json(['message' => 'Точка погрузки не найдена'], 422);
+            }
+            if ($task->route_id && (int) $loadingTask->route_id !== (int) $task->route_id) {
+                return response()->json(['message' => 'Точка погрузки должна быть из маршрута задачи'], 422);
+            }
+        }
+
         try {
-            $waybill = $service->create($task);
+            $waybill = $service->create($task, $loadingTask);
         } catch (SabyValidationException $e) {
             return response()->json([
                 'message' => $e->getMessage(),
@@ -71,6 +82,46 @@ class SabyWaybillController extends Controller
             'enabled' => true,
             'errors' => $service->validate($task),
         ]);
+    }
+
+    public function routeTasks($id)
+    {
+        $task = Task::find($id);
+        if (!$task) {
+            return response()->json(['message' => 'Задача не найдена'], 404);
+        }
+        if (!$task->route_id) {
+            return response()->json(['data' => [], 'route_id' => null]);
+        }
+
+        $tasks = Task::where('route_id', $task->route_id)
+            ->orderBy('sort')
+            ->orderBy('id')
+            ->get()
+            ->map(function ($item) use ($task) {
+                $name = (string) $item->name;
+                $decoded = json_decode($name, true);
+                if (is_array($decoded) && array_key_exists('value', $decoded)) {
+                    $name = (string) $decoded['value'];
+                }
+                $address = '';
+                $rawAddress = json_decode((string) $item->address, true);
+                if (is_array($rawAddress)) {
+                    $address = trim((string) ($rawAddress['text'] ?? ''));
+                } elseif (is_string($item->address)) {
+                    $address = trim($item->address);
+                }
+                return [
+                    'id' => $item->id,
+                    'name' => $name,
+                    'address' => $address,
+                    'plan_time' => $item->plan_time,
+                    'is_current' => $item->id === $task->id,
+                ];
+            })
+            ->values();
+
+        return response()->json(['data' => $tasks, 'route_id' => $task->route_id]);
     }
 
     public function refresh($waybillId)
@@ -125,6 +176,25 @@ class SabyWaybillController extends Controller
             'cabinet_url' => $waybill->cabinet_url,
             'qr_url' => $waybill->qr_url,
             'created_at' => optional($waybill->created_at)->format('d.m.Y H:i'),
+            'loading_task' => $this->presentLoadingTask($waybill->loading_task_id),
         ];
+    }
+
+    private function presentLoadingTask($taskId): ?array
+    {
+        if (!$taskId) {
+            return null;
+        }
+        $task = Task::find($taskId);
+        if (!$task) {
+            return null;
+        }
+        $name = (string) $task->name;
+        $decoded = json_decode($name, true);
+        if (is_array($decoded) && array_key_exists('value', $decoded)) {
+            $name = (string) $decoded['value'];
+        }
+
+        return ['id' => $task->id, 'name' => $name];
     }
 }

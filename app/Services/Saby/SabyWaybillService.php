@@ -38,9 +38,9 @@ class SabyWaybillService
         return SabyClient::ready();
     }
 
-    public function create(Task $task): SabyWaybill
+    public function create(Task $task, ?Task $loadingTask = null): SabyWaybill
     {
-        $document = $this->buildDocument($task);
+        $document = $this->buildDocument($task, $loadingTask);
         $config = $this->client->config();
         $route = $task->route_id ? Route::find($task->route_id) : null;
         $shipper = $this->companyOf($task, 'shipment_company_id');
@@ -89,6 +89,7 @@ class SabyWaybillService
 
         $waybill = SabyWaybill::create([
             'task_id' => $task->id,
+            'loading_task_id' => $loadingTask?->id,
             'route_id' => $task->route_id,
             'doc_id' => $written['Идентификатор'] ?? null,
             'attachment_id' => $attachment['Идентификатор'] ?? null,
@@ -164,7 +165,7 @@ class SabyWaybillService
         }
     }
 
-    public function buildDocument(Task $task): array
+    public function buildDocument(Task $task, ?Task $loadingTask = null): array
     {
         $errors = [];
 
@@ -239,10 +240,26 @@ class SabyWaybillService
         if ($places > 0) {
             $loading['КолМестПрием'] = $this->format($places);
         }
+        if ($loadingTask) {
+            $loadingAt = $this->loadingDateTime($loadingTask, $route);
+            if ($loadingAt !== '') {
+                $loading['ЗаявПогр'] = $loadingAt;
+            }
+        }
+
         if (count($loading)) {
-            $shipperAddress = $this->companyAddress($shipper, $this->requisite($shipper));
-            if ($shipperAddress !== '') {
-                $loading['ФАдресПогр'] = ['АдресИнф' => ['АдрТекст' => $shipperAddress, 'КодСтр' => '643']];
+            $loadingAddress = '';
+            if ($loadingTask) {
+                $loadingAddress = $this->addressText($loadingTask->address);
+                if ($this->isCoordinates($loadingAddress)) {
+                    $loadingAddress = '';
+                }
+            }
+            if ($loadingAddress === '') {
+                $loadingAddress = $this->companyAddress($shipper, $this->requisite($shipper));
+            }
+            if ($loadingAddress !== '') {
+                $loading['ФАдресПогр'] = ['АдресИнф' => ['АдрТекст' => $loadingAddress, 'КодСтр' => '643']];
             }
             $document['СодИнфГО']['СвПогруз'] = $loading;
         }
@@ -576,6 +593,24 @@ class SabyWaybillService
         $value = trim((string) $value);
 
         return $value !== '' ? $value : $default;
+    }
+
+    private function loadingDateTime(Task $loadingTask, ?Route $route): string
+    {
+        $date = trim((string) ($loadingTask->delivery_date ?: ($route?->date ?: '')));
+        try {
+            $base = $date !== '' ? \Carbon\Carbon::parse($date) : now();
+        } catch (\Throwable $e) {
+            $base = now();
+        }
+        $time = trim((string) $this->attr($loadingTask, 'plan_time'));
+        if (preg_match('/^(\d{1,2}):(\d{2})/', $time, $m)) {
+            $base->setTime((int) $m[1], (int) $m[2], 0);
+        } else {
+            $base->setTime(0, 0, 0);
+        }
+
+        return $base->format('d.m.Y\TH:i:sP');
     }
 
     private function taskAddress(Task $task, ?Company $receiver = null): string
