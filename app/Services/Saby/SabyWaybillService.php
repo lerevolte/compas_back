@@ -401,7 +401,8 @@ class SabyWaybillService
             $vehicle['РегНомер'] = $number;
         }
 
-        $vehicle['ТипВлад'] = '1';
+        $ownership = trim((string) $this->attr($car, 'ownership_type'));
+        $vehicle['ТипВлад'] = $ownership !== '' ? $ownership : '1';
 
         $params = [];
         $mark = $car->mark;

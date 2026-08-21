@@ -390,7 +390,7 @@ class InstallSabyModule extends Command
         'routes' => ['company_id', 'car_id'],
         'companies' => ['name', 'inn', 'kpp', 'address'],
         'employees' => ['name', 'phone', 'inn', 'snils', 'driver_license'],
-        'cars' => ['name', 'number', 'vehicle_type', 'trailer_number', 'osago_mark', 'osago_model', 'weight_max', 'volume_max'],
+        'cars' => ['name', 'number', 'ownership_type', 'vehicle_type', 'trailer_number', 'osago_mark', 'osago_model', 'weight_max', 'volume_max'],
         'products' => ['name', 'packing_method', 'tare_type', 'weight', 'volume'],
         'addresses' => ['company_id', 'contact_id', 'address', 'weight'],
         'warehouses' => ['company_id', 'contact_id', 'address', 'weight'],
@@ -398,7 +398,13 @@ class InstallSabyModule extends Command
 
     private const OBSOLETE_FIELDS = [
         'routes' => ['receiver_company_id', 'request_number', 'request_date', 'saby_waybills'],
-        'cars' => ['ownership_type'],
+    ];
+
+    private const OWNERSHIP_TYPES = [
+        ['value' => '1', 'label' => 'Собственность'],
+        ['value' => '2', 'label' => 'Совместная собственность супругов'],
+        ['value' => '3', 'label' => 'Аренда'],
+        ['value' => '4', 'label' => 'Лизинг'],
     ];
 
     private const VEHICLE_TYPES = [
@@ -516,6 +522,12 @@ class InstallSabyModule extends Command
             'type' => 'text',
             'title' => 'Гос. номер',
         ], 'varchar(32)');
+
+        $this->addField($db, 'cars', 'ownership_type', [
+            'type' => 'select_dropdown',
+            'title' => 'Тип владения ТС',
+            'details' => json_encode(['options' => self::OWNERSHIP_TYPES], JSON_UNESCAPED_UNICODE),
+        ], 'text');
 
         $this->addField($db, 'cars', 'vehicle_type', [
             'type' => 'select_dropdown',

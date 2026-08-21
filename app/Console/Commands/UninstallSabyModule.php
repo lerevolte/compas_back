@@ -18,7 +18,7 @@ class UninstallSabyModule extends Command
         'routes' => ['receiver_company_id', 'request_number', 'request_date', 'saby_waybills'],
         'logistic_tasks' => ['shipment_company_id', 'company_id', 'contact_id', 'saby_waybills'],
         'companies' => ['inn', 'kpp', 'address'],
-        'cars' => ['vehicle_type', 'trailer_number', 'number'],
+        'cars' => ['ownership_type', 'vehicle_type', 'trailer_number', 'number'],
         'employees' => ['inn', 'snils', 'driver_license'],
         'products' => ['packing_method', 'tare_type'],
     ];
