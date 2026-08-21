@@ -184,6 +184,8 @@ class InstallWarehousesEntity extends Command
                 unset($arr['id']);
                 $arr['data_type_id'] = $typeId;
                 $arr['section_id']   = $infoSecId;
+                $arr['group_id'] = null;
+                $arr['subfields'] = null;
                 $arr['module_section_id'] = $this->isNonEmptyJsonArray($arr['module_section_id'] ?? null)
                     ? '['.$moduleSecId.']'
                     : ($arr['module_section_id'] ?? null);

@@ -198,6 +198,8 @@ class InstallAddressesEntity extends Command
                 unset($arr['id']);
                 $arr['data_type_id'] = $typeId;
                 $arr['section_id']   = $infoSecId;
+                $arr['group_id'] = null;
+                $arr['subfields'] = null;
                 // если поле было «используется в модуле» — указываем модульный раздел адресов
                 $arr['module_section_id'] = $this->isNonEmptyJsonArray($arr['module_section_id'] ?? null)
                     ? '['.$moduleSecId.']'

@@ -106,7 +106,11 @@ class Field extends Model
 
     public static function getByGroup(int $id)
     {
-        $fields = \DB::table('data_rows')->where(['group_id' => $id])->orderBy('sort')->get();
+        $group_type_id = \DB::table('data_rows')->where('id', $id)->value('data_type_id');
+        $fields = \DB::table('data_rows')
+            ->where(['group_id' => $id])
+            ->when($group_type_id, fn ($q) => $q->where('data_type_id', $group_type_id))
+            ->orderBy('sort')->get();
 
         return $fields;
     }
