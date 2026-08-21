@@ -10,6 +10,7 @@ use YooKassa\Model\Notification\NotificationWaitingForCapture;
 use YooKassa\Model\NotificationEventType;
 
 Route::group(['middleware' => ['web']], function() {
+    Route::post('/set_geoposition', [App\Http\Controllers\Api\GeopositionController::class, 'store']);
     Route::match(['get', 'post'],'/set_fcm_token', function(Request $request) {
         if($request->userId) {
             info('account '.$request->accountId);

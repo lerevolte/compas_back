@@ -60,6 +60,7 @@ Route::get('/route/v1/driving/{coords}', function(Request $request) {
     info($data);
     return $data;
 });
+Route::post('/set_geoposition', [App\Http\Controllers\Api\GeopositionController::class, 'store']);
 Route::match(['get', 'post'],'/set_fcm_token', function(Request $request) {
     if($request->userId) {
         $tenant = \App\Models\Tenant::find($request->accountId);

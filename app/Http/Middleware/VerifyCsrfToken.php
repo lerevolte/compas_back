@@ -17,6 +17,7 @@ class VerifyCsrfToken extends Middleware
         '/b24_crm_contact_update',
         '/create_payment',
         '/set_fcm_token',
+        '/set_geoposition',
         '/api/bitrix24/deal-hook'
     ];
 }
