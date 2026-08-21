@@ -48,7 +48,7 @@ class TaskController extends Controller
         }
         $object = $class::find($id);
         if(!$object) {
-            return response()->json(['error' => 404, 'text' => 'Задача не найдена']);
+            return response()->json(['error' => 404, 'text' => 'Задача не найдена'], 404);
         }
         $object->setProducts($products);
 

@@ -1043,6 +1043,15 @@ class Settings extends Model
 				cache()->getMemcached()->delete(tenant('id').':'.$t.'-fields');
 			}
 		} catch (\Throwable $e) {}
+		try {
+			$slugs = \DB::table('data_types')->pluck('slug');
+			foreach ($slugs as $slug) {
+				if (!$slug) continue;
+				foreach ($users as $user) {
+					cache()->getMemcached()->delete(tenant('id').':filter-'.$slug.'-'.$user->id);
+				}
+			}
+		} catch (\Throwable $e) {}
 		// \App\Jobs\SettingsClearJob::dispatch();
 
 
