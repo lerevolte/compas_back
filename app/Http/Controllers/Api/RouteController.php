@@ -1158,6 +1158,8 @@ class RouteController extends Controller
             return response()->json(['code' => 500, 'error' => 'Не удалось создать задачу'], 500);
         }
 
+        \App\Models\ObjectRelation::link('warehouses', $warehouse->id, 'logistic_tasks', $newId);
+
         if ($warehouse->client_id) {
             $task = Task::find($newId);
             if ($task) {
