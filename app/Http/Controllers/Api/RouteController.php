@@ -1121,12 +1121,12 @@ class RouteController extends Controller
 
         $routeId = $request->route_id ? (int) $request->route_id : null;
 
-        $companyId = $address->company_id;
+        $companyId = $warehouse->company_id;
         if (is_string($companyId) && is_array($decodedCompany = json_decode($companyId, true))) {
             $companyId = $decodedCompany[0] ?? null;
         }
         $contactIds = array_values(array_map('intval', array_filter(
-            (array) json_decode((string) $address->contact_id, true),
+            (array) json_decode((string) $warehouse->contact_id, true),
             'is_numeric'
         )));
 
@@ -1147,6 +1147,8 @@ class RouteController extends Controller
             'weight'                => $warehouse->weight ?? null,
             'delivery_price'        => $warehouse->delivery_price ?? null,
             'volume'                => $warehouse->volume ?? null,
+            'company_id'            => $companyId,
+            'contact_id'            => $contactIds,
         ];
 
         $result = $crud->batch('logistic_tasks', [$row]);
