@@ -29,6 +29,8 @@ class Dadata
             "X-Secret: " . $this->secret,
         ));
         curl_setopt($this->handle, CURLOPT_POST, 1);
+        curl_setopt($this->handle, CURLOPT_CONNECTTIMEOUT, 5);
+        curl_setopt($this->handle, CURLOPT_TIMEOUT, 10);
     }
 
     /**

@@ -36,4 +36,9 @@ return [
         'password' => env('SMS_AGENT_PASSWORD'),
     ],
 
+    'dadata' => [
+        'token' => env('DADATA_TOKEN', '1aae835b4ef406e670f2fed34e0e1f44a7a2fc46'),
+        'secret' => env('DADATA_SECRET', '12b85f4474f0fab219a2307f13a33c05f8418355'),
+    ],
+
 ];

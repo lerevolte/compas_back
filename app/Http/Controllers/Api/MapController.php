@@ -49,7 +49,7 @@ class MapController extends Controller
 
     public function suggest(Request $request)
     {
-        $dadata = new \App\Services\Dadata('1aae835b4ef406e670f2fed34e0e1f44a7a2fc46', '12b85f4474f0fab219a2307f13a33c05f8418355');
+        $dadata = new \App\Services\Dadata(config('services.dadata.token'), config('services.dadata.secret'));
         $dadata->init();
 
         $fields = array("query" => $request->address, "count" => 5);
@@ -91,7 +91,7 @@ class MapController extends Controller
 
     public function geocode(Request $request)
     {
-        $dadata = new \App\Services\Dadata('1aae835b4ef406e670f2fed34e0e1f44a7a2fc46', '12b85f4474f0fab219a2307f13a33c05f8418355');
+        $dadata = new \App\Services\Dadata(config('services.dadata.token'), config('services.dadata.secret'));
         $dadata->init();
         
         $address = $request->address;

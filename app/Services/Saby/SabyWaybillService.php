@@ -9,6 +9,7 @@ use App\Models\Requisite;
 use App\Models\Route;
 use App\Models\Task;
 use App\Models\SabyWaybill;
+use App\Services\Dadata;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
@@ -18,8 +19,10 @@ class SabyWaybillService
     public const SHIPPER_TITLE_KND = '1110339';
     public const DOC_TYPE = 'ConsignmentNote';
     public const REGULATION = 'Транспортная накладная';
+    public const GEOCODE_RADIUS = 1000;
 
     private SabyClient $client;
+    private array $geocodeCache = [];
 
     public function __construct(SabyClient $client)
     {
@@ -252,7 +255,7 @@ class SabyWaybillService
             if ($loadingTask) {
                 $loadingAddress = $this->addressText($loadingTask->address);
                 if ($this->isCoordinates($loadingAddress)) {
-                    $loadingAddress = '';
+                    $loadingAddress = $this->resolveCoordinates($loadingAddress) ?: $loadingAddress;
                 }
             }
             if ($loadingAddress === '') {
@@ -617,11 +620,13 @@ class SabyWaybillService
     {
         $text = $this->addressText($task->address);
 
-        if ($text !== '' && !$this->isCoordinates($text)) {
-            return $text;
-        }
+        if ($text !== '') {
+            if (!$this->isCoordinates($text)) {
+                return $text;
+            }
 
-        $any = $text;
+            return $this->resolveCoordinates($text) ?: $text;
+        }
 
         if ($receiver) {
             $fallback = $this->companyAddress($receiver, $this->requisite($receiver));
@@ -630,7 +635,50 @@ class SabyWaybillService
             }
         }
 
-        return $any;
+        return '';
+    }
+
+    private function resolveCoordinates(string $text): string
+    {
+        if (!preg_match('/^\s*(-?\d+\.\d+)\s*[,\s]\s*(-?\d+\.\d+)\s*$/', $text, $m)) {
+            return '';
+        }
+
+        $key = $m[1] . ',' . $m[2];
+        if (array_key_exists($key, $this->geocodeCache)) {
+            return $this->geocodeCache[$key];
+        }
+
+        $address = '';
+        $token = config('services.dadata.token');
+        $secret = config('services.dadata.secret');
+
+        if ($token && $secret) {
+            $dadata = new Dadata($token, $secret);
+            try {
+                $dadata->init();
+                $result = $dadata->geolocate((float) $m[1], (float) $m[2], 5, self::GEOCODE_RADIUS);
+                foreach ($result['suggestions'] ?? [] as $item) {
+                    if (empty($item['data']['house'])) {
+                        continue;
+                    }
+                    $address = trim((string) ($item['unrestricted_value'] ?? $item['value'] ?? ''));
+                    if ($address !== '') {
+                        break;
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::channel('saby')->warning('Не удалось определить адрес по координатам ' . $key . ': ' . $e->getMessage());
+                $address = '';
+            } finally {
+                try {
+                    $dadata->close();
+                } catch (\Throwable $e) {
+                }
+            }
+        }
+
+        return $this->geocodeCache[$key] = $address;
     }
 
     private function isCoordinates(string $text): bool
