@@ -1551,7 +1551,7 @@ class EntityObject
                     }
                 } else {
                     if(isset($settings[$slug]['fields'][$field]) && $settings[$slug]['fields'][$field]->is_plural) {
-                        if($settings[$slug]['fields'][$field]->type == 'relation' && $settings[$slug]['fields'][$field]->relation_table) {
+                        if($settings[$slug]['fields'][$field]->type == 'relation' && $settings[$slug]['fields'][$field]->relation_table && method_exists($entity_class, $settings[$slug]['fields'][$field]->relation_table)) {
                             $paginator = $paginator->whereHas($settings[$slug]['fields'][$field]->relation_table, function($q) use($val) {
                                 if (is_array($val)) {
                                     $q->whereIn('id', array_map('intval', $val));
@@ -1560,6 +1560,16 @@ class EntityObject
                                 }
                             });
 
+                        } elseif($settings[$slug]['fields'][$field]->type == 'relation' && $settings[$slug]['fields'][$field]->relation_table) {
+                            if (is_array($val)) {
+                                $paginator = $paginator->where(function($query) use ($val, $field) {
+                                    foreach (array_map('intval', $val) as $v) {
+                                        $query->orWhereJsonContains($field, $v);
+                                    }
+                                });
+                            } else {
+                                $paginator = $paginator->whereJsonContains($field, (int)$val);
+                            }
                         } elseif($settings[$slug]['fields'][$field]->type == 'relation') {
                             $paginator = $paginator->whereJsonContains($field, (int)$val);
                         } elseif($settings[$slug]['fields'][$field]->type == 'multi_text') {
@@ -1745,7 +1755,7 @@ class EntityObject
                     $q_date = sprintf('%04d-%02d-%02d', $m[1], $m[2], $m[3]);
             }
 
-            $paginator = $paginator->where(function ($query) use ($slug, $settings, $model_fields, $q, $q_number, $q_date) {
+            $paginator = $paginator->where(function ($query) use ($slug, $settings, $model_fields, $q, $q_number, $q_date, $entity_class) {
                 foreach($model_fields as $field) {
                     if(in_array($field->type, ['text_group', 'file', 'redactor', 'password']))
                         continue;
@@ -1791,9 +1801,17 @@ class EntityObject
                             $relations = array_values(array_unique($relations));
                         }
                         if(count($relations) && $field->is_plural) {
-                            $query->orWhereHas($field->relation_table, function($subquery) use($relations) {
-                                $subquery->whereIntegerInRaw('id', $relations);
-                            });
+                            if($field->relation_table && method_exists($entity_class, $field->relation_table)) {
+                                $query->orWhereHas($field->relation_table, function($subquery) use($relations) {
+                                    $subquery->whereIntegerInRaw('id', $relations);
+                                });
+                            } else {
+                                $query->orWhere(function ($subquery) use ($relations, $field) {
+                                    foreach($relations as $rel_id) {
+                                        $subquery->orWhereJsonContains($field->field, (int) $rel_id);
+                                    }
+                                });
+                            }
                         } elseif(count($relations)) {
                             $query->orWhereIn($field->field, $relations);
                         }

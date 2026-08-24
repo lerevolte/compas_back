@@ -73,7 +73,7 @@ class SearchService
                             }
                         } else {
                             if(isset($settings[$slug]['fields'][$field]) && $settings[$slug]['fields'][$field]->is_plural) {
-                                if($settings[$slug]['fields'][$field]->type == 'relation' && $settings[$slug]['fields'][$field]->relation_table) {
+                                if($settings[$slug]['fields'][$field]->type == 'relation' && $settings[$slug]['fields'][$field]->relation_table && method_exists($entity_class, $settings[$slug]['fields'][$field]->relation_table)) {
                                     $paginator = $paginator->whereHas($settings[$slug]['fields'][$field]->relation_table, function($q) use($val) {
                                         $q->where('id', '=', (int)$val);
                                     });
