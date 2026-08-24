@@ -405,6 +405,7 @@ Route::middleware([
 
         Route::get('map/suggest', [App\Http\Controllers\Api\MapController::class, 'suggest']);
         Route::get('map/geocode', [App\Http\Controllers\Api\MapController::class, 'geocode']);
+        Route::get('suggest/bank', [App\Http\Controllers\Api\SuggestController::class, 'bank']);
         
         
         Route::get('modules/categories', [App\Http\Controllers\Api\ModuleController::class, 'categories'])->name('modules.categories');

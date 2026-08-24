@@ -133,6 +133,21 @@ class Company extends Model
         return $this->belongsToMany(Contact::class, 'company_contact');
     }
 
+    public function bank_requisites()
+    {
+        return $this->hasMany(BankRequisite::class, 'company_id')->orderBy('id');
+    }
+
+    public function defaultBankRequisite(): ?BankRequisite
+    {
+        if (!\Schema::hasTable('bank_requisites')) {
+            return null;
+        }
+
+        return $this->bank_requisites()->where('is_default', '1')->first()
+            ?: $this->bank_requisites()->first();
+    }
+
     public function deals()
     {
         return $this->belongsToMany(Deal::class, 'company_deal');

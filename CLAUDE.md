@@ -69,7 +69,8 @@ https://github.com/lerevolte/compas_f
    установку/удаление на ручной SQL или шаги вне команд. Существующие пары:
    deals (`entity:install-deals`/`entity:uninstall-deals`),
    contacts (`entity:install-contacts`/`entity:uninstall-contacts`),
-   saby (`saby:install`/`saby:uninstall`).
+   saby (`saby:install`/`saby:uninstall`),
+   bank_requisites (`bank-requisites:install`/`bank-requisites:uninstall`).
 7. **Модуль обязан прописываться во вкладку «Модули» деталки.** Пользователь
    должен видеть, какие поля сущностей использует модуль. Эталон — модуль
    логистики (`logistic:sync-module-fields`), рабочий пример в install/uninstall —

@@ -591,8 +591,11 @@ class Field extends Model
             if (isset($details['can_create'])) {
                 $data['can_create'] = $details['can_create'] ? 1 : 0;
             }
+            if (!empty($details['suggest'])) {
+                $data['suggest'] = (string) $details['suggest'];
+            }
         }
-        
+
         return $data;
     }
 
