@@ -13,36 +13,64 @@ class GeopositionController extends Controller
 {
     public function store(Request $request)
     {
+        $raw = $request->getContent();
+        Log::channel('geo')->info('incoming', [
+            'ip' => $request->ip(),
+            'ua' => $request->userAgent(),
+            'content_type' => $request->header('Content-Type'),
+            'length' => strlen($raw),
+            'raw' => mb_substr($raw, 0, 4000),
+            'query' => $request->query(),
+            'input_keys' => array_keys($request->all()),
+        ]);
+
         $points = $request->json()->all();
         if (!is_array($points)) {
+            Log::channel('geo')->warning('rejected: json is not array', ['type' => gettype($points)]);
             return response()->json(['ok' => true]);
         }
 
         $byTenant = [];
+        $skipped = [];
         foreach ($points as $point) {
             if (!is_array($point)) {
+                $skipped[] = 'point is not array';
                 continue;
             }
             $tenantId = $point['accountId'] ?? null;
             $userId = $point['userId'] ?? null;
             $location = $point['location'] ?? null;
             if (!$tenantId || !$userId || !is_array($location)) {
+                $skipped[] = 'missing fields: '.implode(',', array_filter([
+                    $tenantId ? null : 'accountId',
+                    $userId ? null : 'userId',
+                    is_array($location) ? null : 'location',
+                ])).' | keys: '.implode(',', array_keys($point));
                 continue;
             }
             if (!isset($location['latitude']) || !isset($location['longitude'])) {
+                $skipped[] = 'missing coords | location keys: '.implode(',', array_keys($location));
                 continue;
             }
             $byTenant[(string) $tenantId][] = $point;
         }
 
+        Log::channel('geo')->info('parsed', [
+            'points' => count($points),
+            'accepted_by_tenant' => array_map('count', $byTenant),
+            'skipped' => array_slice($skipped, 0, 10),
+        ]);
+
         foreach ($byTenant as $tenantId => $rows) {
             try {
                 $tenant = Tenant::find($tenantId);
                 if (!$tenant) {
+                    Log::channel('geo')->warning('tenant not found', ['tenant' => $tenantId]);
                     continue;
                 }
-                $tenant->run(function () use ($rows) {
+                $tenant->run(function () use ($rows, $tenantId) {
                     if (!Schema::hasTable('user_geopositions')) {
+                        Log::channel('geo')->warning('table user_geopositions missing', ['tenant' => $tenantId]);
                         return;
                     }
                     $now = now();
@@ -88,6 +116,7 @@ class GeopositionController extends Controller
                     if (count($insert)) {
                         DB::table('user_geopositions')->insert($insert);
                     }
+                    Log::channel('geo')->info('stored', ['tenant' => $tenantId, 'rows' => count($insert), 'users' => array_keys($latest)]);
                     if (count($latest) && Schema::hasColumn('users', 'geoposition')) {
                         foreach ($latest as $userId => $value) {
                             DB::table('users')->where('id', $userId)->update([
@@ -97,6 +126,7 @@ class GeopositionController extends Controller
                     }
                 });
             } catch (\Throwable $e) {
+                Log::channel('geo')->error('failed: '.$e->getMessage(), ['tenant' => $tenantId]);
                 Log::warning('set_geoposition failed: '.$e->getMessage(), ['tenant' => $tenantId]);
             }
         }

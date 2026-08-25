@@ -78,6 +78,12 @@ return [
             'level' => env('LOG_LEVEL', 'debug'),
         ],
 
+        'geo' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/geo.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+        ],
+
         'saby' => [
             'driver' => 'single',
             'path' => storage_path('logs/saby.log'),
