@@ -37,12 +37,12 @@
         </tr>
         <tr>
             <td>
-                <div>ИНН {{ $company->inn ?? '' }} @if(!empty($company->kpp)) КПП {{ $company->kpp }} @endif</div>
-                <div>{{ $companyName }}</div>
+                <div>ИНН {{ $org->inn ?? '' }} @if(!empty($org->kpp)) КПП {{ $org->kpp }} @endif</div>
+                <div>{{ $org->name ?? '' }}</div>
                 <div class="muted">Получатель</div>
             </td>
             <td>Сч. №</td>
-            <td>{{ $bank->account ?? '' }}</td>
+            <td>{{ $bank->account ?? ($org->account ?? '') }}</td>
         </tr>
     </table>
 
@@ -51,11 +51,11 @@
 
     <p>
         <b>Поставщик:</b>
-        {{ $companyName }}@if(!empty($company->inn)), ИНН {{ $company->inn }}@endif @if(!empty($company->kpp)), КПП {{ $company->kpp }}@endif @if(!empty($company->address)), {{ $company->address }}@endif
+        {{ $org->name ?? '' }}@if(!empty($org->inn)), ИНН {{ $org->inn }}@endif @if(!empty($org->kpp)), КПП {{ $org->kpp }}@endif @if(!empty($org->address) || !empty($org->fact_address)), {{ $org->address ?: $org->fact_address }}@endif
     </p>
     <p>
         <b>Покупатель:</b>
-        {{ $buyer !== '' ? $buyer : '—' }}
+        @if($companyName !== ''){{ $companyName }}@if(!empty($company->inn)), ИНН {{ $company->inn }}@endif @if(!empty($company->kpp)), КПП {{ $company->kpp }}@endif @if(!empty($company->address)), {{ $company->address }}@endif @if($buyer !== '') ({{ $buyer }})@endif @else{{ $buyer !== '' ? $buyer : '—' }}@endif
     </p>
     @if($dealName !== '')
         <p><b>Основание:</b> Заказ покупателя «{{ $dealName }}» № {{ $dealId }}</p>
@@ -99,9 +99,9 @@
     <table class="sign">
         <tr>
             <td style="width: 18%;"><b>Руководитель</b></td>
-            <td class="line" style="width: 32%;">{{ $company->director ?? '' }}</td>
+            <td class="line" style="width: 32%;"></td>
             <td style="width: 18%;"><b>Гл. бухгалтер</b></td>
-            <td class="line" style="width: 32%;">{{ $company->accountant ?? '' }}</td>
+            <td class="line" style="width: 32%;"></td>
         </tr>
     </table>
 </body>

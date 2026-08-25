@@ -57,11 +57,8 @@ class SaleDocumentService
         $companyId = $this->firstId($doc->company_id) ?: ($deal ? $this->firstId($deal->company_id ?? null) : null);
         $company = $companyId ? Company::find($companyId) : null;
 
-        $bank = null;
-        if ($company && Schema::hasTable('bank_requisites')) {
-            $bank = BankRequisite::where('company_id', $company->id)->where('is_default', '1')->first()
-                ?: BankRequisite::where('company_id', $company->id)->orderBy('id')->first();
-        }
+        $org = $this->ourOrganization();
+        $bank = $org ? $this->orgBank($org) : null;
 
         $products = $this->decodeProducts($doc->products);
         if (!count($products) && $deal) {
@@ -88,9 +85,10 @@ class SaleDocumentService
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView($meta['view'], [
             'number' => $number,
             'date' => $date,
+            'org' => $org,
+            'bank' => $bank,
             'company' => $company,
             'companyName' => $company ? ($this->plain($company->full_name ?? '') ?: $this->plainName($company->name ?? '')) : '',
-            'bank' => $bank,
             'products' => $products,
             'total' => $total,
             'buyer' => $buyer,
@@ -159,6 +157,39 @@ class SaleDocumentService
             $out[] = ['name' => (string) ($item['name'] ?? 'Документ'), 'url' => $link];
         }
         return $out;
+    }
+
+    private function ourOrganization(): ?object
+    {
+        if (!Schema::hasTable('requisites')) {
+            return null;
+        }
+
+        return DB::table('requisites')
+            ->whereNull('deleted_at')
+            ->orderByRaw('choosed_at IS NULL')
+            ->orderByDesc('choosed_at')
+            ->orderBy('id')
+            ->first();
+    }
+
+    private function orgBank(object $org): ?BankRequisite
+    {
+        $inn = preg_replace('/\D/', '', (string) ($org->inn ?? ''));
+        if ($inn === '' || !Schema::hasTable('bank_requisites') || !Schema::hasColumn('companies', 'inn')) {
+            return null;
+        }
+
+        $companyId = DB::table('companies')
+            ->whereNull('deleted_at')
+            ->where('inn', $inn)
+            ->value('id');
+        if (!$companyId) {
+            return null;
+        }
+
+        return BankRequisite::where('company_id', $companyId)->where('is_default', '1')->first()
+            ?: BankRequisite::where('company_id', $companyId)->orderBy('id')->first();
     }
 
     private function firstId($value): ?int

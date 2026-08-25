@@ -23,11 +23,11 @@
 
     <p>
         <b>Поставщик:</b>
-        {{ $companyName }}@if(!empty($company->inn)), ИНН {{ $company->inn }}@endif @if(!empty($company->kpp)), КПП {{ $company->kpp }}@endif @if(!empty($company->address)), {{ $company->address }}@endif
+        {{ $org->name ?? '' }}@if(!empty($org->inn)), ИНН {{ $org->inn }}@endif @if(!empty($org->kpp)), КПП {{ $org->kpp }}@endif @if(!empty($org->address) || !empty($org->fact_address)), {{ $org->address ?: $org->fact_address }}@endif
     </p>
     <p>
         <b>Покупатель:</b>
-        {{ $buyer !== '' ? $buyer : '—' }}
+        @if($companyName !== ''){{ $companyName }}@if(!empty($company->inn)), ИНН {{ $company->inn }}@endif @if(!empty($company->kpp)), КПП {{ $company->kpp }}@endif @if(!empty($company->address)), {{ $company->address }}@endif @if($buyer !== '') ({{ $buyer }})@endif @else{{ $buyer !== '' ? $buyer : '—' }}@endif
     </p>
     @if($dealName !== '')
         <p><b>Основание:</b> Заказ покупателя «{{ $dealName }}» № {{ $dealId }}</p>
