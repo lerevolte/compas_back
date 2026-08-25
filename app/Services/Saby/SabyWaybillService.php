@@ -20,6 +20,11 @@ class SabyWaybillService
     public const DOC_TYPE = 'ConsignmentNote';
     public const REGULATION = 'Транспортная накладная';
     public const GEOCODE_RADIUS = 1000;
+    public const MASS_METHODS = [
+        '1' => 'Взвешивание по общей массе',
+        '2' => 'Взвешивание поосно',
+        '3' => 'Расчетная масса',
+    ];
 
     private SabyClient $client;
     private array $geocodeCache = [];
@@ -41,9 +46,9 @@ class SabyWaybillService
         return SabyClient::ready();
     }
 
-    public function create(Task $task, ?Task $loadingTask = null): SabyWaybill
+    public function create(Task $task, ?Task $loadingTask = null, ?string $massMethod = null): SabyWaybill
     {
-        $document = $this->buildDocument($task, $loadingTask);
+        $document = $this->buildDocument($task, $loadingTask, $massMethod);
         $config = $this->client->config();
         $route = $task->route_id ? Route::find($task->route_id) : null;
         $shipper = $this->companyOf($task, 'shipment_company_id');
@@ -93,6 +98,7 @@ class SabyWaybillService
         $waybill = SabyWaybill::create([
             'task_id' => $task->id,
             'loading_task_id' => $loadingTask?->id,
+            'mass_method' => Schema::hasColumn('saby_waybills', 'mass_method') ? $massMethod : null,
             'route_id' => $task->route_id,
             'doc_id' => $written['Идентификатор'] ?? null,
             'attachment_id' => $attachment['Идентификатор'] ?? null,
@@ -168,7 +174,7 @@ class SabyWaybillService
         }
     }
 
-    public function buildDocument(Task $task, ?Task $loadingTask = null): array
+    public function buildDocument(Task $task, ?Task $loadingTask = null, ?string $massMethod = null): array
     {
         $errors = [];
 
@@ -248,6 +254,9 @@ class SabyWaybillService
             if ($loadingAt !== '') {
                 $loading['ЗаявПогр'] = $loadingAt;
             }
+        }
+        if ($massMethod !== null && isset(self::MASS_METHODS[$massMethod])) {
+            $loading['МетОпрМасс'] = $massMethod;
         }
 
         if (count($loading)) {
@@ -649,7 +658,11 @@ class SabyWaybillService
             return $this->geocodeCache[$key];
         }
 
-        $address = '';
+        $address = $this->yandexReverse((float) $m[1], (float) $m[2]);
+        if ($address !== '') {
+            return $this->geocodeCache[$key] = $address;
+        }
+
         $token = config('services.dadata.token');
         $secret = config('services.dadata.secret');
 
@@ -679,6 +692,41 @@ class SabyWaybillService
         }
 
         return $this->geocodeCache[$key] = $address;
+    }
+
+    private function yandexReverse(float $lat, float $lng): string
+    {
+        $key = (string) config('services.yandex.geocoder_key');
+        if ($key === '') {
+            return '';
+        }
+        try {
+            $response = \Illuminate\Support\Facades\Http::timeout(5)->get('https://geocode-maps.yandex.ru/1.x/', [
+                'apikey' => $key,
+                'geocode' => $lng . ',' . $lat,
+                'format' => 'json',
+                'kind' => 'house',
+                'results' => 1,
+                'lang' => 'ru_RU',
+            ]);
+            if (!$response->ok()) {
+                return '';
+            }
+            foreach ($response->json('response.GeoObjectCollection.featureMember', []) as $member) {
+                $meta = $member['GeoObject']['metaDataProperty']['GeocoderMetaData'] ?? [];
+                if (($meta['kind'] ?? '') !== 'house' || !in_array($meta['precision'] ?? '', ['exact', 'number', 'near'], true)) {
+                    continue;
+                }
+                $text = trim((string) ($meta['text'] ?? ''));
+                if ($text !== '') {
+                    return preg_replace('/^Россия,\s*/u', '', $text);
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::channel('saby')->warning('Яндекс-геокодер недоступен для ' . $lat . ',' . $lng . ': ' . $e->getMessage());
+        }
+
+        return '';
     }
 
     private function isCoordinates(string $text): bool

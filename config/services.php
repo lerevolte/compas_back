@@ -41,4 +41,8 @@ return [
         'secret' => env('DADATA_SECRET', '12b85f4474f0fab219a2307f13a33c05f8418355'),
     ],
 
+    'yandex' => [
+        'geocoder_key' => env('YANDEX_GEOCODER_KEY', '10946c08-3ea9-4fac-95d1-c833ee44dd6b'),
+    ],
+
 ];

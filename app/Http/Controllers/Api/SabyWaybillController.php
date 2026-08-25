@@ -52,8 +52,13 @@ class SabyWaybillController extends Controller
             }
         }
 
+        $massMethod = $request->mass_method !== null && $request->mass_method !== '' ? (string) $request->mass_method : null;
+        if ($massMethod !== null && !isset(SabyWaybillService::MASS_METHODS[$massMethod])) {
+            return response()->json(['message' => 'Неизвестный метод определения массы'], 422);
+        }
+
         try {
-            $waybill = $service->create($task, $loadingTask);
+            $waybill = $service->create($task, $loadingTask, $massMethod);
         } catch (SabyValidationException $e) {
             return response()->json([
                 'message' => $e->getMessage(),
@@ -91,7 +96,7 @@ class SabyWaybillController extends Controller
             return response()->json(['message' => 'Задача не найдена'], 404);
         }
         if (!$task->route_id) {
-            return response()->json(['data' => [], 'route_id' => null]);
+            return response()->json(['data' => [], 'route_id' => null, 'mass_methods' => $this->massMethods()]);
         }
 
         $tasks = Task::where('route_id', $task->route_id)
@@ -121,7 +126,16 @@ class SabyWaybillController extends Controller
             })
             ->values();
 
-        return response()->json(['data' => $tasks, 'route_id' => $task->route_id]);
+        return response()->json(['data' => $tasks, 'route_id' => $task->route_id, 'mass_methods' => $this->massMethods()]);
+    }
+
+    private function massMethods(): array
+    {
+        $out = [];
+        foreach (SabyWaybillService::MASS_METHODS as $value => $label) {
+            $out[] = ['value' => (string) $value, 'label' => $label];
+        }
+        return $out;
     }
 
     public function refresh($waybillId)
@@ -177,6 +191,8 @@ class SabyWaybillController extends Controller
             'qr_url' => $waybill->qr_url,
             'created_at' => optional($waybill->created_at)->format('d.m.Y H:i'),
             'loading_task' => $this->presentLoadingTask($waybill->loading_task_id),
+            'mass_method' => $waybill->mass_method ?? null,
+            'mass_method_label' => SabyWaybillService::MASS_METHODS[(string) ($waybill->mass_method ?? '')] ?? null,
         ];
     }
 

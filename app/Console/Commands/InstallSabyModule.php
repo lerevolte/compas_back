@@ -888,6 +888,10 @@ class InstallSabyModule extends Command
         if (!$sb->hasColumn('saby_waybills', 'loading_task_id')) {
             $db->statement("ALTER TABLE `saby_waybills` ADD COLUMN `loading_task_id` BIGINT UNSIGNED NULL");
         }
+
+        if (!$sb->hasColumn('saby_waybills', 'mass_method')) {
+            $db->statement("ALTER TABLE `saby_waybills` ADD COLUMN `mass_method` VARCHAR(4) NULL");
+        }
     }
 
     private function addField(ConnectionInterface $db, string $entity, string $field, array $attrs, string $columnType): void
