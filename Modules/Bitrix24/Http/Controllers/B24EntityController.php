@@ -11,8 +11,8 @@ use Modules\Bitrix24\Services\B24EntitySync;
 class B24EntityController extends Controller
 {
     /**
-     * Вебхук Bitrix24 по событиям сделок/контактов/компаний (ONCRMDEAL*,
-     * ONCRMCONTACT*, ONCRMCOMPANY*). Без auth — тенант по домену.
+     * Вебхук Bitrix24 по событиям сделок/контактов/компаний/реквизитов (ONCRMDEAL*,
+     * ONCRMCONTACT*, ONCRMCOMPANY*, ONCRMREQUISITE*, ONCRMBANKDETAIL*). Без auth — тенант по домену.
      * URL: /api/bitrix24/entity-hook
      * Ручной вызов: /api/bitrix24/entity-hook?type=deal&id=123
      */
@@ -34,6 +34,10 @@ class B24EntityController extends Controller
         if (!$type) {
             if (str_contains($event, 'PRODUCT')) {
                 $type = 'product';
+            } elseif (str_contains($event, 'BANKDETAIL')) {
+                $type = 'bankdetail';
+            } elseif (str_contains($event, 'REQUISITE')) {
+                $type = 'requisite';
             } elseif (str_contains($event, 'DEAL')) {
                 $type = 'deal';
             } elseif (str_contains($event, 'CONTACT')) {

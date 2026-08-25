@@ -119,10 +119,16 @@ CREATE TABLE IF NOT EXISTS `bank_requisites` (
   `swift` varchar(20) DEFAULT NULL,
   `comment` text DEFAULT NULL,
   `is_default` varchar(8) DEFAULT NULL,
+  `b24_id` varchar(32) DEFAULT NULL,
   PRIMARY KEY (`id`),
-  KEY `bank_requisites_company_id_index` (`company_id`)
+  KEY `bank_requisites_company_id_index` (`company_id`),
+  KEY `bank_requisites_b24_id_index` (`b24_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL);
+
+        if (!$sb->hasColumn('bank_requisites', 'b24_id')) {
+            $db->statement('ALTER TABLE `bank_requisites` ADD COLUMN `b24_id` VARCHAR(32) NULL, ADD INDEX `bank_requisites_b24_id_index` (`b24_id`)');
+        }
 
         if (!$sb->hasColumn('companies', 'bank_requisite_id')) {
             $db->statement('ALTER TABLE `companies` ADD COLUMN `bank_requisite_id` TEXT NULL');

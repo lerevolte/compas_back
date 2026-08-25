@@ -468,6 +468,23 @@ class B24EntitySync
         return $company ? $this->upsertCompanyFromB24($company) : null;
     }
 
+    public function pullCompanyByRequisiteId($requisiteId): ?Company
+    {
+        $resp = $this->b24('crm.requisite.get', ['id' => $requisiteId]);
+        $requisite = $resp['result'] ?? null;
+        if (!is_array($requisite) || (int) ($requisite['ENTITY_TYPE_ID'] ?? 0) !== 4 || empty($requisite['ENTITY_ID'])) {
+            return null;
+        }
+        return $this->pullCompanyById($requisite['ENTITY_ID']);
+    }
+
+    public function pullCompanyByBankDetailId($bankDetailId): ?Company
+    {
+        $resp = $this->b24('crm.requisite.bankdetail.get', ['id' => $bankDetailId]);
+        $detail = $resp['result'] ?? null;
+        return is_array($detail) && !empty($detail['ENTITY_ID']) ? $this->pullCompanyByRequisiteId($detail['ENTITY_ID']) : null;
+    }
+
     // --------------------------------------------------------------- upserts
 
     public function upsertDealFromB24(array $deal, ?array $pre = null): Deal
@@ -935,13 +952,19 @@ class B24EntitySync
                     $model->user_id = $responsibleId;
                 }
             }
-            $this->applyCompanyRequisites($model, $b24Id);
+            $requisiteData = $this->fetchCompanyRequisiteData([0 => $b24Id])[0] ?? null;
+            if ($requisiteData) {
+                $this->applyCompanyRequisiteFields($model, $requisiteData['fields'], true);
+            }
             if (!$model->exists) {
                 $model->saveQuietly();
                 $this->writeSyncCreatedHistory('companies', $model->id);
             } elseif ($model->isDirty()) {
                 $this->writeSyncFieldHistory('companies', $model->id, $model->getDirty());
                 $model->saveQuietly();
+            }
+            if ($requisiteData) {
+                $this->applyCompanyBankDetails($model, $requisiteData['bank']);
             }
             return $model;
         } finally {
@@ -984,38 +1007,147 @@ class B24EntitySync
         return $this->companyTypeMeta ?: null;
     }
 
+    public const COMPANY_REQUISITE_FIELDS = [
+        'inn', 'kpp', 'ogrn', 'okpo', 'oktmo', 'full_name', 'director', 'accountant',
+        'registration_date', 'address', 'fact_address',
+    ];
+
+    private const REQUISITE_SELECT = [
+        'ID', 'NAME', 'SORT', 'PRESET_ID', 'RQ_INN', 'RQ_KPP', 'RQ_OGRN', 'RQ_OGRNIP', 'RQ_OKPO', 'RQ_OKTMO',
+        'RQ_COMPANY_NAME', 'RQ_COMPANY_FULL_NAME', 'RQ_COMPANY_REG_DATE', 'RQ_DIRECTOR', 'RQ_ACCOUNTANT',
+    ];
+
+    private const BANK_SELECT = [
+        'ID', 'ENTITY_ID', 'NAME', 'SORT', 'ACTIVE', 'COMMENTS', 'RQ_BANK_NAME', 'RQ_BANK_ADDR', 'RQ_BIK',
+        'RQ_ACC_NUM', 'RQ_COR_ACC_NUM', 'RQ_SWIFT', 'RQ_ACC_CURRENCY',
+    ];
+
     private function companyRequisiteColumns(): array
     {
         return array_values(array_filter(
-            ['inn', 'kpp', 'address'],
+            self::COMPANY_REQUISITE_FIELDS,
             fn ($field) => Schema::hasColumn('companies', $field)
         ));
     }
 
-    private function companyRequisiteCommands(string $companyB24Id): array
+    private function bankRequisitesReady(): bool
     {
-        return [
-            'req'  => 'crm.requisite.list?filter[ENTITY_TYPE_ID]=4&filter[ENTITY_ID]=' . $companyB24Id
-                . '&select[]=ID&select[]=RQ_INN&select[]=RQ_KPP',
-            'addr' => 'crm.address.list?filter[ANCHOR_TYPE_ID]=4&filter[ANCHOR_ID]=' . $companyB24Id
-                . '&filter[TYPE_ID]=6',
-        ];
+        return Schema::hasTable('bank_requisites') && Schema::hasColumn('bank_requisites', 'b24_id');
+    }
+
+    private function selectQuery(array $fields): string
+    {
+        return implode('', array_map(fn ($f) => '&select[]=' . $f, $fields));
+    }
+
+    private function fetchCompanyRequisiteData(array $companies): array
+    {
+        $out = [];
+        $cmd = [];
+        foreach ($companies as $localId => $b24Id) {
+            $out[$localId] = ['requisites' => [], 'addresses' => [], 'bank' => [], 'fields' => []];
+            $cmd['req_' . $localId] = 'crm.requisite.list?filter[ENTITY_TYPE_ID]=4&filter[ENTITY_ID]=' . $b24Id
+                . $this->selectQuery(self::REQUISITE_SELECT);
+            $cmd['addr_' . $localId] = 'crm.address.list?filter[ANCHOR_TYPE_ID]=4&filter[ANCHOR_ID]=' . $b24Id;
+        }
+        if (!count($cmd)) {
+            return $out;
+        }
+
+        $res = $this->b24Batch($cmd);
+
+        $cmd2 = [];
+        $requisiteOwner = [];
+        foreach ($companies as $localId => $b24Id) {
+            $requisites = is_array($res['req_' . $localId] ?? null) ? $res['req_' . $localId] : [];
+            usort($requisites, fn ($a, $b) => ((int) ($a['SORT'] ?? 0) <=> (int) ($b['SORT'] ?? 0)) ?: ((int) ($a['ID'] ?? 0) <=> (int) ($b['ID'] ?? 0)));
+            $out[$localId]['requisites'] = $requisites;
+            $out[$localId]['addresses'] = is_array($res['addr_' . $localId] ?? null) ? $res['addr_' . $localId] : [];
+            foreach ($requisites as $requisite) {
+                $rid = (string) ($requisite['ID'] ?? '');
+                if ($rid === '') {
+                    continue;
+                }
+                $requisiteOwner[$rid] = $localId;
+                $cmd2['addr_' . $rid] = 'crm.address.list?filter[ANCHOR_TYPE_ID]=8&filter[ANCHOR_ID]=' . $rid;
+                if ($this->bankRequisitesReady()) {
+                    $cmd2['bank_' . $rid] = 'crm.requisite.bankdetail.list?filter[ENTITY_ID]=' . $rid
+                        . $this->selectQuery(self::BANK_SELECT);
+                }
+            }
+        }
+
+        if (count($cmd2)) {
+            $res2 = $this->b24Batch($cmd2);
+            foreach ($requisiteOwner as $rid => $localId) {
+                $addresses = $res2['addr_' . $rid] ?? null;
+                if (is_array($addresses)) {
+                    $out[$localId]['addresses'] = array_merge($out[$localId]['addresses'], $addresses);
+                }
+                $bank = $res2['bank_' . $rid] ?? null;
+                if (is_array($bank)) {
+                    $out[$localId]['bank'] = array_merge($out[$localId]['bank'], $bank);
+                }
+            }
+        }
+
+        foreach ($out as $localId => $data) {
+            $out[$localId]['fields'] = $this->parseCompanyRequisites($data['requisites'], $data['addresses']);
+        }
+
+        return $out;
+    }
+
+    private function formatB24Date($value): ?string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+        try {
+            return \Carbon\Carbon::parse($value)->format('Y-m-d');
+        } catch (\Throwable $e) {
+            return $value;
+        }
     }
 
     private function parseCompanyRequisites($reqRows, $addrRows): array
     {
-        $out = ['inn' => null, 'kpp' => null, 'address' => null];
+        $out = array_fill_keys(self::COMPANY_REQUISITE_FIELDS, null);
+        $map = [
+            'inn' => ['RQ_INN'],
+            'kpp' => ['RQ_KPP'],
+            'ogrn' => ['RQ_OGRN', 'RQ_OGRNIP'],
+            'okpo' => ['RQ_OKPO'],
+            'oktmo' => ['RQ_OKTMO'],
+            'full_name' => ['RQ_COMPANY_FULL_NAME', 'RQ_COMPANY_NAME'],
+            'director' => ['RQ_DIRECTOR'],
+            'accountant' => ['RQ_ACCOUNTANT'],
+        ];
         foreach ((is_array($reqRows) ? $reqRows : []) as $requisite) {
-            $inn = trim((string) ($requisite['RQ_INN'] ?? ''));
-            $kpp = trim((string) ($requisite['RQ_KPP'] ?? ''));
-            if ($out['inn'] === null && $inn !== '') {
-                $out['inn'] = $inn;
+            foreach ($map as $field => $keys) {
+                if ($out[$field] !== null) {
+                    continue;
+                }
+                foreach ($keys as $key) {
+                    $value = trim((string) ($requisite[$key] ?? ''));
+                    if ($value !== '') {
+                        $out[$field] = $value;
+                        break;
+                    }
+                }
             }
-            if ($out['kpp'] === null && $kpp !== '') {
-                $out['kpp'] = $kpp;
+            if ($out['registration_date'] === null) {
+                $out['registration_date'] = $this->formatB24Date($requisite['RQ_COMPANY_REG_DATE'] ?? '');
             }
         }
+
+        $addressTypes = ['6' => 'address', '1' => 'fact_address'];
         foreach ((is_array($addrRows) ? $addrRows : []) as $address) {
+            $field = $addressTypes[(string) ($address['TYPE_ID'] ?? '')] ?? null;
+            if (!$field || $out[$field] !== null) {
+                continue;
+            }
             $parts = [];
             foreach (['POSTAL_CODE', 'COUNTRY', 'PROVINCE', 'REGION', 'CITY', 'ADDRESS_1', 'ADDRESS_2'] as $key) {
                 $value = trim((string) ($address[$key] ?? ''));
@@ -1024,82 +1156,154 @@ class B24EntitySync
                 }
             }
             if (count($parts)) {
-                $out['address'] = implode(', ', $parts);
-                break;
+                $out[$field] = implode(', ', $parts);
             }
         }
+
         return $out;
     }
 
-    private function applyCompanyRequisites(Company $model, string $b24Id): void
+    private function applyCompanyRequisiteFields(Company $model, array $fields, bool $overwrite): void
     {
-        $columns = $this->companyRequisiteColumns();
-        if (!count($columns)) {
-            return;
-        }
-        try {
-            $res = $this->b24Batch($this->companyRequisiteCommands($b24Id));
-            $requisites = $this->parseCompanyRequisites($res['req'] ?? null, $res['addr'] ?? null);
-        } catch (\Throwable $e) {
-            Log::channel('bitrix24')->warning('entity-sync: company requisites fetch failed', [
-                'b24_id' => $b24Id,
-                'error'  => $e->getMessage(),
-            ]);
-            return;
-        }
-        foreach ($columns as $column) {
-            if ($requisites[$column] !== null) {
-                $model->{$column} = $requisites[$column];
+        foreach ($this->companyRequisiteColumns() as $column) {
+            if ($fields[$column] === null) {
+                continue;
+            }
+            $current = trim((string) ($model->{$column} ?? ''));
+            if ($overwrite || $current === '') {
+                $model->{$column} = $fields[$column];
             }
         }
     }
 
-    public function backfillCompanyRequisites(): array
+    private function applyCompanyBankDetails(Company $model, array $bankRows): array
     {
-        $out = ['checked' => 0, 'updated' => 0];
+        $stat = ['created' => 0, 'updated' => 0, 'deleted' => 0];
+        if (!$this->bankRequisitesReady() || !$model->id) {
+            return $stat;
+        }
+
+        $seen = [];
+        foreach ($bankRows as $row) {
+            $b24Id = (string) ($row['ID'] ?? '');
+            $values = [
+                'bank_name' => trim((string) ($row['RQ_BANK_NAME'] ?? '')),
+                'bic' => trim((string) ($row['RQ_BIK'] ?? '')),
+                'account' => trim((string) ($row['RQ_ACC_NUM'] ?? '')),
+                'corr_account' => trim((string) ($row['RQ_COR_ACC_NUM'] ?? '')),
+                'swift' => trim((string) ($row['RQ_SWIFT'] ?? '')),
+                'bank_address' => trim((string) ($row['RQ_BANK_ADDR'] ?? '')),
+                'currency' => strtoupper(trim((string) ($row['RQ_ACC_CURRENCY'] ?? ''))),
+                'comment' => trim((string) ($row['COMMENTS'] ?? '')),
+            ];
+            if ($b24Id === '' || ($values['bank_name'] === '' && $values['bic'] === '' && $values['account'] === '')) {
+                continue;
+            }
+            $seen[] = $b24Id;
+
+            $requisite = \App\Models\BankRequisite::withTrashed()->where('b24_id', $b24Id)->first();
+            $isNew = !$requisite;
+            if ($isNew) {
+                $requisite = new \App\Models\BankRequisite();
+                $requisite->b24_id = $b24Id;
+                $requisite->user_id = $model->user_id ?: 1;
+            } elseif ($requisite->trashed()) {
+                $requisite->deleted_at = null;
+            }
+
+            $name = trim((string) ($row['NAME'] ?? ''));
+            if ($name === '') {
+                $name = $values['bank_name'] !== '' ? $values['bank_name'] : ('Счёт ' . $values['account']);
+            }
+            $requisite->name = $name;
+            $requisite->company_id = $model->id;
+            foreach ($values as $column => $value) {
+                if (!Schema::hasColumn('bank_requisites', $column)) {
+                    continue;
+                }
+                if ($column === 'comment' && $value === '' && !$isNew) {
+                    continue;
+                }
+                $requisite->{$column} = $value !== '' ? $value : null;
+            }
+            if ($values['currency'] === '' && Schema::hasColumn('bank_requisites', 'currency') && !$requisite->currency) {
+                $requisite->currency = 'RUB';
+            }
+
+            if ($isNew) {
+                $requisite->saveQuietly();
+                $this->writeSyncCreatedHistory('bank_requisites', $requisite->id);
+                $stat['created']++;
+            } elseif ($requisite->isDirty()) {
+                $this->writeSyncFieldHistory('bank_requisites', $requisite->id, $requisite->getDirty());
+                $requisite->saveQuietly();
+                $stat['updated']++;
+            }
+            $requisite->syncDefault();
+        }
+
+        $stale = \App\Models\BankRequisite::where('company_id', $model->id)
+            ->whereNotNull('b24_id')
+            ->where('b24_id', '!=', '')
+            ->when(count($seen), fn ($q) => $q->whereNotIn('b24_id', $seen))
+            ->get();
+        foreach ($stale as $requisite) {
+            $requisite->delete();
+            $stat['deleted']++;
+        }
+
+        if (Schema::hasColumn('companies', 'bank_requisite_id')) {
+            $ids = \App\Models\BankRequisite::where('company_id', $model->id)->orderBy('id')->pluck('id')->map(fn ($id) => (int) $id)->all();
+            DB::table('companies')->where('id', $model->id)->update(['bank_requisite_id' => count($ids) ? json_encode($ids) : null]);
+        }
+
+        return $stat;
+    }
+
+    public function backfillCompanyRequisites(bool $force = false): array
+    {
+        $out = ['checked' => 0, 'updated' => 0, 'bank_created' => 0, 'bank_updated' => 0, 'bank_deleted' => 0];
         if (!Schema::hasTable('companies') || !Schema::hasColumn('companies', 'b24_id')) {
             return $out;
         }
         $columns = $this->companyRequisiteColumns();
-        if (!count($columns)) {
+        if (!count($columns) && !$this->bankRequisitesReady()) {
             return $out;
         }
-        $companies = Company::whereNotNull('b24_id')
-            ->where('b24_id', '!=', '')
-            ->where(function ($q) use ($columns) {
+        $query = Company::whereNotNull('b24_id')->where('b24_id', '!=', '');
+        if (!$force) {
+            $query->where(function ($q) use ($columns) {
                 foreach ($columns as $column) {
                     $q->orWhereNull($column)->orWhere($column, '');
                 }
-            })
-            ->get();
+            });
+        }
+        $companies = $query->orderBy('id')->get();
         $out['checked'] = count($companies);
 
         self::$muted = true;
         try {
             foreach ($companies->chunk(25) as $chunk) {
-                $cmd = [];
+                $map = [];
                 foreach ($chunk as $company) {
-                    foreach ($this->companyRequisiteCommands((string) $company->b24_id) as $key => $command) {
-                        $cmd[$key . '_' . $company->id] = $command;
-                    }
+                    $map[$company->id] = (string) $company->b24_id;
                 }
-                $res = $this->b24Batch($cmd);
+                $data = $this->fetchCompanyRequisiteData($map);
                 foreach ($chunk as $company) {
-                    $requisites = $this->parseCompanyRequisites(
-                        $res['req_' . $company->id] ?? null,
-                        $res['addr_' . $company->id] ?? null
-                    );
-                    foreach ($columns as $column) {
-                        $current = trim((string) ($company->{$column} ?? ''));
-                        if ($current === '' && $requisites[$column] !== null) {
-                            $company->{$column} = $requisites[$column];
-                        }
+                    $item = $data[$company->id] ?? null;
+                    if (!$item) {
+                        continue;
                     }
+                    $this->applyCompanyRequisiteFields($company, $item['fields'], $force);
                     if ($company->isDirty()) {
                         $this->writeSyncFieldHistory('companies', $company->id, $company->getDirty());
                         $company->saveQuietly();
                         $out['updated']++;
                     }
+                    $bank = $this->applyCompanyBankDetails($company, $item['bank']);
+                    $out['bank_created'] += $bank['created'];
+                    $out['bank_updated'] += $bank['updated'];
+                    $out['bank_deleted'] += $bank['deleted'];
                 }
             }
         } finally {

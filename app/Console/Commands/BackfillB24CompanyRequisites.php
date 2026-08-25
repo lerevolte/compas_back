@@ -6,21 +6,13 @@ use Illuminate\Console\Command;
 use App\Models\Tenant;
 use Modules\Bitrix24\Services\B24EntitySync;
 
-/**
- * Подтягивает ИНН/КПП/юридический адрес из реквизитов Bitrix24 для уже
- * синхронизированных компаний с пустыми полями.
- *
- * Работает только там, где настроен B24EntitySync и у companies есть
- * колонки inn/kpp/address (ставит saby:install).
- * Команда идемпотентна: заполняет только пустые поля у компаний с b24_id.
- *   php artisan b24:backfill-company-requisites avixo
- */
 class BackfillB24CompanyRequisites extends Command
 {
     protected $signature = 'b24:backfill-company-requisites
-        {target=avixo : all-tenants | <tenant_id>}';
+        {target=avixo : all-tenants | <tenant_id>}
+        {--force : выгрузить реквизиты всех компаний с b24_id, перезаписывая заполненные поля значениями из Bitrix24}';
 
-    protected $description = 'Заполнить ИНН/КПП/юр. адрес из реквизитов Bitrix24 у компаний без них';
+    protected $description = 'Выгрузить реквизиты компаний (ИНН/КПП/ОГРН/адреса/руководители) и банковские реквизиты из Bitrix24';
 
     public function handle(): int
     {
@@ -61,7 +53,7 @@ class BackfillB24CompanyRequisites extends Command
             $this->line("  {$label}: B24EntitySync не настроен, пропуск");
             return;
         }
-        $stat = $svc->backfillCompanyRequisites();
-        $this->line("  {$label}: companies — с пустыми реквизитами {$stat['checked']}, заполнено {$stat['updated']}");
+        $stat = $svc->backfillCompanyRequisites((bool) $this->option('force'));
+        $this->line("  {$label}: companies — проверено {$stat['checked']}, обновлено {$stat['updated']}; банковские реквизиты — создано {$stat['bank_created']}, обновлено {$stat['bank_updated']}, удалено {$stat['bank_deleted']}");
     }
 }

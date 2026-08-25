@@ -83,6 +83,20 @@ class ProcessEntityHook implements ShouldQueue
                             $svc->pullCompanyById($this->entityId);
                         }
                         break;
+                    case 'requisite':
+                        if (!$this->isDelete) {
+                            $svc->pullCompanyByRequisiteId($this->entityId);
+                        }
+                        break;
+                    case 'bankdetail':
+                        if ($this->isDelete) {
+                            if (\Schema::hasTable('bank_requisites') && \Schema::hasColumn('bank_requisites', 'b24_id')) {
+                                \App\Models\BankRequisite::where('b24_id', $this->entityId)->first()?->delete();
+                            }
+                        } else {
+                            $svc->pullCompanyByBankDetailId($this->entityId);
+                        }
+                        break;
                 }
             } catch (\Throwable $e) {
                 Log::channel('bitrix24')->error('entity-hook job: failed', [
