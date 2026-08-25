@@ -1,0 +1,221 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\BankRequisite;
+use App\Models\Company;
+use App\Models\File;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+
+class SaleDocumentService
+{
+    public const TARGETS = [
+        'payment_invoices' => [
+            'model' => \App\Models\PaymentInvoice::class,
+            'view' => 'pdf.sale_invoice',
+            'title' => 'Счет на оплату',
+            'file' => 'invoice',
+        ],
+        'expense_invoices' => [
+            'model' => \App\Models\ExpenseInvoice::class,
+            'view' => 'pdf.expense_invoice',
+            'title' => 'Расходная накладная',
+            'file' => 'nakladnaya',
+        ],
+    ];
+
+    public static function generateFor(string $targetSlug, $targetId, string $sourceSlug, $sourceId): bool
+    {
+        if (!isset(self::TARGETS[$targetSlug]) || $sourceSlug !== 'deals') {
+            return false;
+        }
+
+        try {
+            return (new self())->generate($targetSlug, (int) $targetId, (int) $sourceId);
+        } catch (\Throwable $e) {
+            Log::warning('sale-doc: генерация печатной формы не удалась', [
+                'target' => $targetSlug . '#' . $targetId,
+                'source' => $sourceSlug . '#' . $sourceId,
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
+    }
+
+    private function generate(string $slug, int $id, int $dealId): bool
+    {
+        $meta = self::TARGETS[$slug];
+        $doc = $meta['model']::find($id);
+        if (!$doc) {
+            return false;
+        }
+
+        $deal = Schema::hasTable('deals') ? DB::table('deals')->where('id', $dealId)->first() : null;
+
+        $companyId = $this->firstId($doc->company_id) ?: ($deal ? $this->firstId($deal->company_id ?? null) : null);
+        $company = $companyId ? Company::find($companyId) : null;
+
+        $bank = null;
+        if ($company && Schema::hasTable('bank_requisites')) {
+            $bank = BankRequisite::where('company_id', $company->id)->where('is_default', '1')->first()
+                ?: BankRequisite::where('company_id', $company->id)->orderBy('id')->first();
+        }
+
+        $products = $this->decodeProducts($doc->products);
+        if (!count($products) && $deal) {
+            $products = $this->decodeProducts($deal->products ?? null);
+        }
+
+        $total = 0.0;
+        foreach ($products as $k => $product) {
+            $count = (float) ($product['count'] ?? 0);
+            $price = (float) ($product['price'] ?? 0);
+            $products[$k]['total'] = $count * $price;
+            $total += $count * $price;
+        }
+        if ((float) ($doc->sum ?? 0) > 0 && $total <= 0) {
+            $total = (float) $doc->sum;
+        }
+
+        $number = (string) $doc->id;
+        $date = $doc->created_at ? $doc->created_at->format('d.m.Y') : date('d.m.Y');
+
+        $buyer = $this->dealContacts($dealId);
+        $dealName = $deal ? $this->plainName($deal->name ?? '') : '';
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView($meta['view'], [
+            'number' => $number,
+            'date' => $date,
+            'company' => $company,
+            'companyName' => $company ? ($this->plain($company->full_name ?? '') ?: $this->plainName($company->name ?? '')) : '',
+            'bank' => $bank,
+            'products' => $products,
+            'total' => $total,
+            'buyer' => $buyer,
+            'dealName' => $dealName,
+            'dealId' => $dealId,
+        ]);
+
+        $disk = \Storage::disk('public');
+        $dir = 'sale_docs/' . $slug . '/' . $id;
+        if (!\File::isDirectory($disk->path($dir))) {
+            \File::makeDirectory($disk->path($dir), 0755, true);
+        }
+        $filename = $meta['file'] . '_' . $id . '.pdf';
+        $path = $dir . '/' . $filename;
+        $pdf->save($disk->path($path));
+
+        $tenant = tenant('id');
+        $url = $tenant
+            ? 'https://' . $tenant . '.compas.pro/storage/tenant' . $tenant . '/app/public/' . $path
+            : 'https://compas.pro/storage/app/public/' . $path;
+
+        $file = new File();
+        $file->name = $filename;
+        $file->path = $path;
+        $file->save();
+
+        $doc->photo = json_encode([[
+            'id' => $file->id,
+            'name' => $meta['title'] . ' № ' . $number . ' от ' . $date . '.pdf',
+            'url' => '/files/pdfSmall.svg',
+            'file' => $url,
+            'extension' => 'pdf',
+            'sort' => 0,
+            'ext' => 'pdf',
+        ]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        if ($total > 0 && !(float) ($doc->sum ?? 0)) {
+            $doc->sum = rtrim(rtrim(number_format($total, 2, '.', ''), '0'), '.');
+        }
+        if ($this->plain($doc->name) === '' || $this->plain($doc->name) === $dealName) {
+            $doc->name = $meta['title'] . ' № ' . $number . ' от ' . $date;
+        }
+        if (count($products) && !$this->decodeProducts($doc->products)) {
+            $doc->products = json_encode($products, JSON_UNESCAPED_UNICODE);
+        }
+        $doc->saveQuietly();
+
+        return true;
+    }
+
+    public static function documentFiles($photo): array
+    {
+        $decoded = is_array($photo) ? $photo : json_decode((string) $photo, true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+        $out = [];
+        foreach ($decoded as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $link = trim((string) ($item['file'] ?? ($item['url'] ?? '')));
+            if ($link === '') {
+                continue;
+            }
+            $out[] = ['name' => (string) ($item['name'] ?? 'Документ'), 'url' => $link];
+        }
+        return $out;
+    }
+
+    private function firstId($value): ?int
+    {
+        if (is_numeric($value)) {
+            return (int) $value;
+        }
+        $decoded = json_decode((string) $value, true);
+        if (is_array($decoded)) {
+            foreach ($decoded as $item) {
+                if (is_numeric($item)) {
+                    return (int) $item;
+                }
+            }
+        }
+        return null;
+    }
+
+    private function decodeProducts($value): array
+    {
+        $decoded = is_array($value) ? $value : json_decode((string) $value, true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+        return array_values(array_filter($decoded, 'is_array'));
+    }
+
+    private function dealContacts(int $dealId): string
+    {
+        if (!Schema::hasTable('contact_deal') || !Schema::hasTable('contacts')) {
+            return '';
+        }
+        $ids = DB::table('contact_deal')->where('deal_id', $dealId)->pluck('contact_id');
+        if (!count($ids)) {
+            return '';
+        }
+        $names = DB::table('contacts')->whereIn('id', $ids)->pluck('name')
+            ->map(fn ($name) => $this->plainName($name))
+            ->filter()
+            ->all();
+        return implode(', ', $names);
+    }
+
+    private function plainName($name): string
+    {
+        $name = (string) $name;
+        if ($name !== '' && ($name[0] === '{' || $name[0] === '[')) {
+            $decoded = json_decode($name, true);
+            if (is_array($decoded)) {
+                $name = (string) ($decoded['value'] ?? reset($decoded));
+            }
+        }
+        return trim($name);
+    }
+
+    private function plain($value): string
+    {
+        return $this->plainName($value);
+    }
+}

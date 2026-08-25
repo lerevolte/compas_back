@@ -39,7 +39,58 @@ class ObjectRelationController extends Controller
             $data['target_id']
         );
 
-        return response()->json(['ok' => true, 'products_copied' => $productsCopied, 'b24_copied' => $b24Copied]);
+        $printGenerated = \App\Services\SaleDocumentService::generateFor(
+            $data['target_slug'],
+            $data['target_id'],
+            $data['source_slug'],
+            $data['source_id']
+        );
+
+        return response()->json(['ok' => true, 'products_copied' => $productsCopied, 'b24_copied' => $b24Copied, 'print_generated' => $printGenerated]);
+    }
+
+    public function printDocuments($slug, $id)
+    {
+        if (!ObjectRelation::ready()) {
+            return response()->json(['data' => []]);
+        }
+
+        $root = $this->rootOf($slug, (int) $id);
+        $tree = $this->buildNode($root['slug'], $root['id'], (int) $id, $slug, []);
+
+        $flat = [];
+        $walk = function ($node) use (&$walk, &$flat) {
+            if (!$node) {
+                return;
+            }
+            $flat[] = $node;
+            foreach ($node['children'] ?? [] as $child) {
+                $walk($child);
+            }
+        };
+        $walk($tree);
+
+        $docs = [];
+        foreach ($flat as $node) {
+            if (!isset(\App\Services\SaleDocumentService::TARGETS[$node['slug']])) {
+                continue;
+            }
+            $row = DB::table($node['slug'])->where('id', $node['id'])->first();
+            if (!$row || (property_exists($row, 'deleted_at') && $row->deleted_at)) {
+                continue;
+            }
+            $docs[] = [
+                'slug' => $node['slug'],
+                'id' => $node['id'],
+                'entity_title' => $node['entity_title'],
+                'name' => $node['name'],
+                'created_at' => $node['created_at'],
+                'sum' => $row->sum ?? null,
+                'files' => \App\Services\SaleDocumentService::documentFiles($row->photo ?? null),
+            ];
+        }
+
+        return response()->json(['data' => $docs]);
     }
 
     public function tree($slug, $id)
