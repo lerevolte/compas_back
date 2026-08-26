@@ -21,6 +21,7 @@ class UninstallSabyModule extends Command
         'cars' => ['ownership_type', 'vehicle_type', 'trailer_number', 'number'],
         'employees' => ['inn', 'snils', 'driver_license'],
         'products' => ['packing_method', 'tare_type'],
+        'contacts' => ['inn'],
     ];
 
     public function handle(): int

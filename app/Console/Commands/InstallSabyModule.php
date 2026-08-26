@@ -392,6 +392,7 @@ class InstallSabyModule extends Command
         'employees' => ['name', 'phone', 'inn', 'snils', 'driver_license'],
         'cars' => ['name', 'number', 'ownership_type', 'vehicle_type', 'trailer_number', 'osago_mark', 'osago_model', 'weight_max', 'volume_max'],
         'products' => ['name', 'packing_method', 'tare_type', 'weight', 'volume'],
+        'contacts' => ['name', 'phones', 'inn'],
         'addresses' => ['company_id', 'contact_id', 'address', 'weight'],
         'warehouses' => ['company_id', 'contact_id', 'address', 'weight'],
     ];
@@ -502,6 +503,11 @@ class InstallSabyModule extends Command
             'only_read' => 1,
             'visible_always' => 1,
         ], 'text');
+
+        $this->addField($db, 'contacts', 'inn', [
+            'type' => 'text',
+            'title' => 'ИНН',
+        ], 'varchar(20)');
 
         $this->addField($db, 'companies', 'inn', [
             'type' => 'text',

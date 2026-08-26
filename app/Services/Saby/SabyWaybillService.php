@@ -78,22 +78,25 @@ class SabyWaybillService
             throw new SabyException('Saby не вернул сформированный файл накладной');
         }
 
-        $written = $this->client->call('СБИС.ЗаписатьДокумент', [
-            'Документ' => [
-                'Тип' => self::DOC_TYPE,
-                'Регламент' => ['Название' => self::REGULATION],
-                'НашаОрганизация' => $this->ourOrganization(),
-                'Грузоотправитель' => $this->counterparty($shipper),
-                'Грузополучатель' => $receiver ? $this->counterparty($receiver) : $this->contactCounterparty($receiverContact),
-                'ТранспортнаяКомпания' => $this->counterparty($carrier ?: $shipper),
-                'Вложение' => [
-                    ['Файл' => [
-                        'ДвоичныеДанные' => $file['ДвоичныеДанные'],
-                        'Имя' => $file['Имя'] ?? null,
-                    ]],
-                ],
+        $payload = [
+            'Тип' => self::DOC_TYPE,
+            'Регламент' => ['Название' => self::REGULATION],
+            'НашаОрганизация' => $this->ourOrganization(),
+            'Грузоотправитель' => $this->counterparty($shipper),
+            'ТранспортнаяКомпания' => $this->counterparty($carrier ?: $shipper),
+            'Вложение' => [
+                ['Файл' => [
+                    'ДвоичныеДанные' => $file['ДвоичныеДанные'],
+                    'Имя' => $file['Имя'] ?? null,
+                ]],
             ],
-        ]);
+        ];
+        $receiverParty = $receiver ? $this->counterparty($receiver) : $this->contactCounterparty($receiverContact);
+        if (count($receiverParty)) {
+            $payload['Грузополучатель'] = $receiverParty;
+        }
+
+        $written = $this->client->call('СБИС.ЗаписатьДокумент', ['Документ' => $payload]);
 
         $attachment = $written['Вложение'][0] ?? [];
 
@@ -355,7 +358,7 @@ class SabyWaybillService
     private function contactParty(Contact $contact): array
     {
         $inn = $this->contactInn($contact);
-        $party = ['ИдСв' => ['СвФЛ' => array_filter([
+        $party = ['ИдСв' => ['СвИП' => array_filter([
             'ИННФЛ' => $inn !== '' ? $inn : null,
             'ФИО' => $this->splitName($this->contactName($contact)),
         ])]];
@@ -389,10 +392,13 @@ class SabyWaybillService
         }
 
         $inn = $this->contactInn($contact);
+        if (strlen($inn) !== 12) {
+            return [];
+        }
         $name = $this->splitName($this->contactName($contact));
 
         return ['СвФЛ' => array_filter([
-            'ИНН' => $inn !== '' ? $inn : null,
+            'ИНН' => $inn,
             'Фамилия' => $name['Фамилия'] ?? null,
             'Имя' => $name['Имя'] ?? null,
             'Отчество' => $name['Отчество'] ?? null,
