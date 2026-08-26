@@ -88,6 +88,9 @@ class InstallBankRequisitesModule extends Command
         $typeId = $this->ensureEntity($db, $label);
         $this->patchCompanies($db, $label, (int) $companiesType->id);
         $this->installModuleTab($db, $label);
+        foreach (InstallSaleDocsEntities::ensureBankRequisiteFields($db) as $line) {
+            $this->line("    [{$label}] {$line}");
+        }
         $this->clearCache($db, $inTenant);
 
         $this->line("    [{$label}] bank_requisites: data_type={$typeId}");

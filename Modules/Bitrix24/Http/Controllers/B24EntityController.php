@@ -34,6 +34,8 @@ class B24EntityController extends Controller
         if (!$type) {
             if (str_contains($event, 'PRODUCT')) {
                 $type = 'product';
+            } elseif (str_contains($event, 'INVOICE')) {
+                $type = 'invoice';
             } elseif (str_contains($event, 'BANKDETAIL')) {
                 $type = 'bankdetail';
             } elseif (str_contains($event, 'REQUISITE')) {

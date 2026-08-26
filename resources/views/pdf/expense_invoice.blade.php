@@ -54,7 +54,7 @@
         @empty
             <tr>
                 <td class="center">1</td>
-                <td>По заказу покупателя № {{ $dealId }}</td>
+                <td>@if($dealId !== '')По заказу покупателя № {{ $dealId }}@else Товары по накладной № {{ $number }}@endif</td>
                 <td class="center">1</td>
                 <td class="center"></td>
                 <td class="right nb">{{ number_format($total, 2, ',', ' ') }}</td>

@@ -112,6 +112,8 @@ class UninstallBankRequisitesModule extends Command
             $this->line("    [{$label}] companies: удалено полей реквизитов {$removed}, оставлено занятых другими модулями " . count($kept));
         }
 
+        InstallSaleDocsEntities::removeBankRequisiteFields($db);
+
         if ($this->option('purge')) {
             $db->statement('DROP TABLE IF EXISTS `bank_requisites`');
             $db->table('histories')->where('entity', $entity)->delete();
@@ -120,7 +122,7 @@ class UninstallBankRequisitesModule extends Command
 
         try {
             if ($db->getSchemaBuilder()->hasTable('local_cache')) {
-                $db->table('local_cache')->whereIn('url', ['fields/companies', 'fields/' . $entity])->update(['updated_at' => now()]);
+                $db->table('local_cache')->whereIn('url', ['fields/companies', 'fields/' . $entity, 'fields/deals', 'fields/payment_invoices'])->update(['updated_at' => now()]);
             }
         } catch (\Throwable $e) {
         }

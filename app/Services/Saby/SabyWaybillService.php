@@ -4,6 +4,7 @@ namespace App\Services\Saby;
 
 use App\Models\Car;
 use App\Models\Company;
+use App\Models\Contact;
 use App\Models\Employee;
 use App\Models\Requisite;
 use App\Models\Route;
@@ -54,6 +55,7 @@ class SabyWaybillService
         $shipper = $this->companyOf($task, 'shipment_company_id');
         $carrier = $route ? $this->companyOf($route, 'company_id') : null;
         $receiver = $this->companyOf($task, 'company_id');
+        $receiverContact = $this->contactOf($task);
 
         $number = $this->nextNumber($task);
         $document['СодИнфГО']['НомерТрН'] = $number;
@@ -82,7 +84,7 @@ class SabyWaybillService
                 'Регламент' => ['Название' => self::REGULATION],
                 'НашаОрганизация' => $this->ourOrganization(),
                 'Грузоотправитель' => $this->counterparty($shipper),
-                'Грузополучатель' => $this->counterparty($receiver),
+                'Грузополучатель' => $receiver ? $this->counterparty($receiver) : $this->contactCounterparty($receiverContact),
                 'ТранспортнаяКомпания' => $this->counterparty($carrier ?: $shipper),
                 'Вложение' => [
                     ['Файл' => [
@@ -194,8 +196,9 @@ class SabyWaybillService
         }
 
         $receiver = $this->companyOf($task, 'company_id');
-        if (!$receiver) {
-            $errors[] = 'В задаче не заполнено поле «Компания» (грузополучатель)';
+        $receiverContact = $this->contactOf($task);
+        if (!$receiver && !$receiverContact) {
+            $errors[] = 'В задаче не заполнено ни поле «Компания», ни поле «Контакт» (грузополучатель)';
         }
 
         $cargo = $this->cargo([$task]);
@@ -225,7 +228,7 @@ class SabyWaybillService
                 'НомерТрН' => (string) $task->id,
                 'СвГО' => ['РекИдентГО' => $this->party($shipper)],
                 'СвГП' => [
-                    'РекИдентГП' => $this->party($receiver),
+                    'РекИдентГП' => $receiver ? $this->party($receiver, $receiverContact) : $this->contactParty($receiverContact),
                     'АдресДостГр' => ['АдресИнф' => ['АдрТекст' => $deliveryAddress, 'КодСтр' => '643']],
                 ],
                 'СвГруз' => ['ОпГруз' => $cargo],
@@ -317,7 +320,7 @@ class SabyWaybillService
         return ['СвЮЛ' => ['ИНН' => $inn, 'КПП' => $kpp]];
     }
 
-    private function party(Company $company): array
+    private function party(Company $company, ?Contact $contact = null): array
     {
         $inn = $this->inn($company);
         $kpp = $this->kpp($company);
@@ -341,12 +344,117 @@ class SabyWaybillService
             $party['Адрес'] = ['АдрИнф' => ['АдрТекст' => $address, 'КодСтр' => '643']];
         }
 
-        $phone = $this->phone($company);
-        if ($phone !== '') {
-            $party['Контакт'] = ['Тлф' => [['value' => $phone]]];
+        $contactInfo = $this->contactInfo($contact ? $this->contactPhone($contact) : '', $contact ? $this->contactEmail($contact) : '', $this->phone($company));
+        if (count($contactInfo)) {
+            $party['Контакт'] = $contactInfo;
         }
 
         return $party;
+    }
+
+    private function contactParty(Contact $contact): array
+    {
+        $inn = $this->contactInn($contact);
+        $party = ['ИдСв' => ['СвФЛ' => array_filter([
+            'ИННФЛ' => $inn !== '' ? $inn : null,
+            'ФИО' => $this->splitName($this->contactName($contact)),
+        ])]];
+
+        $contactInfo = $this->contactInfo($this->contactPhone($contact), $this->contactEmail($contact), '');
+        if (count($contactInfo)) {
+            $party['Контакт'] = $contactInfo;
+        }
+
+        return $party;
+    }
+
+    private function contactInfo(string $contactPhone, string $email, string $companyPhone): array
+    {
+        $info = [];
+        $phones = array_values(array_unique(array_filter([$contactPhone, $companyPhone], fn ($v) => $v !== '')));
+        if (count($phones)) {
+            $info['Тлф'] = array_map(fn ($phone) => ['value' => $phone], $phones);
+        }
+        if ($email !== '') {
+            $info['ЭлПочта'] = [['value' => $email]];
+        }
+
+        return $info;
+    }
+
+    private function contactCounterparty(?Contact $contact): array
+    {
+        if (!$contact) {
+            return [];
+        }
+
+        $inn = $this->contactInn($contact);
+        $name = $this->splitName($this->contactName($contact));
+
+        return ['СвФЛ' => array_filter([
+            'ИНН' => $inn !== '' ? $inn : null,
+            'Фамилия' => $name['Фамилия'] ?? null,
+            'Имя' => $name['Имя'] ?? null,
+            'Отчество' => $name['Отчество'] ?? null,
+        ])];
+    }
+
+    private function contactOf(Task $task): ?Contact
+    {
+        if (!Schema::hasTable('contacts')) {
+            return null;
+        }
+
+        $ids = Route::parseIdList($this->attr($task, 'contact_id'));
+        $id = count($ids) ? $ids[0] : null;
+
+        if (!$id && Schema::hasTable('logistic_task_contact')) {
+            $id = \DB::table('logistic_task_contact')->where('logistic_task_id', $task->id)->value('contact_id');
+        }
+
+        return $id ? Contact::find($id) : null;
+    }
+
+    private function contactName(Contact $contact): string
+    {
+        $name = $this->attr($contact, 'name');
+        if (is_string($name) && $name !== '' && ($name[0] === '{' || $name[0] === '[')) {
+            $decoded = json_decode($name, true);
+            if (is_array($decoded)) {
+                $name = (string) ($decoded['value'] ?? reset($decoded));
+            }
+        }
+
+        return trim((string) $name);
+    }
+
+    private function contactInn(Contact $contact): string
+    {
+        return preg_replace('/\D/', '', (string) $this->attr($contact, 'inn'));
+    }
+
+    private function contactPhone(Contact $contact): string
+    {
+        foreach (['phones', 'phone', 'work_phone'] as $field) {
+            $value = $this->phoneValue($this->attr($contact, $field));
+            if ($value !== '') {
+                return $value;
+            }
+        }
+
+        return '';
+    }
+
+    private function contactEmail(Contact $contact): string
+    {
+        foreach (['emails', 'email'] as $field) {
+            $value = $this->phoneValue($this->attr($contact, $field));
+            if ($value !== '' && str_contains($value, '@')) {
+                return $value;
+            }
+        }
+
+        return '';
     }
 
     private function counterparty(Company $company): array

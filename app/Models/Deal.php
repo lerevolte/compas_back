@@ -15,7 +15,7 @@ class Deal extends Model
 
     public const B24_PUSH_FIELDS = [
         'address', 'time', 'phone', 'delivery_price', 'comment',
-        'pallets_count', 'delivery_date', 'contact', 'contact_id', 'company_id',
+        'pallets_count', 'delivery_date', 'contact', 'contact_id', 'company_id', 'bank_requisite_id',
     ];
 
     public static function boot()
@@ -30,7 +30,7 @@ class Deal extends Model
         });
 
         static::saving(function ($model) {
-            foreach (['contact_id', 'company_id', 'car_requirements', 'employee_requirements'] as $col) {
+            foreach (['contact_id', 'company_id', 'car_requirements', 'employee_requirements', 'bank_requisite_id'] as $col) {
                 if (is_array($model->{$col})) {
                     $model->{$col} = json_encode(array_values($model->{$col}));
                 }

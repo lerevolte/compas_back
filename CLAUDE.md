@@ -70,7 +70,11 @@ https://github.com/lerevolte/compas_f
    deals (`entity:install-deals`/`entity:uninstall-deals`),
    contacts (`entity:install-contacts`/`entity:uninstall-contacts`),
    saby (`saby:install`/`saby:uninstall`),
-   bank_requisites (`bank-requisites:install`/`bank-requisites:uninstall`).
+   bank_requisites (`bank-requisites:install`/`bank-requisites:uninstall`),
+   sale_docs — счета на оплату / расходные накладные / возвраты
+   (`entity:install-sale-docs`/`entity:uninstall-sale-docs`; поле
+   «Банковские реквизиты» у счетов и заказов ставится только при наличии
+   bank_requisites, `b24:backfill-deal-invoices` тянет счета из Bitrix24).
 7. **Модуль обязан прописываться во вкладку «Модули» деталки.** Пользователь
    должен видеть, какие поля сущностей использует модуль. Эталон — модуль
    логистики (`logistic:sync-module-fields`), рабочий пример в install/uninstall —

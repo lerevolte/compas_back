@@ -11,7 +11,7 @@ class UninstallSaleDocsEntities extends Command
         {target=avixo : seeds | all-tenants | <tenant_id>}
         {--purge : удалить и данные (DROP таблиц, история)}';
 
-    protected $description = 'Удалить сущности «Счета на оплату» и «Расходные накладные» и вкладку «Печать документов» у заказов';
+    protected $description = 'Удалить сущности «Счета на оплату», «Расходные накладные», «Возвраты», вкладку «Печать документов» и поле «Банковские реквизиты» у заказов';
 
     public function handle(): int
     {
@@ -71,6 +71,8 @@ class UninstallSaleDocsEntities extends Command
             }
             $this->line("    [{$label}] {$slug}: метаданные удалены");
         }
+
+        InstallSaleDocsEntities::removeBankRequisiteFields($db);
 
         foreach ($db->table('settings')->where(['type' => 'menu', 'entity' => 'deals'])->get() as $menu) {
             $tabs = json_decode($menu->value, true);

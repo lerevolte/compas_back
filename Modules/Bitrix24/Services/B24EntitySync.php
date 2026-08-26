@@ -373,6 +373,9 @@ class B24EntitySync
             $cmd['rows_' . $id] = 'crm.deal.productrows.get?id=' . $id;
             $cmd['contacts_' . $id] = 'crm.deal.contact.items.get?id=' . $id;
             $cmd['invoices_' . $id] = 'crm.invoice.list?filter[UF_DEAL_ID]=' . $id;
+            if ($this->bankRequisitesReady()) {
+                $cmd['reqlink_' . $id] = 'crm.requisite.link.list?filter[ENTITY_TYPE_ID]=' . self::DEAL_ENTITY_TYPE . '&filter[ENTITY_ID]=' . $id;
+            }
         }
         $res = $this->b24Batch($cmd);
 
@@ -385,12 +388,18 @@ class B24EntitySync
             ];
             if (isset($res['invoices_' . $id]) && is_array($res['invoices_' . $id])) {
                 $invoices = [];
+                $rows = [];
                 foreach ($res['invoices_' . $id] as $invoice) {
                     if (($invoice['UF_DEAL_ID'] ?? null) == $id) {
                         $invoices[] = $invoice['ACCOUNT_NUMBER'] ?? $invoice['ID'];
+                        $rows[] = $invoice;
                     }
                 }
                 $item['invoices'] = $invoices;
+                $item['invoice_rows'] = $rows;
+            }
+            if (isset($res['reqlink_' . $id]) && is_array($res['reqlink_' . $id])) {
+                $item['requisite_link'] = $this->firstRow($res['reqlink_' . $id]);
             }
             $pre[$id] = $item;
         }
@@ -598,10 +607,462 @@ class B24EntitySync
 
             $this->linkDealRelations($model, $deal, $pre['contact_items'] ?? null);
 
+            $link = $pre !== null && array_key_exists('requisite_link', $pre)
+                ? $pre['requisite_link']
+                : $this->fetchRequisiteLink(self::DEAL_ENTITY_TYPE, $dealId);
+            $this->applyDealRequisiteLink($model, $link);
+            $this->syncDealInvoices($model, $dealId, $pre['invoice_rows'] ?? null);
+
             return $model;
         } finally {
             self::$muted = false;
         }
+    }
+
+    // --------------------------------------------------------------- invoices
+
+    public const DEAL_ENTITY_TYPE = 2;
+    public const INVOICE_ENTITY_TYPE = 5;
+
+    private ?bool $invoicesReady = null;
+    private array $bankDetailCache = [];
+
+    private function paymentInvoicesReady(): bool
+    {
+        if ($this->invoicesReady === null) {
+            $this->invoicesReady = Schema::hasTable('payment_invoices')
+                && Schema::hasColumn('payment_invoices', 'b24_id')
+                && DB::table('data_types')->where('slug', 'payment_invoices')->exists();
+        }
+        return $this->invoicesReady;
+    }
+
+    private function firstRow($rows): ?array
+    {
+        if (!is_array($rows)) {
+            return null;
+        }
+        foreach ($rows as $row) {
+            if (is_array($row)) {
+                return $row;
+            }
+        }
+        return null;
+    }
+
+    private function fetchRequisiteLink(int $entityTypeId, $entityId): ?array
+    {
+        if (!$this->bankRequisitesReady() || !$entityId) {
+            return null;
+        }
+        try {
+            $resp = $this->b24('crm.requisite.link.list', [
+                'filter' => ['ENTITY_TYPE_ID' => $entityTypeId, 'ENTITY_ID' => $entityId],
+            ]);
+            return $this->firstRow($resp['result'] ?? null);
+        } catch (\Throwable $e) {
+            Log::channel('bitrix24')->warning('entity-sync: requisite link fetch failed', [
+                'entity_type' => $entityTypeId, 'entity_id' => $entityId, 'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
+    }
+
+    private function bankRequisiteLocalId(?array $link): ?int
+    {
+        if (!$link || !$this->bankRequisitesReady()) {
+            return null;
+        }
+        foreach (['MC_BANK_DETAIL_ID', 'BANK_DETAIL_ID'] as $key) {
+            $b24Id = (string) ($link[$key] ?? '');
+            if ($b24Id === '' || $b24Id === '0') {
+                continue;
+            }
+            $localId = $this->resolveBankDetail($b24Id);
+            if ($localId) {
+                return $localId;
+            }
+        }
+        return null;
+    }
+
+    private function resolveBankDetail(string $b24Id): ?int
+    {
+        if (array_key_exists($b24Id, $this->bankDetailCache)) {
+            return $this->bankDetailCache[$b24Id];
+        }
+
+        $localId = \App\Models\BankRequisite::where('b24_id', $b24Id)->value('id');
+        if ($localId) {
+            return $this->bankDetailCache[$b24Id] = (int) $localId;
+        }
+
+        try {
+            $detail = $this->b24('crm.requisite.bankdetail.get', ['id' => $b24Id])['result'] ?? null;
+            if (!is_array($detail) || empty($detail['ENTITY_ID'])) {
+                return $this->bankDetailCache[$b24Id] = null;
+            }
+            $requisite = $this->b24('crm.requisite.get', ['id' => $detail['ENTITY_ID']])['result'] ?? null;
+            if (!is_array($requisite) || (int) ($requisite['ENTITY_TYPE_ID'] ?? 0) !== 4 || empty($requisite['ENTITY_ID'])) {
+                return $this->bankDetailCache[$b24Id] = null;
+            }
+            $this->pullCompanyById($requisite['ENTITY_ID']);
+        } catch (\Throwable $e) {
+            Log::channel('bitrix24')->warning('entity-sync: bank detail resolve failed', ['bank_detail_id' => $b24Id, 'error' => $e->getMessage()]);
+            return $this->bankDetailCache[$b24Id] = null;
+        }
+
+        $localId = \App\Models\BankRequisite::where('b24_id', $b24Id)->value('id');
+        return $this->bankDetailCache[$b24Id] = ($localId ? (int) $localId : null);
+    }
+
+    private function applyDealRequisiteLink(Deal $model, ?array $link): void
+    {
+        if (!Schema::hasColumn('deals', 'bank_requisite_id')) {
+            return;
+        }
+        $localId = $this->bankRequisiteLocalId($link);
+        if (!$localId) {
+            return;
+        }
+        $current = json_decode((string) $model->bank_requisite_id, true);
+        $current = is_array($current) ? array_values(array_map('intval', array_filter($current, 'is_numeric'))) : [];
+        if ($current === [$localId]) {
+            return;
+        }
+        $this->writeSyncFieldHistory('deals', $model->id, ['bank_requisite_id' => [$localId]]);
+        $model->bank_requisite_id = json_encode([$localId]);
+        $model->saveQuietly();
+    }
+
+    private function syncDealInvoices(Deal $model, $b24DealId, ?array $rows): void
+    {
+        if (!$this->paymentInvoicesReady()) {
+            return;
+        }
+        if ($rows === null) {
+            $rows = [];
+            try {
+                $resp = $this->b24('crm.invoice.list', ['filter' => ['UF_DEAL_ID' => $b24DealId]]);
+                foreach (($resp['result'] ?? []) as $row) {
+                    if (is_array($row) && ($row['UF_DEAL_ID'] ?? null) == $b24DealId) {
+                        $rows[] = $row;
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::channel('bitrix24')->warning('entity-sync: invoice list failed', ['deal_id' => $b24DealId, 'error' => $e->getMessage()]);
+                return;
+            }
+        }
+
+        $b24Ids = [];
+        $cmd = [];
+        foreach ($rows as $row) {
+            $id = (string) ($row['ID'] ?? '');
+            if ($id === '') {
+                continue;
+            }
+            $b24Ids[] = $id;
+            $cmd['inv_' . $id] = 'crm.invoice.get?id=' . $id;
+            if ($this->bankRequisitesReady()) {
+                $cmd['link_' . $id] = 'crm.requisite.link.list?filter[ENTITY_TYPE_ID]=' . self::INVOICE_ENTITY_TYPE . '&filter[ENTITY_ID]=' . $id;
+            }
+        }
+        $res = count($cmd) ? $this->b24Batch($cmd) : [];
+
+        foreach ($rows as $row) {
+            $id = (string) ($row['ID'] ?? '');
+            if ($id === '') {
+                continue;
+            }
+            try {
+                $full = isset($res['inv_' . $id]) && is_array($res['inv_' . $id]) ? $res['inv_' . $id] : $row;
+                $link = array_key_exists('link_' . $id, $res) ? $this->firstRow($res['link_' . $id]) : $this->fetchRequisiteLink(self::INVOICE_ENTITY_TYPE, $id);
+                $this->upsertInvoiceFromB24($full, $model, $link);
+            } catch (\Throwable $e) {
+                Log::channel('bitrix24')->warning('entity-sync: invoice upsert failed', ['invoice_id' => $id, 'deal_id' => $b24DealId, 'error' => $e->getMessage()]);
+            }
+        }
+
+        if (\App\Models\ObjectRelation::ready()) {
+            $linkedIds = \App\Models\ObjectRelation::where('source_slug', 'deals')
+                ->where('source_id', $model->id)
+                ->where('target_slug', 'payment_invoices')
+                ->pluck('target_id');
+            if ($linkedIds->count()) {
+                $stale = \App\Models\PaymentInvoice::whereIn('id', $linkedIds)
+                    ->whereNotNull('b24_id')
+                    ->where('b24_id', '!=', '')
+                    ->when(count($b24Ids), fn ($q) => $q->whereNotIn('b24_id', $b24Ids))
+                    ->get();
+                foreach ($stale as $invoice) {
+                    $invoice->delete();
+                }
+            }
+        }
+    }
+
+    public function upsertInvoiceFromB24(array $inv, ?Deal $deal, ?array $link = null): ?\App\Models\PaymentInvoice
+    {
+        if (!$this->paymentInvoicesReady() || empty($inv['ID'])) {
+            return null;
+        }
+        $b24Id = (string) $inv['ID'];
+
+        $model = \App\Models\PaymentInvoice::withTrashed()->where('b24_id', $b24Id)->first() ?: new \App\Models\PaymentInvoice();
+        $isNew = !$model->exists;
+        if (!$isNew && $model->trashed()) {
+            $model->deleted_at = null;
+        }
+        $model->b24_id = $b24Id;
+
+        $number = trim((string) ($inv['ACCOUNT_NUMBER'] ?? ''));
+        if ($number === '') {
+            $number = $b24Id;
+        }
+        if (Schema::hasColumn('payment_invoices', 'number')) {
+            $model->number = $number;
+        }
+
+        $billDate = null;
+        if (!empty($inv['DATE_BILL'])) {
+            try {
+                $billDate = \Carbon\Carbon::parse($inv['DATE_BILL'])->setTimezone(config('app.timezone', 'Europe/Moscow'));
+            } catch (\Throwable $e) {
+                $billDate = null;
+            }
+        }
+        if ($isNew) {
+            $model->created_at = $billDate ?: now();
+        } elseif ($billDate && $model->created_at && !$model->created_at->isSameDay($billDate)) {
+            $model->created_at = $billDate;
+        }
+
+        $dateText = ($model->created_at ?: now())->format('d.m.Y');
+        $autoName = 'Счет на оплату № ' . $number . ' от ' . $dateText;
+        $currentName = $this->plainText($model->name);
+        if ($isNew || $currentName === '' || preg_match('/^Счет на оплату № .+ от \d{2}\.\d{2}\.\d{4}$/u', $currentName)) {
+            $model->name = $autoName;
+        }
+
+        $price = (float) ($inv['PRICE'] ?? 0);
+        $model->sum = $price > 0 ? rtrim(rtrim(number_format($price, 2, '.', ''), '0'), '.') : null;
+
+        $companyIds = [];
+        if (!empty($inv['UF_COMPANY_ID'])) {
+            $localId = $this->localIdByB24('companies', $inv['UF_COMPANY_ID']);
+            if (!$localId) {
+                $localId = $this->pullCompanyById($inv['UF_COMPANY_ID'])?->id;
+            }
+            if ($localId) {
+                $companyIds[] = (int) $localId;
+            }
+        }
+        if (!count($companyIds) && $deal) {
+            $dealCompanies = json_decode((string) $deal->company_id, true);
+            $companyIds = is_array($dealCompanies) ? array_values(array_map('intval', array_filter($dealCompanies, 'is_numeric'))) : [];
+        }
+        $model->company_id = count($companyIds) ? json_encode($companyIds) : null;
+
+        $responsibleId = $this->resolveResponsible($inv['RESPONSIBLE_ID'] ?? null);
+        $model->user_id = $responsibleId ?: ($model->user_id ?: ($deal?->user_id ?: 1));
+
+        [$products] = $this->fetchDealProducts($b24Id, is_array($inv['PRODUCT_ROWS'] ?? null) ? $inv['PRODUCT_ROWS'] : []);
+        if (count($products)) {
+            $model->products = json_encode($products, JSON_UNESCAPED_UNICODE);
+        }
+
+        if (Schema::hasColumn('payment_invoices', 'bank_requisite_id')) {
+            $bankId = $this->bankRequisiteLocalId($link);
+            if ($bankId) {
+                $model->bank_requisite_id = json_encode([$bankId]);
+            } elseif ($isNew && $deal && Schema::hasColumn('deals', 'bank_requisite_id') && $deal->bank_requisite_id) {
+                $model->bank_requisite_id = $deal->bank_requisite_id;
+            }
+        }
+
+        $changed = false;
+        if ($isNew) {
+            $model->saveQuietly();
+            $this->writeSyncCreatedHistory('payment_invoices', $model->id);
+            $changed = true;
+        } elseif ($model->isDirty()) {
+            $this->writeSyncFieldHistory('payment_invoices', $model->id, $model->getDirty());
+            $model->saveQuietly();
+            $changed = true;
+        }
+
+        if ($deal) {
+            \App\Models\ObjectRelation::link('deals', $deal->id, 'payment_invoices', $model->id);
+        }
+
+        if ($changed || !$model->photo) {
+            \App\Services\SaleDocumentService::regenerate('payment_invoices', (int) $model->id);
+        }
+
+        return $model;
+    }
+
+    private function plainText($value): string
+    {
+        $value = (string) $value;
+        if ($value !== '' && ($value[0] === '{' || $value[0] === '[')) {
+            $decoded = json_decode($value, true);
+            if (is_array($decoded)) {
+                $value = (string) ($decoded['value'] ?? reset($decoded));
+            }
+        }
+        return trim($value);
+    }
+
+    public function pullInvoiceById($invoiceId): ?\App\Models\PaymentInvoice
+    {
+        if (!$this->paymentInvoicesReady()) {
+            return null;
+        }
+        $resp = $this->b24('crm.invoice.get', ['id' => $invoiceId]);
+        $inv = $resp['result'] ?? null;
+        if (!is_array($inv) || empty($inv['ID'])) {
+            return null;
+        }
+
+        $deal = null;
+        if (!empty($inv['UF_DEAL_ID'])) {
+            $localId = $this->localIdByB24('deals', $inv['UF_DEAL_ID']);
+            $deal = $localId ? Deal::find($localId) : $this->pullDealById($inv['UF_DEAL_ID']);
+        }
+
+        self::$muted = true;
+        try {
+            return $this->upsertInvoiceFromB24($inv, $deal, $this->fetchRequisiteLink(self::INVOICE_ENTITY_TYPE, $inv['ID']));
+        } finally {
+            self::$muted = false;
+        }
+    }
+
+    public function deleteInvoiceByB24Id($invoiceId): void
+    {
+        if (!$this->paymentInvoicesReady()) {
+            return;
+        }
+        \App\Models\PaymentInvoice::where('b24_id', (string) $invoiceId)->first()?->delete();
+    }
+
+    public function backfillDealInvoices(?callable $progress = null): array
+    {
+        $stat = ['deals' => 0, 'invoices' => 0, 'failed' => 0];
+        if (!$this->paymentInvoicesReady() || !Schema::hasColumn('deals', 'b24_id')) {
+            $stat['skipped'] = true;
+            return $stat;
+        }
+
+        Deal::whereNotNull('b24_id')->where('b24_id', '!=', '')->orderBy('id')->chunkById(50, function ($deals) use (&$stat, $progress) {
+            $cmd = [];
+            foreach ($deals as $deal) {
+                $cmd['invoices_' . $deal->b24_id] = 'crm.invoice.list?filter[UF_DEAL_ID]=' . $deal->b24_id;
+                if ($this->bankRequisitesReady()) {
+                    $cmd['reqlink_' . $deal->b24_id] = 'crm.requisite.link.list?filter[ENTITY_TYPE_ID]=' . self::DEAL_ENTITY_TYPE . '&filter[ENTITY_ID]=' . $deal->b24_id;
+                }
+            }
+            $res = $this->b24Batch($cmd);
+
+            foreach ($deals as $deal) {
+                self::$muted = true;
+                try {
+                    $rows = [];
+                    foreach ((isset($res['invoices_' . $deal->b24_id]) && is_array($res['invoices_' . $deal->b24_id]) ? $res['invoices_' . $deal->b24_id] : []) as $row) {
+                        if (is_array($row) && ($row['UF_DEAL_ID'] ?? null) == $deal->b24_id) {
+                            $rows[] = $row;
+                        }
+                    }
+                    if (array_key_exists('reqlink_' . $deal->b24_id, $res)) {
+                        $this->applyDealRequisiteLink($deal, $this->firstRow($res['reqlink_' . $deal->b24_id]));
+                    }
+                    $this->syncDealInvoices($deal, $deal->b24_id, $rows);
+                    $stat['invoices'] += count($rows);
+                } catch (\Throwable $e) {
+                    $stat['failed']++;
+                    Log::channel('bitrix24')->warning('entity-sync: deal invoices backfill failed', ['deal_id' => $deal->id, 'error' => $e->getMessage()]);
+                } finally {
+                    self::$muted = false;
+                }
+                $stat['deals']++;
+            }
+            if ($progress) {
+                $progress($stat);
+            }
+        });
+
+        return $stat;
+    }
+
+    private function ourOrganizationInn(): string
+    {
+        if (!Schema::hasTable('requisites')) {
+            return '';
+        }
+        $inn = DB::table('requisites')
+            ->whereNull('deleted_at')
+            ->orderByRaw('choosed_at IS NULL')
+            ->orderByDesc('choosed_at')
+            ->orderBy('id')
+            ->value('inn');
+        return preg_replace('/\D/', '', (string) $inn);
+    }
+
+    private function pushDealRequisiteLink(Deal $deal): void
+    {
+        if (!$deal->b24_id || !$this->bankRequisitesReady()) {
+            return;
+        }
+        $ids = json_decode((string) $deal->bank_requisite_id, true);
+        $bankId = null;
+        foreach (is_array($ids) ? $ids : [] as $id) {
+            if (is_numeric($id)) {
+                $bankId = (int) $id;
+                break;
+            }
+        }
+        if (!$bankId) {
+            return;
+        }
+        $bank = \App\Models\BankRequisite::find($bankId);
+        if (!$bank || !$bank->b24_id) {
+            return;
+        }
+        $detail = $this->b24('crm.requisite.bankdetail.get', ['id' => $bank->b24_id])['result'] ?? null;
+        if (!is_array($detail) || empty($detail['ENTITY_ID'])) {
+            return;
+        }
+
+        $orgInn = $this->ourOrganizationInn();
+        $companyInn = '';
+        if ($orgInn !== '' && Schema::hasColumn('companies', 'inn')) {
+            $companyInn = preg_replace('/\D/', '', (string) DB::table('companies')->where('id', $bank->company_id)->value('inn'));
+        }
+        $isOurs = $orgInn !== '' && $companyInn === $orgInn;
+
+        $current = $this->fetchRequisiteLink(self::DEAL_ENTITY_TYPE, $deal->b24_id) ?: [];
+        $fields = [
+            'ENTITY_TYPE_ID' => self::DEAL_ENTITY_TYPE,
+            'ENTITY_ID' => $deal->b24_id,
+            'REQUISITE_ID' => $current['REQUISITE_ID'] ?? 0,
+            'BANK_DETAIL_ID' => $current['BANK_DETAIL_ID'] ?? 0,
+            'MC_REQUISITE_ID' => $current['MC_REQUISITE_ID'] ?? 0,
+            'MC_BANK_DETAIL_ID' => $current['MC_BANK_DETAIL_ID'] ?? 0,
+        ];
+        if ($isOurs) {
+            $fields['MC_REQUISITE_ID'] = $detail['ENTITY_ID'];
+            $fields['MC_BANK_DETAIL_ID'] = $bank->b24_id;
+        } else {
+            $fields['REQUISITE_ID'] = $detail['ENTITY_ID'];
+            $fields['BANK_DETAIL_ID'] = $bank->b24_id;
+        }
+
+        $resp = $this->b24('crm.requisite.link.register', ['fields' => $fields]);
+        Log::channel('bitrix24')->info('entity-sync: deal requisite link pushed', [
+            'deal_id' => $deal->id, 'b24_id' => $deal->b24_id, 'fields' => $fields, 'result' => $resp['result'] ?? null,
+        ]);
     }
 
     private function resolveResponsible($assignedById): ?int
@@ -1485,6 +1946,13 @@ class B24EntitySync
         }
         if (in_array('company_id', $changed, true)) {
             $this->pushDealCompany($deal);
+        }
+        if (in_array('bank_requisite_id', $changed, true)) {
+            try {
+                $this->pushDealRequisiteLink($deal);
+            } catch (\Throwable $e) {
+                Log::channel('bitrix24')->warning('entity-sync: deal requisite link push failed', ['deal_id' => $deal->id, 'error' => $e->getMessage()]);
+            }
         }
 
         $fields = [];

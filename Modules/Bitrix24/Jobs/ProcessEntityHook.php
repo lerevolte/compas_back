@@ -88,6 +88,13 @@ class ProcessEntityHook implements ShouldQueue
                             $svc->pullCompanyByRequisiteId($this->entityId);
                         }
                         break;
+                    case 'invoice':
+                        if ($this->isDelete) {
+                            $svc->deleteInvoiceByB24Id($this->entityId);
+                        } else {
+                            $svc->pullInvoiceById($this->entityId);
+                        }
+                        break;
                     case 'bankdetail':
                         if ($this->isDelete) {
                             if (\Schema::hasTable('bank_requisites') && \Schema::hasColumn('bank_requisites', 'b24_id')) {

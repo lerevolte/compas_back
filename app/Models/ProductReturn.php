@@ -7,15 +7,13 @@ use App\Traits\FieldValue, App\Traits\ModelActions, App\Traits\ColorGenerator;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Auth;
 
-class PaymentInvoice extends Model
+class ProductReturn extends Model
 {
     use FieldValue, ModelActions, ColorGenerator, SoftDeletes;
 
-    protected $table = 'payment_invoices';
+    protected $table = 'product_returns';
 
     protected $guarded = ['id'];
-
-    public const REGENERATE_FIELDS = ['name', 'number', 'company_id', 'sum', 'products', 'bank_requisite_id', 'created_at'];
 
     public static function boot()
     {
@@ -27,23 +25,6 @@ class PaymentInvoice extends Model
                 $model->user_id = $user->id;
             }
         });
-
-        static::saving(function ($model) {
-            if (is_array($model->bank_requisite_id)) {
-                $model->bank_requisite_id = json_encode(array_values(array_filter($model->bank_requisite_id, 'is_numeric')));
-            }
-        });
-
-        static::saved(function ($model) {
-            if ($model->wasRecentlyCreated || count(array_intersect(array_keys($model->getChanges()), self::REGENERATE_FIELDS))) {
-                $model->regeneratePdf();
-            }
-        });
-    }
-
-    public function regeneratePdf(): bool
-    {
-        return \App\Services\SaleDocumentService::regenerate('payment_invoices', (int) $this->id);
     }
 
     public function setProducts(array $products)
@@ -59,6 +40,5 @@ class PaymentInvoice extends Model
             $this->sum = rtrim(rtrim(number_format($total, 2, '.', ''), '0'), '.');
         }
         $this->saveQuietly();
-        $this->regeneratePdf();
     }
 }

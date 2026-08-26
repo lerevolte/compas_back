@@ -15,6 +15,15 @@ class InstallSaleDocsEntities extends Command
             'model' => 'App\\Models\\PaymentInvoice',
             'slug_singular' => 'payment_invoice',
             'color' => '#B8860B',
+            'columns' => [
+                'number' => 'VARCHAR(64) NULL',
+                'b24_id' => 'VARCHAR(32) NULL',
+                'bank_requisite_id' => 'TEXT NULL',
+            ],
+            'indexes' => ['payment_invoices_b24_id_index' => 'b24_id'],
+            'fields' => [
+                'number' => ['type' => 'text', 'title' => 'Номер', 'after' => 'name'],
+            ],
         ],
         'expense_invoices' => [
             'title_singular' => 'Расходная накладная',
@@ -23,15 +32,32 @@ class InstallSaleDocsEntities extends Command
             'slug_singular' => 'expense_invoice',
             'color' => '#8E5AA8',
         ],
+        'product_returns' => [
+            'title_singular' => 'Возврат',
+            'title_plural' => 'Возвраты',
+            'model' => 'App\\Models\\ProductReturn',
+            'slug_singular' => 'product_return',
+            'color' => '#C0392B',
+            'columns' => [
+                'reason' => 'TEXT NULL',
+            ],
+            'fields' => [
+                'reason' => ['type' => 'text', 'title' => 'Причина возврата', 'is_plural' => 1],
+            ],
+        ],
     ];
 
     public const PRINT_TAB = 'print_docs';
     public const PRINT_TAB_TITLE = 'Печать документов';
 
+    public const BANK_FIELD = 'bank_requisite_id';
+    public const BANK_FIELD_TITLE = 'Банковские реквизиты';
+    public const BANK_FIELD_ENTITIES = ['payment_invoices', 'deals'];
+
     protected $signature = 'entity:install-sale-docs
         {target=avixo : seeds | all-tenants | <tenant_id>}';
 
-    protected $description = 'Установить сущности «Счета на оплату» и «Расходные накладные», переименовать deals в «Заказы покупателей», добавить вкладку «Печать документов»';
+    protected $description = 'Установить сущности «Счета на оплату», «Расходные накладные» и «Возвраты», переименовать deals в «Заказы покупателей», добавить вкладку «Печать документов» и поле «Банковские реквизиты» у счетов и заказов';
 
     public function handle(): int
     {
@@ -79,6 +105,10 @@ class InstallSaleDocsEntities extends Command
         }
 
         $this->ensurePrintTab($db, $label);
+
+        foreach (self::ensureBankRequisiteFields($db) as $line) {
+            $this->line("    [{$label}] {$line}");
+        }
 
         try {
             if ($db->getSchemaBuilder()->hasTable('local_cache')) {
@@ -131,6 +161,18 @@ CREATE TABLE IF NOT EXISTS `{$slug}` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL);
 
+        foreach ($meta['columns'] ?? [] as $column => $definition) {
+            if (!$sb->hasColumn($slug, $column)) {
+                $db->statement("ALTER TABLE `{$slug}` ADD COLUMN `{$column}` {$definition}");
+            }
+        }
+        foreach ($meta['indexes'] ?? [] as $index => $column) {
+            $exists = collect($db->select("SHOW INDEX FROM `{$slug}`"))->pluck('Key_name')->contains($index);
+            if (!$exists) {
+                $db->statement("ALTER TABLE `{$slug}` ADD INDEX `{$index}` (`{$column}`)");
+            }
+        }
+
         $type = $db->table('data_types')->where('slug', $slug)->first();
         $typeAttrs = [
             'name' => $slug,
@@ -176,6 +218,22 @@ SQL);
             'company_id' => ['type' => 'relation', 'title' => 'Компания', 'details' => '{"table":"companies"}', 'is_link' => 1, 'is_plural' => 1, 'relation_table' => 'companies'],
             'sum' => ['type' => 'number', 'title' => 'Сумма', 'unit' => 'руб.'],
         ];
+        foreach ($meta['fields'] ?? [] as $field => $attrs) {
+            $after = $attrs['after'] ?? null;
+            unset($attrs['after']);
+            if ($after && isset($fields[$after])) {
+                $ordered = [];
+                foreach ($fields as $key => $value) {
+                    $ordered[$key] = $value;
+                    if ($key === $after) {
+                        $ordered[$field] = $attrs;
+                    }
+                }
+                $fields = $ordered;
+            } else {
+                $fields[$field] = $attrs;
+            }
+        }
 
         $sort = 0;
         foreach ($fields as $field => $attrs) {
@@ -189,7 +247,7 @@ SQL);
                 $db->table('data_rows')->where('id', $existing->id)->update($patch);
                 continue;
             }
-            $db->table('data_rows')->insert(array_merge($this->baseRow($typeId, (int) $infoSecId), $attrs, [
+            $db->table('data_rows')->insert(array_merge(self::baseRow($typeId, (int) $infoSecId), $attrs, [
                 'field' => $field, 'sort' => $sort,
             ]));
             $sort++;
@@ -264,7 +322,77 @@ SQL);
         }
     }
 
-    private function baseRow(int $typeId, int $sectionId): array
+    public static function ensureBankRequisiteFields($db): array
+    {
+        $sb = $db->getSchemaBuilder();
+        $lines = [];
+
+        if (!$db->table('data_types')->where('slug', 'bank_requisites')->exists() || !$sb->hasTable('bank_requisites')) {
+            $lines[] = 'модуль «Банковские реквизиты» не установлен — поле «' . self::BANK_FIELD_TITLE . '» у счетов/заказов не добавлено';
+            return $lines;
+        }
+
+        foreach (self::BANK_FIELD_ENTITIES as $slug) {
+            $typeId = $db->table('data_types')->where('slug', $slug)->value('id');
+            if (!$typeId || !$sb->hasTable($slug)) {
+                continue;
+            }
+            if (!$sb->hasColumn($slug, self::BANK_FIELD)) {
+                $db->statement("ALTER TABLE `{$slug}` ADD COLUMN `" . self::BANK_FIELD . "` TEXT NULL");
+            }
+
+            $attrs = [
+                'type' => 'relation', 'title' => self::BANK_FIELD_TITLE, 'details' => '{"table":"bank_requisites"}',
+                'is_link' => 1, 'is_plural' => 1, 'relation_table' => 'bank_requisites', 'is_permanent' => 0,
+                'is_remove' => 0, 'hide' => 0,
+            ];
+            $existing = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', self::BANK_FIELD)->first();
+            if ($existing) {
+                $db->table('data_rows')->where('id', $existing->id)->update($attrs);
+                continue;
+            }
+
+            $sectionId = (int) ($db->table('field_sections')
+                ->where('page', $slug)
+                ->where(fn ($q) => $q->whereNull('module')->orWhere('module', ''))
+                ->orderBy('sort')
+                ->value('id') ?: 0);
+            $maxSort = (int) $db->table('data_rows')->where('data_type_id', $typeId)->max('sort');
+            $db->table('data_rows')->insert(array_merge(self::baseRow((int) $typeId, $sectionId), $attrs, [
+                'field' => self::BANK_FIELD, 'sort' => $maxSort + 1,
+            ]));
+            $lines[] = "{$slug}: добавлено поле «" . self::BANK_FIELD_TITLE . '»';
+        }
+
+        try {
+            if ($sb->hasTable('local_cache')) {
+                $db->table('local_cache')
+                    ->whereIn('url', array_map(fn ($s) => 'fields/' . $s, self::BANK_FIELD_ENTITIES))
+                    ->update(['updated_at' => now()]);
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return $lines;
+    }
+
+    public static function removeBankRequisiteFields($db): void
+    {
+        foreach (self::BANK_FIELD_ENTITIES as $slug) {
+            $typeId = $db->table('data_types')->where('slug', $slug)->value('id');
+            if (!$typeId) {
+                continue;
+            }
+            $ids = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', self::BANK_FIELD)->pluck('id');
+            if ($ids->isEmpty()) {
+                continue;
+            }
+            $db->table('section_fields_sort')->whereIn('field_id', $ids)->delete();
+            $db->table('data_rows')->whereIn('id', $ids)->delete();
+        }
+    }
+
+    public static function baseRow(int $typeId, int $sectionId): array
     {
         return [
             'data_type_id' => $typeId, 'field' => null, 'type' => 'text', 'title' => '',

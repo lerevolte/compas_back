@@ -26,25 +26,57 @@ class SaleDocumentService
         ],
     ];
 
+    private static bool $busy = false;
+
     public static function generateFor(string $targetSlug, $targetId, string $sourceSlug, $sourceId): bool
     {
         if (!isset(self::TARGETS[$targetSlug]) || $sourceSlug !== 'deals') {
             return false;
         }
 
+        return self::run($targetSlug, (int) $targetId, (int) $sourceId);
+    }
+
+    public static function regenerate(string $slug, int $id): bool
+    {
+        if (!isset(self::TARGETS[$slug])) {
+            return false;
+        }
+
+        $dealId = null;
+        if (\App\Models\ObjectRelation::ready()) {
+            $dealId = \App\Models\ObjectRelation::where('source_slug', 'deals')
+                ->where('target_slug', $slug)
+                ->where('target_id', $id)
+                ->orderBy('id')
+                ->value('source_id');
+        }
+
+        return self::run($slug, $id, $dealId ? (int) $dealId : null);
+    }
+
+    private static function run(string $slug, int $id, ?int $dealId): bool
+    {
+        if (self::$busy) {
+            return false;
+        }
+
+        self::$busy = true;
         try {
-            return (new self())->generate($targetSlug, (int) $targetId, (int) $sourceId);
+            return (new self())->generate($slug, $id, $dealId);
         } catch (\Throwable $e) {
             Log::warning('sale-doc: генерация печатной формы не удалась', [
-                'target' => $targetSlug . '#' . $targetId,
-                'source' => $sourceSlug . '#' . $sourceId,
+                'target' => $slug . '#' . $id,
+                'source' => 'deals#' . ($dealId ?? '-'),
                 'error' => $e->getMessage(),
             ]);
             return false;
+        } finally {
+            self::$busy = false;
         }
     }
 
-    private function generate(string $slug, int $id, int $dealId): bool
+    private function generate(string $slug, int $id, ?int $dealId): bool
     {
         $meta = self::TARGETS[$slug];
         $doc = $meta['model']::find($id);
@@ -52,13 +84,13 @@ class SaleDocumentService
             return false;
         }
 
-        $deal = Schema::hasTable('deals') ? DB::table('deals')->where('id', $dealId)->first() : null;
+        $deal = $dealId && Schema::hasTable('deals') ? DB::table('deals')->where('id', $dealId)->first() : null;
 
         $companyId = $this->firstId($doc->company_id) ?: ($deal ? $this->firstId($deal->company_id ?? null) : null);
         $company = $companyId ? Company::find($companyId) : null;
 
         $org = $this->ourOrganization();
-        $bank = $org ? $this->orgBank($org) : null;
+        $bank = $this->documentBank($doc, $org) ?: ($org ? $this->orgBank($org) : null);
 
         $products = $this->decodeProducts($doc->products);
         if (!count($products) && $deal) {
@@ -76,10 +108,10 @@ class SaleDocumentService
             $total = (float) $doc->sum;
         }
 
-        $number = (string) $doc->id;
+        $number = trim((string) ($doc->number ?? '')) !== '' ? trim((string) $doc->number) : (string) $doc->id;
         $date = $doc->created_at ? $doc->created_at->format('d.m.Y') : date('d.m.Y');
 
-        $buyer = $this->dealContacts($dealId);
+        $buyer = $dealId ? $this->dealContacts($dealId) : '';
         $dealName = $deal ? $this->plainName($deal->name ?? '') : '';
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView($meta['view'], [
@@ -93,7 +125,7 @@ class SaleDocumentService
             'total' => $total,
             'buyer' => $buyer,
             'dealName' => $dealName,
-            'dealId' => $dealId,
+            'dealId' => $dealId ?? '',
         ]);
 
         $disk = \Storage::disk('public');
@@ -115,7 +147,7 @@ class SaleDocumentService
         $file->path = $path;
         $file->save();
 
-        $doc->photo = json_encode([[
+        $generated = [
             'id' => $file->id,
             'name' => $meta['title'] . ' № ' . $number . ' от ' . $date . '.pdf',
             'url' => '/files/pdfSmall.svg',
@@ -123,12 +155,22 @@ class SaleDocumentService
             'extension' => 'pdf',
             'sort' => 0,
             'ext' => 'pdf',
-        ]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        ];
+        $photos = [$generated];
+        $existing = json_decode((string) $doc->photo, true);
+        foreach (is_array($existing) ? $existing : [] as $item) {
+            if (is_array($item) && !str_contains((string) ($item['file'] ?? ''), '/sale_docs/')) {
+                $item['sort'] = count($photos);
+                $photos[] = $item;
+            }
+        }
+        $doc->photo = json_encode($photos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         if ($total > 0 && !(float) ($doc->sum ?? 0)) {
             $doc->sum = rtrim(rtrim(number_format($total, 2, '.', ''), '0'), '.');
         }
-        if ($this->plain($doc->name) === '' || $this->plain($doc->name) === $dealName) {
+        $currentName = $this->plain($doc->name);
+        if ($currentName === '' || $currentName === $dealName || preg_match('/^' . preg_quote($meta['title'], '/') . ' № .+ от \d{2}\.\d{2}\.\d{4}$/u', $currentName)) {
             $doc->name = $meta['title'] . ' № ' . $number . ' от ' . $date;
         }
         if (count($products) && !$this->decodeProducts($doc->products)) {
@@ -171,6 +213,32 @@ class SaleDocumentService
             ->orderByDesc('choosed_at')
             ->orderBy('id')
             ->first();
+    }
+
+    private function documentBank($doc, ?object $org): ?BankRequisite
+    {
+        if (!Schema::hasTable('bank_requisites')) {
+            return null;
+        }
+
+        $bankId = $this->firstId($doc->bank_requisite_id ?? null);
+        if (!$bankId) {
+            return null;
+        }
+
+        $bank = BankRequisite::find($bankId);
+        if (!$bank) {
+            return null;
+        }
+
+        $orgInn = preg_replace('/\D/', '', (string) ($org->inn ?? ''));
+        if ($orgInn === '' || !Schema::hasColumn('companies', 'inn')) {
+            return $bank;
+        }
+
+        $companyInn = preg_replace('/\D/', '', (string) DB::table('companies')->where('id', $bank->company_id)->value('inn'));
+
+        return $companyInn === $orgInn ? $bank : null;
     }
 
     private function orgBank(object $org): ?BankRequisite
