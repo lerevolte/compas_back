@@ -97,10 +97,26 @@ class B24EntitySync
         return $result;
     }
 
-    /**
-     * crm.batch: до 50 команд за один HTTP-запрос. Возвращает результаты,
-     * ключи — из $cmd; отсутствующий ключ = команда не выполнилась.
-     */
+    private function b24ListByIdCursor(string $method, array $params, int $afterId, int $max): array
+    {
+        $result = [];
+        $guard = 0;
+        while (count($result) < $max && $guard < 1000) {
+            $params['filter'] = ($params['filter'] ?? []) + ['>ID' => $afterId];
+            $params['order'] = ['ID' => 'ASC'];
+            $resp = $this->b24($method, $params + ['start' => -1]);
+            $batch = $resp['result'] ?? [];
+            if (!is_array($batch) || !count($batch)) {
+                break;
+            }
+            $result = array_merge($result, $batch);
+            $afterId = (int) end($batch)['ID'];
+            $guard++;
+        }
+
+        return $result;
+    }
+
     private function b24Batch(array $cmd): array
     {
         $out = [];
@@ -296,6 +312,7 @@ class B24EntitySync
         $legacy = $read('b24_entities_synced_at');
         $sinceDeals = $read('b24_deals_synced_at') ?: $legacy;
         $sinceContacts = $read('b24_contacts_synced_at') ?: $legacy;
+        $sinceCompanies = $read('b24_companies_synced_at');
         $started = now()->format('Y-m-d\TH:i:sP');
 
         if (!$sinceDeals && !$sinceContacts) {
@@ -303,10 +320,19 @@ class B24EntitySync
             $write('b24_entities_synced_at', $started);
             $write('b24_deals_synced_at', $started);
             $write('b24_contacts_synced_at', $started);
-            return ['init' => true, 'stages' => count($stages), 'deals' => 0, 'contacts' => 0, 'more' => false];
+            $write('b24_companies_synced_at', $started);
+            return ['init' => true, 'stages' => count($stages), 'deals' => 0, 'contacts' => 0, 'companies' => 0, 'more' => false];
         }
 
         $this->syncStages();
+
+        $companies = ['count' => 0, 'more' => false];
+        if ($sinceCompanies) {
+            $companies = $this->pullCompanies($sinceCompanies, $chunk);
+            $write('b24_companies_synced_at', ($companies['more'] && $companies['last_modify']) ? $companies['last_modify'] : $started);
+        } else {
+            $write('b24_companies_synced_at', $started);
+        }
 
         $deals = $this->pullDeals($sinceDeals, $chunk);
         $write('b24_deals_synced_at', ($deals['more'] && $deals['last_modify']) ? $deals['last_modify'] : $started);
@@ -318,7 +344,8 @@ class B24EntitySync
             'init' => false,
             'deals' => $deals['count'],
             'contacts' => $contacts['count'],
-            'more' => $deals['more'] || $contacts['more'],
+            'companies' => $companies['count'],
+            'more' => $deals['more'] || $contacts['more'] || $companies['more'],
         ];
     }
 
@@ -414,7 +441,7 @@ class B24EntitySync
         }
         $contacts = $this->b24All('crm.contact.list', [
             'filter' => $filter,
-            'select' => ['ID', 'NAME', 'LAST_NAME', 'SECOND_NAME', 'EMAIL', 'PHONE', 'DATE_MODIFY', 'ASSIGNED_BY_ID', self::CONTACT_TYPE_UF],
+            'select' => self::CONTACT_SELECT,
             'order'  => $since ? ['DATE_MODIFY' => 'ASC'] : ['ID' => 'ASC'],
         ], $limit);
         $more = $limit > 0 && count($contacts) >= $limit;
@@ -422,8 +449,16 @@ class B24EntitySync
             $contacts = array_slice($contacts, 0, $limit);
         }
 
+        return $this->processContacts($contacts) + ['more' => $more];
+    }
+
+    private const CONTACT_SELECT = ['ID', 'NAME', 'LAST_NAME', 'SECOND_NAME', 'EMAIL', 'PHONE', 'DATE_MODIFY', 'ASSIGNED_BY_ID', self::CONTACT_TYPE_UF];
+
+    private function processContacts(array $contacts): array
+    {
         $count = 0;
         $lastModify = null;
+        $lastId = null;
         foreach (array_chunk($contacts, 50) as $chunkContacts) {
             $cmd = [];
             foreach ($chunkContacts as $contact) {
@@ -444,9 +479,117 @@ class B24EntitySync
                         'error'      => $e->getMessage(),
                     ]);
                 }
+                $lastId = (int) ($contact['ID'] ?? $lastId);
             }
         }
-        return ['count' => $count, 'last_modify' => $lastModify, 'more' => $more];
+        return ['count' => $count, 'last_modify' => $lastModify, 'last_id' => $lastId];
+    }
+
+    private const COMPANY_SELECT = ['ID', 'TITLE', 'DATE_MODIFY', 'ASSIGNED_BY_ID'];
+
+    public function pullCompanies(?string $since = null, int $limit = 0): array
+    {
+        $filter = [];
+        if ($since) {
+            $filter['>DATE_MODIFY'] = $since;
+        }
+        $companies = $this->b24All('crm.company.list', [
+            'filter' => $filter,
+            'select' => self::COMPANY_SELECT,
+            'order'  => $since ? ['DATE_MODIFY' => 'ASC'] : ['ID' => 'ASC'],
+        ], $limit);
+        $more = $limit > 0 && count($companies) >= $limit;
+        if ($limit > 0) {
+            $companies = array_slice($companies, 0, $limit);
+        }
+
+        return $this->processCompanies($companies) + ['more' => $more];
+    }
+
+    private function processCompanies(array $companies): array
+    {
+        $count = 0;
+        $lastModify = null;
+        $lastId = null;
+        foreach (array_chunk($companies, 50) as $chunkCompanies) {
+            $map = [];
+            foreach ($chunkCompanies as $company) {
+                $map[(string) $company['ID']] = (string) $company['ID'];
+            }
+            $pre = $this->fetchCompanyRequisiteData($map);
+            foreach ($chunkCompanies as $company) {
+                try {
+                    $this->upsertCompanyFromB24($company, $pre[(string) $company['ID']] ?? null);
+                    $count++;
+                    $lastModify = $company['DATE_MODIFY'] ?? $lastModify;
+                } catch (\Throwable $e) {
+                    Log::channel('bitrix24')->warning('entity-sync: company upsert failed', [
+                        'company_id' => $company['ID'] ?? null,
+                        'error'      => $e->getMessage(),
+                    ]);
+                }
+                $lastId = (int) ($company['ID'] ?? $lastId);
+            }
+        }
+        return ['count' => $count, 'last_modify' => $lastModify, 'last_id' => $lastId];
+    }
+
+    public const BACKFILL_ENTITIES = ['companies', 'contacts'];
+
+    public static function backfillState(string $entity): array
+    {
+        $read = fn (string $type) => DB::table('settings')->where('type', $type)->value('value');
+
+        return [
+            'after_id' => (int) $read('b24_' . $entity . '_backfill_id'),
+            'done' => $read('b24_' . $entity . '_backfill_done'),
+        ];
+    }
+
+    public static function resetBackfill(string $entity): void
+    {
+        DB::table('settings')
+            ->whereIn('type', ['b24_' . $entity . '_backfill_id', 'b24_' . $entity . '_backfill_done'])
+            ->delete();
+    }
+
+    public function backfill(string $entity, int $chunk = 500): array
+    {
+        if (!in_array($entity, self::BACKFILL_ENTITIES, true)) {
+            return ['count' => 0, 'more' => false, 'after_id' => 0, 'done' => true];
+        }
+        $state = self::backfillState($entity);
+        if ($state['done']) {
+            return ['count' => 0, 'more' => false, 'after_id' => $state['after_id'], 'done' => true];
+        }
+
+        $write = function (string $type, string $value) {
+            DB::table('settings')->updateOrInsert(
+                ['type' => $type, 'entity' => null, 'user_id' => null],
+                ['key' => $type, 'value' => $value]
+            );
+        };
+
+        $rows = $entity === 'companies'
+            ? $this->b24ListByIdCursor('crm.company.list', ['select' => self::COMPANY_SELECT], $state['after_id'], $chunk)
+            : $this->b24ListByIdCursor('crm.contact.list', ['select' => self::CONTACT_SELECT], $state['after_id'], $chunk);
+        $rows = array_slice($rows, 0, $chunk);
+
+        if (!count($rows)) {
+            $write('b24_' . $entity . '_backfill_done', now()->format('Y-m-d\TH:i:sP'));
+            return ['count' => 0, 'more' => false, 'after_id' => $state['after_id'], 'done' => true];
+        }
+
+        $result = $entity === 'companies' ? $this->processCompanies($rows) : $this->processContacts($rows);
+        $afterId = (int) ($result['last_id'] ?? $state['after_id']);
+        $write('b24_' . $entity . '_backfill_id', (string) $afterId);
+
+        $more = count($rows) >= $chunk;
+        if (!$more) {
+            $write('b24_' . $entity . '_backfill_done', now()->format('Y-m-d\TH:i:sP'));
+        }
+
+        return ['count' => $result['count'], 'more' => $more, 'after_id' => $afterId, 'done' => !$more];
     }
 
     public function pullDealById($dealId): ?Deal
@@ -1380,7 +1523,7 @@ class B24EntitySync
         }
     }
 
-    public function upsertCompanyFromB24(array $company): Company
+    public function upsertCompanyFromB24(array $company, $requisiteData = false): Company
     {
         $b24Id = (string) $company['ID'];
         $title = trim((string) ($company['TITLE'] ?? ''));
@@ -1413,7 +1556,9 @@ class B24EntitySync
                     $model->user_id = $responsibleId;
                 }
             }
-            $requisiteData = $this->fetchCompanyRequisiteData([0 => $b24Id])[0] ?? null;
+            if ($requisiteData === false) {
+                $requisiteData = $this->fetchCompanyRequisiteData([0 => $b24Id])[0] ?? null;
+            }
             if ($requisiteData) {
                 $this->applyCompanyRequisiteFields($model, $requisiteData['fields'], true);
             }

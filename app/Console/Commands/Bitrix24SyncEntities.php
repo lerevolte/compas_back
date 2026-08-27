@@ -69,7 +69,7 @@ class Bitrix24SyncEntities extends Command
                             $this->info("  ✓ {$tenant->id} (init): stages={$result['stages']}; сделки/контакты дальше пойдут инкрементально чанками по {$chunk}, полная выгрузка — только с --full");
                         } else {
                             $more = $result['more'] ? ', есть ещё (доберёт следующий прогон)' : '';
-                            $this->info("  ✓ {$tenant->id}: deals={$result['deals']}, contacts={$result['contacts']}{$more}");
+                            $this->info("  ✓ {$tenant->id}: deals={$result['deals']}, contacts={$result['contacts']}, companies={$result['companies']}{$more}");
                         }
                     }
 
