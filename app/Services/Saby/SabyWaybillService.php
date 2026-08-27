@@ -27,8 +27,8 @@ class SabyWaybillService
         '3' => 'Расчетная масса',
     ];
 
-    private SabyClient $client;
-    private array $geocodeCache = [];
+    protected SabyClient $client;
+    protected array $geocodeCache = [];
 
     public function __construct(SabyClient $client)
     {
@@ -171,7 +171,7 @@ class SabyWaybillService
         return $waybill;
     }
 
-    private function log(string $level, string $message, array $context = []): void
+    protected function log(string $level, string $message, array $context = []): void
     {
         try {
             Log::channel('saby')->{$level}($message, $context);
@@ -306,7 +306,7 @@ class SabyWaybillService
         return [];
     }
 
-    private function ourOrganization(): array
+    protected function ourOrganization(): array
     {
         $config = $this->client->config();
         $inn = trim((string) $config->param('our_inn', ''));
@@ -323,7 +323,7 @@ class SabyWaybillService
         return ['СвЮЛ' => ['ИНН' => $inn, 'КПП' => $kpp]];
     }
 
-    private function party(Company $company, ?Contact $contact = null): array
+    protected function party(Company $company, ?Contact $contact = null): array
     {
         $inn = $this->inn($company);
         $kpp = $this->kpp($company);
@@ -355,7 +355,7 @@ class SabyWaybillService
         return $party;
     }
 
-    private function contactParty(Contact $contact): array
+    protected function contactParty(Contact $contact): array
     {
         $inn = $this->contactInn($contact);
         $party = ['ИдСв' => ['СвИП' => array_filter([
@@ -371,7 +371,7 @@ class SabyWaybillService
         return $party;
     }
 
-    private function contactInfo(string $contactPhone, string $email, string $companyPhone): array
+    protected function contactInfo(string $contactPhone, string $email, string $companyPhone): array
     {
         $info = [];
         $phones = array_values(array_unique(array_filter([$contactPhone, $companyPhone], fn ($v) => $v !== '')));
@@ -385,7 +385,7 @@ class SabyWaybillService
         return $info;
     }
 
-    private function contactCounterparty(?Contact $contact): array
+    protected function contactCounterparty(?Contact $contact): array
     {
         if (!$contact) {
             return [];
@@ -405,7 +405,7 @@ class SabyWaybillService
         ])];
     }
 
-    private function contactOf(Task $task): ?Contact
+    protected function contactOf(Task $task): ?Contact
     {
         if (!Schema::hasTable('contacts')) {
             return null;
@@ -421,7 +421,7 @@ class SabyWaybillService
         return $id ? Contact::find($id) : null;
     }
 
-    private function contactName(Contact $contact): string
+    protected function contactName(Contact $contact): string
     {
         $name = $this->attr($contact, 'name');
         if (is_string($name) && $name !== '' && ($name[0] === '{' || $name[0] === '[')) {
@@ -434,12 +434,12 @@ class SabyWaybillService
         return trim((string) $name);
     }
 
-    private function contactInn(Contact $contact): string
+    protected function contactInn(Contact $contact): string
     {
         return preg_replace('/\D/', '', (string) $this->attr($contact, 'inn'));
     }
 
-    private function contactPhone(Contact $contact): string
+    protected function contactPhone(Contact $contact): string
     {
         foreach (['phones', 'phone', 'work_phone'] as $field) {
             $value = $this->phoneValue($this->attr($contact, $field));
@@ -451,7 +451,7 @@ class SabyWaybillService
         return '';
     }
 
-    private function contactEmail(Contact $contact): string
+    protected function contactEmail(Contact $contact): string
     {
         foreach (['emails', 'email'] as $field) {
             $value = $this->phoneValue($this->attr($contact, $field));
@@ -463,7 +463,7 @@ class SabyWaybillService
         return '';
     }
 
-    private function counterparty(Company $company): array
+    protected function counterparty(Company $company): array
     {
         $inn = $this->inn($company);
         if (strlen($inn) > 10) {
@@ -483,7 +483,7 @@ class SabyWaybillService
         ])];
     }
 
-    private function driver(Task $task): ?array
+    protected function driver(Task $task): ?array
     {
         $ids = Route::parseIdList($this->attr($task, 'employee_id'));
         $employeeId = count($ids) ? $ids[0] : null;
@@ -526,7 +526,7 @@ class SabyWaybillService
         return $driver;
     }
 
-    private function vehicle(Route $route): ?array
+    protected function vehicle(Route $route): ?array
     {
         if (!$route->car_id) {
             return null;
@@ -583,7 +583,7 @@ class SabyWaybillService
         return $vehicle;
     }
 
-    private function fieldOptionLabel(string $entity, string $field, $value): string
+    protected function fieldOptionLabel(string $entity, string $field, $value): string
     {
         $raw = is_array($value) ? ($value[0] ?? null) : $value;
         if (is_string($raw) && is_array($decoded = json_decode($raw, true))) {
@@ -609,7 +609,7 @@ class SabyWaybillService
         return '';
     }
 
-    private function cargo($tasks): array
+    protected function cargo($tasks): array
     {
         $config = $this->client->config();
         $defaultCondition = (string) $config->param('cargo_condition', 'Хорошее');
@@ -675,7 +675,7 @@ class SabyWaybillService
         return $cargo;
     }
 
-    private function products($task): array
+    protected function products($task): array
     {
         $raw = $task->products ?? null;
         if (is_array($raw)) {
@@ -690,7 +690,7 @@ class SabyWaybillService
         return is_array($decoded) ? $decoded : [];
     }
 
-    private function isService($productId): bool
+    protected function isService($productId): bool
     {
         if (!$productId || !Schema::hasColumn('products', 'product_type')) {
             return false;
@@ -704,7 +704,7 @@ class SabyWaybillService
         return trim((string) $raw) === '1';
     }
 
-    private function productAttr($productId, string $field, string $default): string
+    protected function productAttr($productId, string $field, string $default): string
     {
         if (!$productId || !Schema::hasColumn('products', $field)) {
             return $default;
@@ -716,7 +716,7 @@ class SabyWaybillService
         return $value !== '' ? $value : $default;
     }
 
-    private function loadingDateTime(Task $loadingTask, ?Route $route): string
+    protected function loadingDateTime(Task $loadingTask, ?Route $route): string
     {
         $date = trim((string) ($loadingTask->delivery_date ?: ($route?->date ?: '')));
         try {
@@ -734,7 +734,7 @@ class SabyWaybillService
         return $base->format('d.m.Y\TH:i:sP');
     }
 
-    private function taskAddress(Task $task, ?Company $receiver = null): string
+    protected function taskAddress(Task $task, ?Company $receiver = null): string
     {
         $text = $this->addressText($task->address);
 
@@ -756,7 +756,7 @@ class SabyWaybillService
         return '';
     }
 
-    private function resolveCoordinates(string $text): string
+    protected function resolveCoordinates(string $text): string
     {
         if (!preg_match('/^\s*(-?\d+\.\d+)\s*[,\s]\s*(-?\d+\.\d+)\s*$/', $text, $m)) {
             return '';
@@ -803,7 +803,7 @@ class SabyWaybillService
         return $this->geocodeCache[$key] = $address;
     }
 
-    private function yandexReverse(float $lat, float $lng): string
+    protected function yandexReverse(float $lat, float $lng): string
     {
         $key = (string) config('services.yandex.geocoder_key');
         if ($key === '') {
@@ -838,12 +838,12 @@ class SabyWaybillService
         return '';
     }
 
-    private function isCoordinates(string $text): bool
+    protected function isCoordinates(string $text): bool
     {
         return (bool) preg_match('/^\s*-?\d+\.\d+\s*[,\s]\s*-?\d+\.\d+\s*$/', $text);
     }
 
-    private function addressText($raw): string
+    protected function addressText($raw): string
     {
         if (is_array($raw)) {
             return trim((string) ($raw['text'] ?? ''));
@@ -860,7 +860,7 @@ class SabyWaybillService
         return trim($raw);
     }
 
-    private function companyOf($model, string $field): ?Company
+    protected function companyOf($model, string $field): ?Company
     {
         $value = $this->attr($model, $field);
         $ids = Route::parseIdList($value);
@@ -869,7 +869,7 @@ class SabyWaybillService
         return $id ? Company::find($id) : null;
     }
 
-    private function requisite(Company $company): ?Requisite
+    protected function requisite(Company $company): ?Requisite
     {
         if (!Schema::hasTable('requisites')) {
             return null;
@@ -878,7 +878,7 @@ class SabyWaybillService
         return Requisite::where('company_id', $company->id)->first();
     }
 
-    private function companyAddress(Company $company, ?Requisite $requisite): string
+    protected function companyAddress(Company $company, ?Requisite $requisite): string
     {
         foreach ([$requisite->fact_address ?? null, $requisite->address ?? null, $company->address ?? null] as $value) {
             $text = $this->addressText($value);
@@ -890,17 +890,17 @@ class SabyWaybillService
         return '';
     }
 
-    private function inn(Company $company): string
+    protected function inn(Company $company): string
     {
         return preg_replace('/\D/', '', (string) $this->attr($company, 'inn'));
     }
 
-    private function kpp(Company $company): string
+    protected function kpp(Company $company): string
     {
         return preg_replace('/\D/', '', (string) $this->attr($company, 'kpp'));
     }
 
-    private function phone(Company $company): string
+    protected function phone(Company $company): string
     {
         foreach (['phone', 'work_phone'] as $field) {
             $value = $this->phoneValue($this->attr($company, $field));
@@ -919,7 +919,7 @@ class SabyWaybillService
         return '';
     }
 
-    private function companyPhoneFields(): array
+    protected function companyPhoneFields(): array
     {
         static $fields = null;
 
@@ -944,7 +944,7 @@ class SabyWaybillService
         return $fields;
     }
 
-    private function phoneValue($raw): string
+    protected function phoneValue($raw): string
     {
         if (is_array($raw)) {
             foreach ($raw as $item) {
@@ -972,7 +972,7 @@ class SabyWaybillService
         return $value;
     }
 
-    private function splitName(?string $name): array
+    protected function splitName(?string $name): array
     {
         $clean = preg_replace('/^\s*(ИП|Индивидуальный предприниматель)\s+/iu', '', trim((string) $name));
         $parts = preg_split('/\s+/u', trim((string) $clean)) ?: [];
@@ -984,14 +984,14 @@ class SabyWaybillService
         ], fn ($v) => $v !== '');
     }
 
-    private function nextNumber(Task $task): string
+    protected function nextNumber(Task $task): string
     {
         $prefix = trim((string) $this->client->config()->param('number_prefix', ''));
 
         return $prefix !== '' ? $prefix . $task->id : (string) $task->id;
     }
 
-    private function attr($model, string $field)
+    protected function attr($model, string $field)
     {
         if (!$model) {
             return null;
@@ -1000,7 +1000,7 @@ class SabyWaybillService
         return array_key_exists($field, $model->getAttributes()) ? $model->getAttribute($field) : null;
     }
 
-    private function formatDate($value): string
+    protected function formatDate($value): string
     {
         $value = trim((string) $value);
         if ($value === '') {
@@ -1014,7 +1014,7 @@ class SabyWaybillService
         }
     }
 
-    private function number($value): float
+    protected function number($value): float
     {
         if (is_numeric($value)) {
             return (float) $value;
@@ -1025,7 +1025,7 @@ class SabyWaybillService
         return is_numeric($clean) ? (float) $clean : 0.0;
     }
 
-    private function format(float $value, int $precision = 2): string
+    protected function format(float $value, int $precision = 2): string
     {
         $rounded = round($value, $precision);
 

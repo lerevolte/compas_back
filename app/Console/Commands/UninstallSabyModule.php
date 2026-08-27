@@ -10,9 +10,9 @@ class UninstallSabyModule extends Command
 {
     protected $signature = 'saby:uninstall
         {target=avixo : seeds | all-tenants | <tenant_id>}
-        {--purge : удалить и данные (таблицы saby_config, saby_waybills)}';
+        {--purge : удалить и данные (таблицы saby_config, saby_waybills, saby_orders)}';
 
-    protected $description = 'Удалить модуль «Транспортные накладные Saby»: метаданные полей, при --purge — и таблицы';
+    protected $description = 'Удалить модуль «Заказы в Саби»: метаданные полей, при --purge — и таблицы';
 
     private const FIELDS = [
         'routes' => ['receiver_company_id', 'request_number', 'request_date', 'saby_waybills'],
@@ -88,7 +88,7 @@ class UninstallSabyModule extends Command
 
         if ($this->option('purge')) {
             $sb = $db->getSchemaBuilder();
-            foreach (['saby_waybills', 'saby_config'] as $table) {
+            foreach (['saby_orders', 'saby_waybills', 'saby_config'] as $table) {
                 if ($sb->hasTable($table)) {
                     $sb->drop($table);
                     $this->line("    [{$label}] таблица {$table} удалена");

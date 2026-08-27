@@ -12,7 +12,7 @@ class InstallSabyModule extends Command
         {target=avixo : seeds | all-tenants | <tenant_id>}
         {--dry-run : показать план без изменений}';
 
-    protected $description = 'Установить модуль «Транспортные накладные Saby»: таблицы saby_config/saby_waybills и поля маршрута, автопарка, сотрудника, товара';
+    protected $description = 'Установить модуль «Заказы в Саби» (заказы на перевозку и ЭТрН Saby): таблицы saby_config/saby_waybills/saby_orders и поля задач, автопарка, сотрудника, товара';
 
     private const TARE_TYPES = [
         ['value' => '1A', 'label' => '1A — Барабан стальной'],
@@ -383,7 +383,7 @@ class InstallSabyModule extends Command
     ];
 
     public const MODULE_SLUG = 'saby';
-    public const MODULE_NAME = 'Транспортные накладные';
+    public const MODULE_NAME = 'Заказы в Саби';
 
     private const MODULE_FIELDS = [
         'logistic_tasks' => ['saby_waybills', 'shipment_company_id', 'company_id', 'contact_id', 'employee_id', 'address', 'products', 'weight', 'delivery_date'],
@@ -499,7 +499,7 @@ class InstallSabyModule extends Command
 
         $this->addField($db, 'logistic_tasks', 'saby_waybills', [
             'type' => 'waybills',
-            'title' => 'Транспортные накладные',
+            'title' => 'Заказы в Саби',
             'only_read' => 1,
             'visible_always' => 1,
         ], 'text');
@@ -627,6 +627,8 @@ class InstallSabyModule extends Command
                 'enabled' => 1,
             ]);
             $this->line("      добавлена запись модуля " . self::MODULE_SLUG . " в modules");
+        } else {
+            $db->table('modules')->where('slug', self::MODULE_SLUG)->update(['name' => self::MODULE_NAME]);
         }
 
         foreach (self::MODULE_FIELDS as $entity => $fields) {
@@ -882,6 +884,50 @@ class InstallSabyModule extends Command
 
         if (!$sb->hasColumn('saby_waybills', 'qr_url')) {
             $db->statement("ALTER TABLE `saby_waybills` ADD COLUMN `qr_url` TEXT NULL");
+        }
+
+        if (!$sb->hasTable('saby_orders')) {
+            $db->statement("
+                CREATE TABLE `saby_orders` (
+                    `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+                    `task_id` bigint unsigned DEFAULT NULL,
+                    `route_id` bigint unsigned DEFAULT NULL,
+                    `loading_task_id` bigint unsigned DEFAULT NULL,
+                    `mass_method` varchar(8) DEFAULT NULL,
+                    `doc_id` varchar(64) DEFAULT NULL,
+                    `attachment_id` varchar(64) DEFAULT NULL,
+                    `complete_id` varchar(64) DEFAULT NULL,
+                    `number` varchar(64) DEFAULT NULL,
+                    `date` varchar(32) DEFAULT NULL,
+                    `state_code` varchar(8) DEFAULT NULL,
+                    `state_name` varchar(255) DEFAULT NULL,
+                    `state_note` varchar(255) DEFAULT NULL,
+                    `last_event` varchar(255) DEFAULT NULL,
+                    `pdf_url` text,
+                    `cabinet_url` text,
+                    `archive_url` text,
+                    `waybill_doc_id` varchar(64) DEFAULT NULL,
+                    `waybill_number` varchar(64) DEFAULT NULL,
+                    `waybill_date` varchar(32) DEFAULT NULL,
+                    `waybill_state` varchar(255) DEFAULT NULL,
+                    `waybill_stage` varchar(255) DEFAULT NULL,
+                    `waybill_pdf_url` text,
+                    `waybill_cabinet_url` text,
+                    `waybill_archive_url` text,
+                    `waybill_qr_url` text,
+                    `waybill_checked_at` timestamp NULL DEFAULT NULL,
+                    `payload` longtext,
+                    `error` text,
+                    `user_id` bigint unsigned DEFAULT NULL,
+                    `synced_at` timestamp NULL DEFAULT NULL,
+                    `created_at` timestamp NULL DEFAULT NULL,
+                    `updated_at` timestamp NULL DEFAULT NULL,
+                    PRIMARY KEY (`id`),
+                    KEY `saby_orders_task_id_index` (`task_id`),
+                    KEY `saby_orders_doc_id_index` (`doc_id`),
+                    KEY `saby_orders_waybill_doc_id_index` (`waybill_doc_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ");
         }
 
         if (!$sb->hasTable('logistic_task_contact')) {
