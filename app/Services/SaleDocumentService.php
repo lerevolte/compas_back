@@ -86,6 +86,37 @@ class SaleDocumentService
         self::queue(self::docsForDeals([$dealId]));
     }
 
+    public static function syncFromDeal($deal): void
+    {
+        $dealId = (int) ($deal->id ?? 0);
+        if (!$dealId) {
+            return;
+        }
+        $products = (new self())->decodeProducts($deal->products ?? null);
+        $dealSum = (float) ($deal->sum ?? 0);
+        $queued = [];
+        foreach (self::docsForDeals([$dealId]) as [$slug, $id]) {
+            $doc = self::TARGETS[$slug]['model']::find($id);
+            if (!$doc) {
+                continue;
+            }
+            if (trim((string) ($doc->b24_id ?? '')) !== '') {
+                $queued[] = [$slug, $id];
+                continue;
+            }
+            if (count($products)) {
+                $doc->setProducts($products, $dealSum > 0 ? $deal->sum : null);
+                continue;
+            }
+            if ($dealSum > 0 && (float) ($doc->sum ?? 0) !== $dealSum) {
+                $doc->sum = $deal->sum;
+                $doc->saveQuietly();
+            }
+            $queued[] = [$slug, $id];
+        }
+        self::queue($queued);
+    }
+
     public static function queueForCompany(int $companyId): void
     {
         self::queue(self::docsForCompany($companyId));
@@ -296,7 +327,7 @@ class SaleDocumentService
             $products[$k]['total'] = $count * $price;
             $total += $count * $price;
         }
-        if ((float) ($doc->sum ?? 0) > 0 && $total <= 0) {
+        if ((float) ($doc->sum ?? 0) > 0) {
             $total = (float) $doc->sum;
         }
 
@@ -323,11 +354,12 @@ class SaleDocumentService
         $disk = \Storage::disk('public');
         $dir = 'sale_docs/' . $slug . '/' . $id;
         if (!\File::isDirectory($disk->path($dir))) {
-            \File::makeDirectory($disk->path($dir), 0755, true);
+            \File::makeDirectory($disk->path($dir), 0775, true);
         }
         $filename = $meta['file'] . '_' . $id . '.pdf';
         $path = $dir . '/' . $filename;
         $pdf->save($disk->path($path));
+        $this->fixOwnership($disk, ['sale_docs', 'sale_docs/' . $slug, $dir, $path]);
 
         $tenant = tenant('id');
         $url = $tenant
@@ -381,6 +413,29 @@ class SaleDocumentService
         }
 
         return true;
+    }
+
+    private function fixOwnership($disk, array $paths): void
+    {
+        if (!function_exists('posix_geteuid') || posix_geteuid() !== 0) {
+            return;
+        }
+        $root = rtrim($disk->path(''), '/');
+        $uid = @fileowner($root);
+        $gid = @filegroup($root);
+        if (!$uid) {
+            return;
+        }
+        foreach ($paths as $relative) {
+            $absolute = $disk->path($relative);
+            if (!file_exists($absolute) || @fileowner($absolute) === $uid) {
+                continue;
+            }
+            @chown($absolute, $uid);
+            if ($gid) {
+                @chgrp($absolute, $gid);
+            }
+        }
     }
 
     public static function documentFiles($photo): array

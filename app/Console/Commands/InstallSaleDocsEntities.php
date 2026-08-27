@@ -54,6 +54,9 @@ class InstallSaleDocsEntities extends Command
     public const BANK_FIELD_TITLE = 'Банковские реквизиты';
     public const BANK_FIELD_ENTITIES = ['payment_invoices', 'deals'];
 
+    public const DEAL_SUM_FIELD = 'sum';
+    public const DEAL_SUM_TITLE = 'Сумма';
+
     public const SHIPMENT_FIELD = 'shipment_company_id';
     public const SHIPMENT_FIELD_TITLE = 'Компания отгрузки';
     public const SHIPMENT_FIELD_ENTITIES = ['deals', 'payment_invoices', 'expense_invoices', 'logistic_tasks'];
@@ -115,6 +118,10 @@ class InstallSaleDocsEntities extends Command
         }
 
         foreach (self::ensureShipmentCompanyFields($db) as $line) {
+            $this->line("    [{$label}] {$line}");
+        }
+
+        foreach (self::ensureDealSumField($db) as $line) {
             $this->line("    [{$label}] {$line}");
         }
 
@@ -377,6 +384,76 @@ SQL);
                 $db->table('local_cache')
                     ->whereIn('url', array_map(fn ($s) => 'fields/' . $s, self::BANK_FIELD_ENTITIES))
                     ->update(['updated_at' => now()]);
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return $lines;
+    }
+
+    public static function ensureDealSumField($db): array
+    {
+        $sb = $db->getSchemaBuilder();
+        $lines = [];
+        $typeId = $db->table('data_types')->where('slug', 'deals')->value('id');
+        if (!$typeId || !$sb->hasTable('deals')) {
+            return $lines;
+        }
+        if (!$sb->hasColumn('deals', self::DEAL_SUM_FIELD)) {
+            $db->statement("ALTER TABLE `deals` ADD COLUMN `" . self::DEAL_SUM_FIELD . "` VARCHAR(64) NULL");
+        }
+
+        $attrs = ['type' => 'number', 'title' => self::DEAL_SUM_TITLE, 'unit' => 'руб.', 'is_remove' => 0, 'hide' => 0];
+        $existing = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', self::DEAL_SUM_FIELD)->first();
+        if ($existing) {
+            $db->table('data_rows')->where('id', $existing->id)->update($attrs);
+        } else {
+            $sectionId = (int) ($db->table('field_sections')
+                ->where('page', 'deals')
+                ->where(fn ($q) => $q->whereNull('module')->orWhere('module', ''))
+                ->orderBy('sort')
+                ->value('id') ?: 0);
+            $maxSort = (int) $db->table('data_rows')->where('data_type_id', $typeId)->max('sort');
+            $db->table('data_rows')->insert(array_merge(self::baseRow((int) $typeId, $sectionId), $attrs, [
+                'field' => self::DEAL_SUM_FIELD, 'sort' => $maxSort + 1, 'is_permanent' => 0,
+            ]));
+            $lines[] = 'deals: добавлено поле «' . self::DEAL_SUM_TITLE . '»';
+        }
+
+        $filled = 0;
+        $db->table('deals')
+            ->whereNull('deleted_at')
+            ->where(fn ($q) => $q->whereNull(self::DEAL_SUM_FIELD)->orWhere(self::DEAL_SUM_FIELD, ''))
+            ->whereNotNull('products')
+            ->orderBy('id')
+            ->chunkById(500, function ($deals) use ($db, &$filled) {
+                foreach ($deals as $deal) {
+                    $products = json_decode((string) $deal->products, true);
+                    if (!is_array($products)) {
+                        continue;
+                    }
+                    $total = 0.0;
+                    foreach ($products as $product) {
+                        if (is_array($product)) {
+                            $total += (float) ($product['count'] ?? 0) * (float) ($product['price'] ?? 0);
+                        }
+                    }
+                    if ($total <= 0) {
+                        continue;
+                    }
+                    $db->table('deals')->where('id', $deal->id)->update([
+                        self::DEAL_SUM_FIELD => rtrim(rtrim(number_format($total, 2, '.', ''), '0'), '.'),
+                    ]);
+                    $filled++;
+                }
+            });
+        if ($filled) {
+            $lines[] = "deals: сумма заполнена из состава у {$filled} заказов";
+        }
+
+        try {
+            if ($sb->hasTable('local_cache')) {
+                $db->table('local_cache')->where('url', 'fields/deals')->update(['updated_at' => now()]);
             }
         } catch (\Throwable $e) {
         }

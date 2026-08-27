@@ -74,7 +74,8 @@ class ObjectRelation extends Model
             }
 
             if (!$dryRun) {
-                $target->setProducts($products);
+                $sourceSum = (float) ($source->sum ?? 0);
+                $target->setProducts($products, $sourceSum > 0 ? $source->sum : null);
             }
 
             return true;

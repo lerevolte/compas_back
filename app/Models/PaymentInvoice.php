@@ -49,7 +49,7 @@ class PaymentInvoice extends Model
         return \App\Services\SaleDocumentService::regenerate('payment_invoices', (int) $this->id);
     }
 
-    public function setProducts(array $products)
+    public function setProducts(array $products, $sum = null)
     {
         $this->products = json_encode($products);
         $total = 0.0;
@@ -58,7 +58,9 @@ class PaymentInvoice extends Model
             $price = isset($product['price']) ? (float) $product['price'] : 0;
             $total += $count * $price;
         }
-        if ($total > 0 && !$this->sum) {
+        if ($sum !== null && (float) $sum > 0) {
+            $this->sum = rtrim(rtrim(number_format((float) $sum, 2, '.', ''), '0'), '.');
+        } elseif ($total > 0) {
             $this->sum = rtrim(rtrim(number_format($total, 2, '.', ''), '0'), '.');
         }
         $this->saveQuietly();

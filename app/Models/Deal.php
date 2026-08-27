@@ -41,7 +41,13 @@ class Deal extends Model
         });
 
         static::saved(function ($model) {
-            if (count(array_intersect(array_keys($model->getChanges()), \App\Services\SaleDocumentService::DEAL_FIELDS))) {
+            $changedKeys = array_keys($model->getChanges());
+            if (count(array_intersect($changedKeys, ['products', 'sum']))) {
+                try {
+                    \App\Services\SaleDocumentService::syncFromDeal($model);
+                } catch (\Throwable $e) {
+                }
+            } elseif (count(array_intersect($changedKeys, \App\Services\SaleDocumentService::DEAL_FIELDS))) {
                 try {
                     \App\Services\SaleDocumentService::queueForDeal((int) $model->id);
                 } catch (\Throwable $e) {
@@ -71,15 +77,20 @@ class Deal extends Model
         $this->products = json_encode($products);
         $totalWeight = 0;
         $totalVolume = 0;
+        $totalSum = 0.0;
         foreach ($products as $product) {
             $count = isset($product['count']) ? (float) $product['count'] : 0;
             $w = isset($product['weight']) ? (float) $product['weight'] : 0;
             $v = isset($product['volume']) ? (float) $product['volume'] : 0;
             $totalWeight += $count * $w;
             $totalVolume += $count * $v;
+            $totalSum += $count * (isset($product['price']) ? (float) $product['price'] : 0);
         }
         $this->weight = $totalWeight;
         $this->volume = $totalVolume;
+        if (\Schema::hasColumn('deals', 'sum')) {
+            $this->sum = $totalSum > 0 ? rtrim(rtrim(number_format($totalSum, 2, '.', ''), '0'), '.') : null;
+        }
 
         $objects = History::saveForObject(
             $this->getTable(),

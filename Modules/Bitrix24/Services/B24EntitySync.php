@@ -739,6 +739,9 @@ class B24EntitySync
             $pay = Bitrix24Controller::buildPaymentFields($invoices, $deal['OPPORTUNITY'] ?? 0);
             $model->payment_type = $pay['payment_type'];
             $model->payment = $pay['payment'];
+            if (Schema::hasColumn('deals', 'sum') && isset($deal['OPPORTUNITY']) && (float) $deal['OPPORTUNITY'] > 0) {
+                $model->sum = rtrim(rtrim(number_format((float) $deal['OPPORTUNITY'], 2, '.', ''), '0'), '.');
+            }
 
             if ($isNew) {
                 $model->save();
