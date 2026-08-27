@@ -910,6 +910,13 @@ class InstallSabyModule extends Command
             return;
         }
 
+        $relationTable = $attrs['relation_table'] ?? null;
+        if (($attrs['type'] ?? '') === 'relation' && $relationTable
+            && (!$db->table('data_types')->where('slug', $relationTable)->exists() || !$sb->hasTable($relationTable))) {
+            $this->warn("      сущность {$relationTable} не установлена, поле {$entity}.{$field} пропущено");
+            return;
+        }
+
         if (!$sb->hasColumn($entity, $field)) {
             $db->statement("ALTER TABLE `{$entity}` ADD COLUMN `{$field}` {$columnType} NULL");
         }
