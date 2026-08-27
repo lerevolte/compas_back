@@ -102,7 +102,7 @@ class B24EntitySync
         $result = [];
         $guard = 0;
         while (count($result) < $max && $guard < 1000) {
-            $params['filter'] = ($params['filter'] ?? []) + ['>ID' => $afterId];
+            $params['filter'] = array_merge($params['filter'] ?? [], ['>ID' => $afterId]);
             $params['order'] = ['ID' => 'ASC'];
             $resp = $this->b24($method, $params + ['start' => -1]);
             $batch = $resp['result'] ?? [];
