@@ -35,9 +35,19 @@ class Deal extends Model
                     $model->{$col} = json_encode(array_values($model->{$col}));
                 }
             }
+            if (is_array($model->shipment_company_id)) {
+                $model->shipment_company_id = array_values(array_filter($model->shipment_company_id, 'is_numeric'))[0] ?? null;
+            }
         });
 
         static::saved(function ($model) {
+            if (count(array_intersect(array_keys($model->getChanges()), \App\Services\SaleDocumentService::DEAL_FIELDS))) {
+                try {
+                    \App\Services\SaleDocumentService::queueForDeal((int) $model->id);
+                } catch (\Throwable $e) {
+                }
+            }
+
             $changed = array_intersect(array_keys($model->getChanges()), self::B24_PUSH_FIELDS);
             if (!count($changed) || !$model->b24_id) {
                 return;

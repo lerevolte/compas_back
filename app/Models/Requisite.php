@@ -68,21 +68,21 @@ class Requisite extends Model
         });
 
 
-        // static::deleted(function($model){
-        //     $tenant = tenant('id');
+        static::saved(function($model){
+            if (count(array_intersect(array_keys($model->getChanges()), \App\Services\SaleDocumentService::ORG_FIELDS))) {
+                try {
+                    \App\Services\SaleDocumentService::queueForOrganization();
+                } catch (\Throwable $e) {
+                }
+            }
+        });
 
-        //     if($tenant) {
-        //         tenancy()->central(function () use ($tenant, $model) {
-        //             $crudService = new CrudService;
-        //             $req = \DB::table('requisites')->where('inner_id', $model->id)->first();
-        //             if($req) {
-        //                 $result = $crudService->delete('requisites', [$req->id]);
-        //             }
-        //         });
-        //     }
-        // });
-
-        
+        static::deleted(function($model){
+            try {
+                \App\Services\SaleDocumentService::queueForOrganization();
+            } catch (\Throwable $e) {
+            }
+        });
     }
 
     public function documents()

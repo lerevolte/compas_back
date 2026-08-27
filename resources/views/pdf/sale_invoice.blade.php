@@ -103,6 +103,12 @@
             <td style="width: 18%;"><b>Гл. бухгалтер</b></td>
             <td class="line" style="width: 32%;"></td>
         </tr>
+        <tr>
+            <td></td>
+            <td class="muted center">{{ $org->director ?? '' }}</td>
+            <td></td>
+            <td class="muted center">{{ $org->accountant ?? '' }}</td>
+        </tr>
     </table>
 </body>
 </html>

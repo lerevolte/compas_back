@@ -15,6 +15,8 @@ class ExpenseInvoice extends Model
 
     protected $guarded = ['id'];
 
+    public const REGENERATE_FIELDS = ['name', 'company_id', 'shipment_company_id', 'sum', 'products', 'created_at'];
+
     public static function boot()
     {
         parent::boot();
@@ -25,6 +27,23 @@ class ExpenseInvoice extends Model
                 $model->user_id = $user->id;
             }
         });
+
+        static::saving(function ($model) {
+            if (is_array($model->shipment_company_id)) {
+                $model->shipment_company_id = array_values(array_filter($model->shipment_company_id, 'is_numeric'))[0] ?? null;
+            }
+        });
+
+        static::saved(function ($model) {
+            if ($model->wasRecentlyCreated || count(array_intersect(array_keys($model->getChanges()), self::REGENERATE_FIELDS))) {
+                $model->regeneratePdf();
+            }
+        });
+    }
+
+    public function regeneratePdf(): bool
+    {
+        return \App\Services\SaleDocumentService::regenerate('expense_invoices', (int) $this->id);
     }
 
     public function setProducts(array $products)
@@ -40,5 +59,6 @@ class ExpenseInvoice extends Model
             $this->sum = rtrim(rtrim(number_format($total, 2, '.', ''), '0'), '.');
         }
         $this->saveQuietly();
+        $this->regeneratePdf();
     }
 }

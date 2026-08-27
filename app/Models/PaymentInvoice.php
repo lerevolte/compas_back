@@ -15,7 +15,7 @@ class PaymentInvoice extends Model
 
     protected $guarded = ['id'];
 
-    public const REGENERATE_FIELDS = ['name', 'number', 'company_id', 'sum', 'products', 'bank_requisite_id', 'created_at'];
+    public const REGENERATE_FIELDS = ['name', 'number', 'company_id', 'shipment_company_id', 'sum', 'products', 'bank_requisite_id', 'created_at'];
 
     public static function boot()
     {
@@ -31,6 +31,9 @@ class PaymentInvoice extends Model
         static::saving(function ($model) {
             if (is_array($model->bank_requisite_id)) {
                 $model->bank_requisite_id = json_encode(array_values(array_filter($model->bank_requisite_id, 'is_numeric')));
+            }
+            if (is_array($model->shipment_company_id)) {
+                $model->shipment_company_id = array_values(array_filter($model->shipment_company_id, 'is_numeric'))[0] ?? null;
             }
         });
 

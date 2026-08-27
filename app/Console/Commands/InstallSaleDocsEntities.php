@@ -54,10 +54,14 @@ class InstallSaleDocsEntities extends Command
     public const BANK_FIELD_TITLE = 'Банковские реквизиты';
     public const BANK_FIELD_ENTITIES = ['payment_invoices', 'deals'];
 
+    public const SHIPMENT_FIELD = 'shipment_company_id';
+    public const SHIPMENT_FIELD_TITLE = 'Компания отгрузки';
+    public const SHIPMENT_FIELD_ENTITIES = ['deals', 'payment_invoices', 'expense_invoices', 'logistic_tasks'];
+
     protected $signature = 'entity:install-sale-docs
         {target=avixo : seeds | all-tenants | <tenant_id>}';
 
-    protected $description = 'Установить сущности «Счета на оплату», «Расходные накладные» и «Возвраты», переименовать deals в «Заказы покупателей», добавить вкладку «Печать документов» и поле «Банковские реквизиты» у счетов и заказов';
+    protected $description = 'Установить сущности «Счета на оплату», «Расходные накладные» и «Возвраты», переименовать deals в «Заказы покупателей», добавить вкладку «Печать документов», поле «Банковские реквизиты» у счетов и заказов и поле «Компания отгрузки» у заказов/счетов/накладных';
 
     public function handle(): int
     {
@@ -107,6 +111,10 @@ class InstallSaleDocsEntities extends Command
         $this->ensurePrintTab($db, $label);
 
         foreach (self::ensureBankRequisiteFields($db) as $line) {
+            $this->line("    [{$label}] {$line}");
+        }
+
+        foreach (self::ensureShipmentCompanyFields($db) as $line) {
             $this->line("    [{$label}] {$line}");
         }
 
@@ -368,6 +376,67 @@ SQL);
             if ($sb->hasTable('local_cache')) {
                 $db->table('local_cache')
                     ->whereIn('url', array_map(fn ($s) => 'fields/' . $s, self::BANK_FIELD_ENTITIES))
+                    ->update(['updated_at' => now()]);
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return $lines;
+    }
+
+    public static function ensureShipmentCompanyFields($db): array
+    {
+        $sb = $db->getSchemaBuilder();
+        $lines = [];
+
+        if (!$db->table('data_types')->where('slug', 'companies')->exists() || !$sb->hasTable('companies')) {
+            $lines[] = 'сущность companies не найдена — поле «' . self::SHIPMENT_FIELD_TITLE . '» не добавлено';
+            return $lines;
+        }
+
+        foreach (self::SHIPMENT_FIELD_ENTITIES as $slug) {
+            $typeId = $db->table('data_types')->where('slug', $slug)->value('id');
+            if (!$typeId || !$sb->hasTable($slug)) {
+                continue;
+            }
+            if (!$sb->hasColumn($slug, self::SHIPMENT_FIELD)) {
+                $db->statement("ALTER TABLE `{$slug}` ADD COLUMN `" . self::SHIPMENT_FIELD . "` TEXT NULL");
+            }
+
+            $attrs = [
+                'type' => 'relation', 'title' => self::SHIPMENT_FIELD_TITLE, 'details' => '{"table":"companies"}',
+                'is_link' => 1, 'is_plural' => 0, 'relation_table' => 'companies', 'is_remove' => 0, 'hide' => 0,
+            ];
+            $existing = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', self::SHIPMENT_FIELD)->first();
+            if ($existing) {
+                $db->table('data_rows')->where('id', $existing->id)->update(
+                    array_intersect_key($attrs, array_flip(['type', 'title', 'details', 'relation_table', 'is_plural', 'is_remove', 'hide']))
+                );
+                continue;
+            }
+
+            $company = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', 'company_id')->first();
+            $sectionId = (int) ($company->section_id ?? 0);
+            if (!$sectionId) {
+                $sectionId = (int) ($db->table('field_sections')
+                    ->where('page', $slug)
+                    ->where(fn ($q) => $q->whereNull('module')->orWhere('module', ''))
+                    ->orderBy('sort')
+                    ->value('id') ?: 0);
+            }
+            $sort = $company
+                ? (int) $company->sort + 1
+                : (int) $db->table('data_rows')->where('data_type_id', $typeId)->max('sort') + 1;
+            $db->table('data_rows')->insert(array_merge(self::baseRow((int) $typeId, $sectionId), $attrs, [
+                'field' => self::SHIPMENT_FIELD, 'sort' => $sort, 'is_permanent' => 0,
+            ]));
+            $lines[] = "{$slug}: добавлено поле «" . self::SHIPMENT_FIELD_TITLE . '»';
+        }
+
+        try {
+            if ($sb->hasTable('local_cache')) {
+                $db->table('local_cache')
+                    ->whereIn('url', array_map(fn ($s) => 'fields/' . $s, self::SHIPMENT_FIELD_ENTITIES))
                     ->update(['updated_at' => now()]);
             }
         } catch (\Throwable $e) {

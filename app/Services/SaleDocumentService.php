@@ -2,9 +2,11 @@
 
 namespace App\Services;
 
+use App\Jobs\RegenerateSaleDocuments;
 use App\Models\BankRequisite;
 use App\Models\Company;
 use App\Models\File;
+use App\Models\ObjectRelation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -26,6 +28,16 @@ class SaleDocumentService
         ],
     ];
 
+    public const DEAL_FIELDS = ['name', 'company_id', 'contact_id', 'products', 'shipment_company_id', 'bank_requisite_id'];
+
+    public const COMPANY_FIELDS = [
+        'name', 'full_name', 'inn', 'kpp', 'ogrn', 'okpo', 'oktmo', 'director', 'accountant', 'address', 'fact_address',
+    ];
+
+    public const BANK_FIELDS = ['bank_name', 'bic', 'account', 'corr_account', 'is_default', 'company_id', 'deleted_at'];
+
+    public const ORG_FIELDS = ['name', 'inn', 'kpp', 'address', 'fact_address', 'account', 'choosed_at', 'deleted_at'];
+
     private static bool $busy = false;
 
     public static function generateFor(string $targetSlug, $targetId, string $sourceSlug, $sourceId): bool
@@ -43,16 +55,185 @@ class SaleDocumentService
             return false;
         }
 
-        $dealId = null;
-        if (\App\Models\ObjectRelation::ready()) {
-            $dealId = \App\Models\ObjectRelation::where('source_slug', 'deals')
-                ->where('target_slug', $slug)
-                ->where('target_id', $id)
-                ->orderBy('id')
-                ->value('source_id');
+        return self::run($slug, $id, self::dealIdFor($slug, $id));
+    }
+
+    public static function queue(array $docs): void
+    {
+        $tenant = tenant('id');
+        if (!$tenant || !count($docs)) {
+            return;
+        }
+        $unique = [];
+        foreach ($docs as $doc) {
+            if (!isset($doc[0], $doc[1]) || !isset(self::TARGETS[$doc[0]])) {
+                continue;
+            }
+            $unique[$doc[0] . '#' . (int) $doc[1]] = [(string) $doc[0], (int) $doc[1]];
+        }
+        if (!count($unique)) {
+            return;
+        }
+        try {
+            RegenerateSaleDocuments::dispatch((string) $tenant, array_values($unique));
+        } catch (\Throwable $e) {
+            Log::warning('sale-doc: не удалось поставить регенерацию в очередь', ['error' => $e->getMessage()]);
+        }
+    }
+
+    public static function queueForDeal(int $dealId): void
+    {
+        self::queue(self::docsForDeals([$dealId]));
+    }
+
+    public static function queueForCompany(int $companyId): void
+    {
+        self::queue(self::docsForCompany($companyId));
+    }
+
+    public static function queueForBank(BankRequisite $bank): void
+    {
+        $docs = self::docsWhere(fn ($row) => in_array((int) $bank->id, self::ids($row->bank_requisite_id ?? null), true));
+        $companyId = (int) $bank->company_id;
+        if ($companyId) {
+            $docs = array_merge($docs, self::docsForCompany($companyId));
+            if (self::isOurOrganization($companyId)) {
+                $docs = array_merge($docs, self::docsWithoutSupplier());
+            }
+        }
+        self::queue($docs);
+    }
+
+    public static function queueForOrganization(): void
+    {
+        self::queue(self::docsWithoutSupplier());
+    }
+
+    public static function docsForDeals(array $dealIds): array
+    {
+        $dealIds = array_values(array_filter(array_map('intval', $dealIds)));
+        if (!count($dealIds) || !ObjectRelation::ready()) {
+            return [];
         }
 
-        return self::run($slug, $id, $dealId ? (int) $dealId : null);
+        return ObjectRelation::where('source_slug', 'deals')
+            ->whereIn('source_id', $dealIds)
+            ->whereIn('target_slug', array_keys(self::TARGETS))
+            ->get(['target_slug', 'target_id'])
+            ->map(fn ($r) => [(string) $r->target_slug, (int) $r->target_id])
+            ->all();
+    }
+
+    public static function docsForCompany(int $companyId): array
+    {
+        if (!$companyId) {
+            return [];
+        }
+
+        $docs = self::docsWhere(fn ($row) =>
+            in_array($companyId, self::ids($row->company_id ?? null), true)
+            || in_array($companyId, self::ids($row->shipment_company_id ?? null), true)
+        );
+
+        if (Schema::hasTable('deals')) {
+            $query = DB::table('deals')->whereNull('deleted_at');
+            $query->where(function ($q) use ($companyId) {
+                if (Schema::hasColumn('deals', 'company_id')) {
+                    self::whereListHas($q, 'company_id', $companyId, true);
+                }
+                if (Schema::hasColumn('deals', 'shipment_company_id')) {
+                    self::whereListHas($q, 'shipment_company_id', $companyId, true);
+                }
+                if (!Schema::hasColumn('deals', 'company_id') && !Schema::hasColumn('deals', 'shipment_company_id')) {
+                    $q->whereRaw('1 = 0');
+                }
+            });
+            $docs = array_merge($docs, self::docsForDeals($query->pluck('id')->all()));
+        }
+
+        return $docs;
+    }
+
+    public static function docsWithoutSupplier(): array
+    {
+        $docs = self::docsWhere(fn ($row) => !self::firstIdStatic($row->shipment_company_id ?? null));
+        if (!count($docs) || !ObjectRelation::ready() || !Schema::hasTable('deals') || !Schema::hasColumn('deals', 'shipment_company_id')) {
+            return $docs;
+        }
+
+        $withSupplier = DB::table('deals')
+            ->whereNotNull('shipment_company_id')
+            ->where('shipment_company_id', '!=', '')
+            ->pluck('id')
+            ->map(fn ($v) => (int) $v)
+            ->all();
+        if (!count($withSupplier)) {
+            return $docs;
+        }
+
+        $covered = [];
+        foreach (self::docsForDeals($withSupplier) as $doc) {
+            $covered[$doc[0] . '#' . $doc[1]] = true;
+        }
+
+        return array_values(array_filter($docs, fn ($doc) => !isset($covered[$doc[0] . '#' . $doc[1]])));
+    }
+
+    private static function docsWhere(callable $filter): array
+    {
+        $out = [];
+        foreach (self::TARGETS as $slug => $meta) {
+            if (!Schema::hasTable($slug)) {
+                continue;
+            }
+            $columns = ['id'];
+            foreach (['company_id', 'shipment_company_id', 'bank_requisite_id'] as $column) {
+                if (Schema::hasColumn($slug, $column)) {
+                    $columns[] = $column;
+                }
+            }
+            $rows = DB::table($slug)->whereNull('deleted_at')->get($columns);
+            foreach ($rows as $row) {
+                if ($filter($row)) {
+                    $out[] = [$slug, (int) $row->id];
+                }
+            }
+        }
+        return $out;
+    }
+
+    private static function whereListHas($query, string $column, int $id, bool $or = false): void
+    {
+        $sql = "CONCAT(',', REPLACE(REPLACE(REPLACE(REPLACE(IFNULL(`{$column}`, ''), '[', ''), ']', ''), '\"', ''), ' ', ''), ',') LIKE ?";
+        $or ? $query->orWhereRaw($sql, ["%,{$id},%"]) : $query->whereRaw($sql, ["%,{$id},%"]);
+    }
+
+    private static function dealIdFor(string $slug, int $id): ?int
+    {
+        if (!ObjectRelation::ready()) {
+            return null;
+        }
+        $dealId = ObjectRelation::where('source_slug', 'deals')
+            ->where('target_slug', $slug)
+            ->where('target_id', $id)
+            ->orderBy('id')
+            ->value('source_id');
+
+        return $dealId ? (int) $dealId : null;
+    }
+
+    private static function isOurOrganization(int $companyId): bool
+    {
+        if (!Schema::hasTable('requisites') || !Schema::hasColumn('companies', 'inn')) {
+            return false;
+        }
+        $companyInn = preg_replace('/\D/', '', (string) DB::table('companies')->where('id', $companyId)->value('inn'));
+        if ($companyInn === '') {
+            return false;
+        }
+        $orgInn = preg_replace('/\D/', '', (string) DB::table('requisites')->whereNull('deleted_at')->value('inn'));
+
+        return $orgInn !== '' && $orgInn === $companyInn;
     }
 
     private static function run(string $slug, int $id, ?int $dealId): bool
@@ -89,8 +270,19 @@ class SaleDocumentService
         $companyId = $this->firstId($doc->company_id) ?: ($deal ? $this->firstId($deal->company_id ?? null) : null);
         $company = $companyId ? Company::find($companyId) : null;
 
-        $org = $this->ourOrganization();
-        $bank = $this->documentBank($doc, $org) ?: ($org ? $this->orgBank($org) : null);
+        $supplierId = $this->firstId($doc->shipment_company_id ?? null) ?: ($deal ? $this->firstId($deal->shipment_company_id ?? null) : null);
+        $supplier = $supplierId ? Company::find($supplierId) : null;
+
+        if ($supplier) {
+            $org = $this->companyAsOrganization($supplier);
+            $bank = $this->documentBank($doc, fn (BankRequisite $b) => (int) $b->company_id === (int) $supplier->id)
+                ?: $supplier->defaultBankRequisite();
+        } else {
+            $org = $this->ourOrganization();
+            $orgInn = preg_replace('/\D/', '', (string) ($org->inn ?? ''));
+            $bank = $this->documentBank($doc, fn (BankRequisite $b) => $orgInn === '' || $this->companyInn($b->company_id) === $orgInn)
+                ?: ($org ? $this->orgBank($org) : null);
+        }
 
         $products = $this->decodeProducts($doc->products);
         if (!count($products) && $deal) {
@@ -151,7 +343,7 @@ class SaleDocumentService
             'id' => $file->id,
             'name' => $meta['title'] . ' № ' . $number . ' от ' . $date . '.pdf',
             'url' => '/files/pdfSmall.svg',
-            'file' => $url,
+            'file' => $url . '?v=' . time(),
             'extension' => 'pdf',
             'sort' => 0,
             'ext' => 'pdf',
@@ -178,6 +370,16 @@ class SaleDocumentService
         }
         $doc->saveQuietly();
 
+        try {
+            $settings = app('settings');
+            $fieldIds = collect($settings[$slug]['fields'] ?? [])
+                ->whereIn('field', ['photo', 'name', 'sum', 'products'])
+                ->pluck('id')
+                ->all();
+            \App\Events\ObjectUpdated::dispatch('ObjectUpdated', $doc->getData($fieldIds, $settings));
+        } catch (\Throwable $e) {
+        }
+
         return true;
     }
 
@@ -201,6 +403,20 @@ class SaleDocumentService
         return $out;
     }
 
+    private function companyAsOrganization(Company $company): object
+    {
+        return (object) [
+            'name' => $this->plain($company->full_name ?? '') ?: $this->plainName($company->name ?? ''),
+            'inn' => (string) ($company->inn ?? ''),
+            'kpp' => (string) ($company->kpp ?? ''),
+            'address' => (string) ($company->address ?? ''),
+            'fact_address' => (string) ($company->fact_address ?? ''),
+            'director' => (string) ($company->director ?? ''),
+            'accountant' => (string) ($company->accountant ?? ''),
+            'account' => null,
+        ];
+    }
+
     private function ourOrganization(): ?object
     {
         if (!Schema::hasTable('requisites')) {
@@ -215,7 +431,7 @@ class SaleDocumentService
             ->first();
     }
 
-    private function documentBank($doc, ?object $org): ?BankRequisite
+    private function documentBank($doc, callable $accepts): ?BankRequisite
     {
         if (!Schema::hasTable('bank_requisites')) {
             return null;
@@ -231,14 +447,16 @@ class SaleDocumentService
             return null;
         }
 
-        $orgInn = preg_replace('/\D/', '', (string) ($org->inn ?? ''));
-        if ($orgInn === '' || !Schema::hasColumn('companies', 'inn')) {
-            return $bank;
+        return $accepts($bank) ? $bank : null;
+    }
+
+    private function companyInn($companyId): string
+    {
+        if (!$companyId || !Schema::hasColumn('companies', 'inn')) {
+            return '';
         }
 
-        $companyInn = preg_replace('/\D/', '', (string) DB::table('companies')->where('id', $bank->company_id)->value('inn'));
-
-        return $companyInn === $orgInn ? $bank : null;
+        return preg_replace('/\D/', '', (string) DB::table('companies')->where('id', $companyId)->value('inn'));
     }
 
     private function orgBank(object $org): ?BankRequisite
@@ -262,18 +480,39 @@ class SaleDocumentService
 
     private function firstId($value): ?int
     {
+        return self::firstIdStatic($value);
+    }
+
+    private static function firstIdStatic($value): ?int
+    {
+        $ids = self::ids($value);
+
+        return count($ids) ? $ids[0] : null;
+    }
+
+    private static function ids($value): array
+    {
         if (is_numeric($value)) {
-            return (int) $value;
+            return (int) $value ? [(int) $value] : [];
         }
-        $decoded = json_decode((string) $value, true);
-        if (is_array($decoded)) {
-            foreach ($decoded as $item) {
-                if (is_numeric($item)) {
-                    return (int) $item;
-                }
+        if (is_array($value)) {
+            $decoded = $value;
+        } else {
+            $decoded = json_decode((string) $value, true);
+        }
+        if (!is_array($decoded)) {
+            return [];
+        }
+        $out = [];
+        foreach ($decoded as $item) {
+            if (is_array($item)) {
+                $item = $item['id'] ?? ($item['value'] ?? null);
+            }
+            if (is_numeric($item) && (int) $item) {
+                $out[] = (int) $item;
             }
         }
-        return null;
+        return $out;
     }
 
     private function decodeProducts($value): array

@@ -16,7 +16,6 @@ class Company extends Model
 {
     use FieldValue, ModelActions, ColorGenerator, SoftDeletes;
 
-    //protected $fillable = ['name','carrier_id','phone'];
     protected $guarded = ['id'];
     
     public static function boot()
@@ -31,6 +30,13 @@ class Company extends Model
 
         static::saved(function($model)
         {
+            if (count(array_intersect(array_keys($model->getChanges()), \App\Services\SaleDocumentService::COMPANY_FIELDS))) {
+                try {
+                    \App\Services\SaleDocumentService::queueForCompany((int) $model->id);
+                } catch (\Throwable $e) {
+                }
+            }
+
             if (!isset($model->getChanges()['name']) || !$model->b24_id) {
                 return;
             }
@@ -43,73 +49,6 @@ class Company extends Model
             } catch (\Throwable $e) {
                 \Log::channel('bitrix24')->warning('company push failed', ['company_id' => $model->id, 'error' => $e->getMessage()]);
             }
-        });
-
-        static::updating(function($model)
-        {   
-            // if($model->getOriginal('car_id') != $model->car_id) {
-            //     if($model->getOriginal('car_id')) {
-            //         if(is_array($model->getOriginal('car_id')))
-            //             $car_ids = $model->getOriginal('car_id');
-            //         else
-            //             $car_ids = json_decode($model->getOriginal('car_id'), true);
-
-                    
-            //         if(count($car_ids)) {
-            //             \DB::table('cars')->whereIntegerInRaw('id',$car_ids)->update(['choosed_at' => null]);
-            //             $new_car_ids = array();
-            //             if($model->car_id) {
-            //                 if(is_array($model->car_id))
-            //                     $new_car_ids = $model->car_id;
-            //                 else
-            //                     $new_car_ids = json_decode($model->car_id, true);
-            //             }
-            //             foreach($car_ids as $car) {
-            //                 if(!in_array($car, $new_car_ids))
-            //                     \App\Models\History::saveForObject('cars', array(['id' => $car, 'company_id' => null]));
-            //             }
-            //         }
-            //         $cars = Car::whereIntegerInRaw('id', $car_ids)->get();
-            //         if(count($cars)) {
-            //             foreach ($cars as $car) {
-            //                 $car->saveRelations('company_id', null);
-            //                 $car->company_id = null;
-            //                 $car->saveQuietly();
-            //             }
-            //         }
-            //     }
-
-            //     if($model->car_id) {
-            //         if(is_array($model->car_id))
-            //             $car_ids = $model->car_id;
-            //         else
-            //             $car_ids = json_decode($model->car_id, true);
-
-            //         if(count($car_ids)) {
-            //             $old_car_ids = array();
-            //             if($model->getOriginal('car_id')) {
-            //                 if(is_array($model->getOriginal('car_id')))
-            //                     $old_car_ids = $model->getOriginal('car_id');
-            //                 else
-            //                     $old_car_ids = json_decode($model->getOriginal('car_id'), true);
-            //             }
-            //             foreach($car_ids as $car) {
-            //                 if(!in_array($car, $old_car_ids))
-            //                     \App\Models\History::saveForObject('cars', array(['id' => $car, 'company_id' => $model->id]));
-            //             }
-            //         }
-            //         if(is_array($car_ids)) {
-            //             $cars = Car::whereIntegerInRaw('id', $car_ids)->get();
-            //             if(count($cars)) {
-            //                 foreach ($cars as $car) {
-            //                     $car->saveRelations('company_id', $model->id);
-            //                     $car->company_id = $model->id;
-            //                     $car->saveQuietly();
-            //                 }
-            //             }
-            //         }
-            //     }
-            // }
         });
     }
 

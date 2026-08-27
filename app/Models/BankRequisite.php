@@ -28,10 +28,20 @@ class BankRequisite extends Model
 
         static::saved(function ($model) {
             $model->syncDefault();
+            if ($model->wasRecentlyCreated || count(array_intersect(array_keys($model->getChanges()), \App\Services\SaleDocumentService::BANK_FIELDS))) {
+                try {
+                    \App\Services\SaleDocumentService::queueForBank($model);
+                } catch (\Throwable $e) {
+                }
+            }
         });
 
         static::deleted(function ($model) {
             $model->promoteSibling();
+            try {
+                \App\Services\SaleDocumentService::queueForBank($model);
+            } catch (\Throwable $e) {
+            }
         });
     }
 

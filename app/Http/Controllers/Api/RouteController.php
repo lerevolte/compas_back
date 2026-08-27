@@ -733,9 +733,6 @@ class RouteController extends Controller
             return response()->json(['code' => 404, 'error' => 'Маршрут не найден или удалён'], 404);
         }
         $old_tasks = $route->tasks;
-        // Пустой ids = из маршрута убрали последнюю задачу. В этом случае
-        // implode даёт "FIELD(id, )" — невалидный SQL, поэтому new_tasks
-        // оставляем пустой коллекцией: ниже все old_tasks отвяжутся (route_id=null).
         $new_tasks = collect();
         if (count($request->ids)) {
             $new_tasks = Task::whereIntegerInRaw('id', $request->ids)->orderByRaw(\DB::raw("FIELD(id, ".implode(",",$request->ids).")"))->get();
@@ -750,6 +747,7 @@ class RouteController extends Controller
         $routeEmployeeIds = $route->employeeIds();
         $detachedTaskIds = [];
         $attachedTaskIds = [];
+        $sourceRoutes = [];
 
         foreach($old_tasks as $task) {
             if(!in_array($task->id, $request->ids)) {
@@ -775,6 +773,9 @@ class RouteController extends Controller
                 $task->saveQuietly();
             } else {
                 $oldEmployeeIds = $this->taskEmployeeIds($task);
+                if ($task->route_id) {
+                    $sourceRoutes[(int) $task->route_id][] = (int) $task->id;
+                }
                 $task->route_id = $id;
                 $task->sort = $i;
                 $task->save();
@@ -789,7 +790,6 @@ class RouteController extends Controller
         $this->writeTaskRouteHistory($attachedTaskIds, $route, true);
 
         $settings = get_settings();
-        $tenant = tenant('id');
 
         $entity = \DB::table('data_types')->where('slug', 'logistic_tasks')->first();
         if(!$entity || !$entity->enable) {
@@ -803,15 +803,30 @@ class RouteController extends Controller
         $entity_class = $entity->model_name;
         $model_fields = $entity_class::getFields();
 
-        $field_colors = array();
-        $perms = array(
-            'read' => array(),
-            'write' => array(),
-        );
-        $field_perms = isset($settings['logistic_tasks']['perms']) ? $settings['logistic_tasks']['perms'] : array();
+        $route = Route::find($id);
+        $this->recalculateRouteStats($route, $new_tasks);
+        if ($currentTaskIds === $requestedTaskIds) {
+            $route->timestamps = false;
+        }
+        $route->save();
+        $route->timestamps = true;
 
+        foreach ($sourceRoutes as $sourceRouteId => $movedTaskIds) {
+            $sourceRoute = Route::find($sourceRouteId);
+            if (!$sourceRoute) {
+                continue;
+            }
+            $sourceTasks = $sourceRoute->tasks()->get();
+            $sourceTaskIds = $sourceTasks->pluck('id')->map(fn ($v) => (int) $v)->values()->toArray();
+            $this->writeRouteTasksHistory($sourceRoute, array_values(array_unique(array_merge($sourceTaskIds, $movedTaskIds))), $sourceTaskIds);
+            $this->recalculateRouteStats($sourceRoute, $sourceTasks);
+            $sourceRoute->save();
+        }
+
+        $this->fixTaskStatuses($new_tasks);
+
+        $field_perms = isset($settings['logistic_tasks']['perms']) ? $settings['logistic_tasks']['perms'] : array();
         $objects = array();
-        $field_values = array();
 
         foreach ($new_tasks as $item) {
             $data = array(
@@ -843,11 +858,11 @@ class RouteController extends Controller
                     };
                 }
             }
-            
+
             $objects[] = $data;
         }
 
-        $res = array(
+        return response()->json(array(
             'count' => count($new_tasks),
             'current_page' => 1,
             'last_page' => 1,
@@ -856,16 +871,16 @@ class RouteController extends Controller
             'from' => 1,
             'to' => count($new_tasks),
             'data' => $objects
-        );
+        ));
+    }
 
-        // Recalculate route statistics
-        $route = Route::find($id);
-
-        // Number of tasks
-        $route->number_tasks = count($new_tasks);
+    private function recalculateRouteStats(Route $route, $tasks): void
+    {
+        $tasks = collect($tasks)->values();
+        $route->number_tasks = count($tasks);
 
         if (empty($route->loading_time)) {
-            $start = $this->parseTimeWindowStart(optional($new_tasks->first())->time);
+            $start = $this->parseTimeWindowStart(optional($tasks->first())->time);
             if ($start) {
                 $route->loading_time = $start;
             }
@@ -873,17 +888,17 @@ class RouteController extends Controller
 
         $route->weight = $route->tasks()->sum('weight');
 
-        // Mileage and time — calculate via OSRM if tasks have addresses
         $addresses = [];
         $totalServiceTime = 0;
-        foreach ($new_tasks as $task) {
+        foreach ($tasks as $task) {
             $address = json_decode($task->address, true);
             if ($address && isset($address['coords']) && count($address['coords']) == 2) {
                 $addresses[] = $address['coords'][1] . ',' . $address['coords'][0];
             }
-            $totalServiceTime += (int) ($task->service_time ?? 0); // service_time in minutes
+            $totalServiceTime += (int) ($task->service_time ?? 0);
         }
 
+        $osrm = null;
         if (count($addresses) >= 2) {
             $coordsStr = implode(';', $addresses);
             try {
@@ -893,14 +908,17 @@ class RouteController extends Controller
                 curl_setopt($ch, CURLOPT_TIMEOUT, 10);
                 $data = curl_exec($ch);
                 curl_close($ch);
-                
+
                 $osrm = json_decode($data, true);
-                if ($osrm && $osrm['code'] === 'Ok' && isset($osrm['routes'][0])) {
+                if ($osrm && ($osrm['code'] ?? null) === 'Ok' && isset($osrm['routes'][0])) {
                     $route->mileage = (int) round($osrm['routes'][0]['distance'] / 1000);
-                    $route->time = round($osrm['routes'][0]['duration'] * self::TRAFFIC_COEFFICIENT / 60) + $totalServiceTime; // driving (с поправкой на пробки) + service
+                    $route->time = round($osrm['routes'][0]['duration'] * self::TRAFFIC_COEFFICIENT / 60) + $totalServiceTime;
+                } else {
+                    $osrm = null;
+                    $route->time = $totalServiceTime;
                 }
             } catch (\Exception $e) {
-                // OSRM unavailable — at least save service time
+                $osrm = null;
                 $route->time = $totalServiceTime;
             }
         } else {
@@ -908,12 +926,12 @@ class RouteController extends Controller
             $route->time = $totalServiceTime;
         }
 
-        if (count($addresses) >= 2 && isset($osrm) && $osrm && $osrm['code'] === 'Ok') {
+        if ($osrm) {
             $legs = $osrm['routes'][0]['legs'] ?? [];
             $loadingTime = $route->loading_time ?? '07:00';
             $currentTime = \Carbon\Carbon::createFromFormat('H:i', $loadingTime);
-            
-            foreach ($new_tasks as $index => $task) {
+
+            foreach ($tasks as $index => $task) {
                 if ($index > 0 && isset($legs[$index - 1])) {
                     $travelMinutes = round($legs[$index - 1]['duration'] * self::TRAFFIC_COEFFICIENT / 60);
                     $currentTime->addMinutes($travelMinutes);
@@ -921,50 +939,32 @@ class RouteController extends Controller
                 $task->plan_time = $currentTime->format('H:i');
                 $task->saveQuietly();
 
-                // $res['data'] собран ВЫШE (до пересчёта) со старым plan_time,
-                // поэтому патчим его свежим значением — иначе фронт показывает
-                // прежнее время прибытия и правка маршрута «ничего не меняет» (8508).
-                foreach ($res['data'] as &$row) {
-                    if (($row['id'] ?? null) == $task->id) {
-                        $row['plan_time'] = $task->plan_time;
-                        break;
-                    }
-                }
-                unset($row);
-
-                $serviceTime = (int) ($task->service_time ?? 0);
-                $currentTime->addMinutes($serviceTime);
+                $currentTime->addMinutes((int) ($task->service_time ?? 0));
             }
         }
+    }
 
-        // Fix tasks with null or deleted status — set default status
+    private function fixTaskStatuses($tasks): void
+    {
         $statusField = collect(get_settings()['logistic_tasks']['fields'])->where('field', 'point_status')->first();
-        if ($statusField) {
-            $validStatuses = \DB::table('field_values')
-                ->where('field_id', $statusField->id)
-                ->orderBy('sort')
-                ->pluck('id')
-                ->toArray();
-            
-            if (count($validStatuses)) {
-                $defaultStatus = $validStatuses[0];
-                
-                foreach ($new_tasks as $task) {
-                    if (!$task->point_status || !in_array($task->point_status, $validStatuses)) {
-                        $task->point_status = $defaultStatus;
-                        $task->saveQuietly();
-                    }
-                }
+        if (!$statusField) {
+            return;
+        }
+        $validStatuses = \DB::table('field_values')
+            ->where('field_id', $statusField->id)
+            ->orderBy('sort')
+            ->pluck('id')
+            ->toArray();
+        if (!count($validStatuses)) {
+            return;
+        }
+        $defaultStatus = $validStatuses[0];
+        foreach ($tasks as $task) {
+            if (!$task->point_status || !in_array($task->point_status, $validStatuses)) {
+                $task->point_status = $defaultStatus;
+                $task->saveQuietly();
             }
         }
-
-        if ($currentTaskIds === $requestedTaskIds) {
-            $route->timestamps = false;
-        }
-        $route->save();
-        $route->timestamps = true;
-
-        return response()->json($res);
     }
 
     public function task_filter($id, Request $request)
