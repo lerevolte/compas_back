@@ -445,6 +445,8 @@ Route::middleware([
         Route::get('logistic_tasks/{id}/saby-waybills/route-tasks', [App\Http\Controllers\Api\SabyWaybillController::class, 'routeTasks'])->name('saby.waybills.route_tasks');
         Route::post('saby-waybills/{id}/refresh', [App\Http\Controllers\Api\SabyWaybillController::class, 'refresh'])->name('saby.waybills.refresh');
         Route::delete('saby-waybills/{id}', [App\Http\Controllers\Api\SabyWaybillController::class, 'destroy'])->name('saby.waybills.destroy');
+        Route::get('saby/settings', [App\Http\Controllers\Api\SabyConfigController::class, 'show'])->name('saby.settings');
+        Route::put('saby/settings', [App\Http\Controllers\Api\SabyConfigController::class, 'update'])->name('saby.settings.update');
         // Настройки полей вкладки «Маршрут списком» (общие на портал).
         Route::get('route-tasks-view/fields', [App\Http\Controllers\Api\RouteController::class, 'tasks_view_fields'])->name('routes.tasks_view_fields');
         Route::put('route-tasks-view/fields', [App\Http\Controllers\Api\RouteController::class, 'save_tasks_view_fields'])->name('routes.save_tasks_view_fields');

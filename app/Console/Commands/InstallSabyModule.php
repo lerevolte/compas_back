@@ -390,7 +390,7 @@ class InstallSabyModule extends Command
         'routes' => ['company_id', 'car_id'],
         'companies' => ['name', 'inn', 'kpp', 'address'],
         'employees' => ['name', 'phone', 'inn', 'snils', 'driver_license'],
-        'cars' => ['name', 'number', 'ownership_type', 'vehicle_type', 'trailer_number', 'osago_mark', 'osago_model', 'weight_max', 'volume_max'],
+        'cars' => ['name', 'brand', 'car_model', 'number', 'ownership_type', 'vehicle_type', 'trailer_number', 'osago_mark', 'osago_model', 'weight_max', 'volume_max'],
         'products' => ['name', 'packing_method', 'tare_type', 'weight', 'volume'],
         'contacts' => ['name', 'phones', 'inn'],
         'addresses' => ['company_id', 'contact_id', 'address', 'weight'],
@@ -523,6 +523,16 @@ class InstallSabyModule extends Command
             'type' => 'text',
             'title' => 'Юридический адрес',
         ], 'text');
+
+        $this->addField($db, 'cars', 'brand', [
+            'type' => 'text',
+            'title' => 'Марка ТС',
+        ], 'varchar(191)');
+
+        $this->addField($db, 'cars', 'car_model', [
+            'type' => 'text',
+            'title' => 'Модель ТС',
+        ], 'varchar(191)');
 
         $this->addField($db, 'cars', 'number', [
             'type' => 'text',

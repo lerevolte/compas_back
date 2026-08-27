@@ -337,6 +337,20 @@ class SaleDocumentService
         $buyer = $dealId ? $this->dealContacts($dealId) : '';
         $dealName = $deal ? $this->plainName($deal->name ?? '') : '';
 
+        $vatRate = $supplier ? $this->vatRate($supplier->vat ?? null) : null;
+        $vatTotal = 0.0;
+        foreach ($products as $k => $product) {
+            $rate = isset($product['tax']) && is_numeric($product['tax']) ? (float) $product['tax'] : $vatRate;
+            $products[$k]['tax_label'] = $rate === null ? 'Без НДС' : rtrim(rtrim(number_format($rate, 2, '.', ''), '0'), '.');
+            $products[$k]['unit'] = trim((string) ($product['unit'] ?? ($product['measure'] ?? 'шт')));
+            if ($rate !== null && $rate > 0) {
+                $vatTotal += (float) $products[$k]['total'] * $rate / (100 + $rate);
+            }
+        }
+        if (!count($products) && $vatRate !== null && $vatRate > 0) {
+            $vatTotal = $total * $vatRate / (100 + $vatRate);
+        }
+
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView($meta['view'], [
             'number' => $number,
             'date' => $date,
@@ -344,11 +358,19 @@ class SaleDocumentService
             'bank' => $bank,
             'company' => $company,
             'companyName' => $company ? ($this->plain($company->full_name ?? '') ?: $this->plainName($company->name ?? '')) : '',
+            'companyPhone' => $company ? $this->companyPhone($company) : '',
             'products' => $products,
             'total' => $total,
+            'vatTotal' => $vatTotal,
+            'vatRate' => $vatRate,
+            'totalWords' => $this->amountInWords($total),
             'buyer' => $buyer,
             'dealName' => $dealName,
             'dealId' => $dealId ?? '',
+            'logo' => $supplier ? $this->imageDataUri($supplier->photo ?? null) : null,
+            'directorSignature' => $bank ? $this->imageDataUri($bank->director_signature ?? null) : null,
+            'accountantSignature' => $bank ? $this->imageDataUri($bank->accountant_signature ?? null) : null,
+            'stamp' => $bank ? $this->imageDataUri($bank->stamp ?? null) : null,
         ]);
 
         $disk = \Storage::disk('public');
@@ -456,6 +478,158 @@ class SaleDocumentService
             $out[] = ['name' => (string) ($item['name'] ?? 'Документ'), 'url' => $link];
         }
         return $out;
+    }
+
+    private function vatRate($value): ?float
+    {
+        $value = is_array($value) ? reset($value) : $value;
+        $value = trim((string) $value);
+        if ($value === '' || $value === 'none' || !is_numeric($value)) {
+            return null;
+        }
+
+        return (float) $value;
+    }
+
+    private function companyPhone(Company $company): string
+    {
+        foreach ($company->getAttributes() as $field => $value) {
+            if (!str_contains($field, 'telefon') && !str_contains($field, 'phone')) {
+                continue;
+            }
+            $decoded = json_decode((string) $value, true);
+            $candidates = is_array($decoded) ? $decoded : [$value];
+            foreach ($candidates as $item) {
+                $text = trim((string) (is_array($item) ? ($item['value'] ?? reset($item)) : $item));
+                if ($text !== '') {
+                    return $text;
+                }
+            }
+        }
+
+        return '';
+    }
+
+    private function imageDataUri($photo): ?string
+    {
+        $decoded = is_array($photo) ? $photo : json_decode((string) $photo, true);
+        if (!is_array($decoded)) {
+            return null;
+        }
+        $item = null;
+        foreach ($decoded as $candidate) {
+            if (is_array($candidate)) {
+                $item = $candidate;
+                break;
+            }
+        }
+        if (!$item) {
+            return null;
+        }
+        $link = trim((string) ($item['file'] ?? ($item['url'] ?? '')));
+        if ($link === '') {
+            return null;
+        }
+        $link = preg_replace('/[?#].*$/', '', $link);
+        $path = null;
+        if (preg_match('#/app/public/(.+)$#', $link, $m)) {
+            $path = \Storage::disk('public')->path($m[1]);
+        } elseif (preg_match('#^/?storage/(.+)$#', $link, $m)) {
+            $path = public_path('storage/' . $m[1]);
+        } elseif (!preg_match('#^https?://#', $link)) {
+            $path = public_path(ltrim($link, '/'));
+        }
+        if (!$path || !is_file($path)) {
+            return null;
+        }
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        $mime = ['png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'gif' => 'image/gif', 'webp' => 'image/webp', 'svg' => 'image/svg+xml'][$ext] ?? null;
+        if (!$mime) {
+            return null;
+        }
+
+        return 'data:' . $mime . ';base64,' . base64_encode((string) file_get_contents($path));
+    }
+
+    private function amountInWords(float $amount): string
+    {
+        $rub = (int) floor($amount + 0.000001);
+        $kop = (int) round(($amount - $rub) * 100);
+        if ($kop >= 100) {
+            $rub++;
+            $kop -= 100;
+        }
+        $words = $rub > 0 ? $this->numberWords($rub) : 'ноль';
+        $text = mb_strtoupper(mb_substr($words, 0, 1)) . mb_substr($words, 1)
+            . ' ' . $this->plural($rub, ['рубль', 'рубля', 'рублей'])
+            . ' ' . str_pad((string) $kop, 2, '0', STR_PAD_LEFT) . ' ' . $this->plural($kop, ['копейка', 'копейки', 'копеек']);
+
+        return $text;
+    }
+
+    private function numberWords(int $number): string
+    {
+        $ones = ['', 'один', 'два', 'три', 'четыре', 'пять', 'шесть', 'семь', 'восемь', 'девять'];
+        $onesF = ['', 'одна', 'две', 'три', 'четыре', 'пять', 'шесть', 'семь', 'восемь', 'девять'];
+        $teens = ['десять', 'одиннадцать', 'двенадцать', 'тринадцать', 'четырнадцать', 'пятнадцать', 'шестнадцать', 'семнадцать', 'восемнадцать', 'девятнадцать'];
+        $tens = ['', '', 'двадцать', 'тридцать', 'сорок', 'пятьдесят', 'шестьдесят', 'семьдесят', 'восемьдесят', 'девяносто'];
+        $hundreds = ['', 'сто', 'двести', 'триста', 'четыреста', 'пятьсот', 'шестьсот', 'семьсот', 'восемьсот', 'девятьсот'];
+        $groups = [
+            [['', '', ''], false],
+            [['тысяча', 'тысячи', 'тысяч'], true],
+            [['миллион', 'миллиона', 'миллионов'], false],
+            [['миллиард', 'миллиарда', 'миллиардов'], false],
+        ];
+
+        $parts = [];
+        $index = 0;
+        while ($number > 0 && $index < count($groups)) {
+            $chunk = $number % 1000;
+            $number = intdiv($number, 1000);
+            if ($chunk > 0) {
+                [$forms, $feminine] = $groups[$index];
+                $words = [];
+                if ($chunk >= 100) {
+                    $words[] = $hundreds[intdiv($chunk, 100)];
+                }
+                $rest = $chunk % 100;
+                if ($rest >= 10 && $rest < 20) {
+                    $words[] = $teens[$rest - 10];
+                } else {
+                    if ($rest >= 20) {
+                        $words[] = $tens[intdiv($rest, 10)];
+                    }
+                    $unit = $rest % 10;
+                    if ($unit) {
+                        $words[] = $feminine ? $onesF[$unit] : $ones[$unit];
+                    }
+                }
+                if ($index > 0) {
+                    $words[] = $this->plural($chunk, $forms);
+                }
+                array_unshift($parts, implode(' ', array_filter($words)));
+            }
+            $index++;
+        }
+
+        return implode(' ', $parts);
+    }
+
+    private function plural(int $n, array $forms): string
+    {
+        $n = abs($n) % 100;
+        $n1 = $n % 10;
+        if ($n > 10 && $n < 20) {
+            return $forms[2];
+        }
+        if ($n1 > 1 && $n1 < 5) {
+            return $forms[1];
+        }
+        if ($n1 === 1) {
+            return $forms[0];
+        }
+
+        return $forms[2];
     }
 
     private function companyAsOrganization(Company $company): object

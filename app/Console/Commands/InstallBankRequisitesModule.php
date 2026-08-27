@@ -30,6 +30,13 @@ class InstallBankRequisitesModule extends Command
     public const ENTITY_FIELDS = [
         'company_id', 'bank_name', 'bic', 'account', 'corr_account',
         'currency', 'bank_address', 'swift', 'comment', 'is_default',
+        'director_signature', 'accountant_signature', 'stamp',
+    ];
+
+    public const IMAGE_FIELDS = [
+        'director_signature' => 'Подпись руководителя',
+        'accountant_signature' => 'Подпись бухгалтера',
+        'stamp' => 'Печать',
     ];
 
     protected $signature = 'bank-requisites:install
@@ -132,6 +139,11 @@ SQL);
         if (!$sb->hasColumn('bank_requisites', 'b24_id')) {
             $db->statement('ALTER TABLE `bank_requisites` ADD COLUMN `b24_id` VARCHAR(32) NULL, ADD INDEX `bank_requisites_b24_id_index` (`b24_id`)');
         }
+        foreach (array_keys(self::IMAGE_FIELDS) as $column) {
+            if (!$sb->hasColumn('bank_requisites', $column)) {
+                $db->statement("ALTER TABLE `bank_requisites` ADD COLUMN `{$column}` TEXT NULL");
+            }
+        }
 
         if (!$sb->hasColumn('companies', 'bank_requisite_id')) {
             $db->statement('ALTER TABLE `companies` ADD COLUMN `bank_requisite_id` TEXT NULL');
@@ -210,6 +222,9 @@ SQL);
                 ['label' => 'Нет', 'value' => 0],
             ]], JSON_UNESCAPED_UNICODE)],
         ];
+        foreach (self::IMAGE_FIELDS as $field => $title) {
+            $fields[$field] = ['type' => 'file', 'title' => $title, 'show_file_image' => 1];
+        }
 
         $sort = 0;
         foreach ($fields as $field => $attrs) {

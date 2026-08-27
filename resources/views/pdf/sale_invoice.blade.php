@@ -3,111 +3,174 @@
 <head>
     <meta charset="utf-8"/>
     <style>
-        body { font-family: "DejaVu Sans", sans-serif; font-size: 9pt; color: #000; }
+        @page { margin: 28px 34px; }
+        body { font-family: "DejaVu Sans", sans-serif; font-size: 8.5pt; color: #000; }
         table { border-collapse: collapse; width: 100%; }
-        .bank td { border: 1px solid #000; padding: 4px 6px; vertical-align: top; }
-        .goods th, .goods td { border: 1px solid #000; padding: 4px 6px; }
-        .goods th { background: #f0f0f0; }
-        .title { font-size: 13pt; font-weight: bold; margin: 14px 0 4px; }
-        .hr { border-bottom: 2px solid #000; margin: 2px 0 10px; }
-        .muted { color: #444; font-size: 8pt; }
-        .nb { white-space: nowrap; }
+        .head td { vertical-align: top; }
+        .logo { width: 22%; text-align: center; vertical-align: middle !important; }
+        .logo img { max-width: 150px; max-height: 70px; }
+        .bank td { border: 1px solid #000; padding: 3px 5px; vertical-align: top; }
+        .bank .lbl { font-size: 7.5pt; color: #333; }
+        .title { font-size: 13.5pt; font-weight: bold; margin: 16px 0 6px; }
+        .hr { border-bottom: 2px solid #000; margin: 4px 0 10px; }
+        .party td { padding: 3px 0; vertical-align: top; }
+        .party .k { width: 15%; }
+        .party .v { font-weight: bold; }
+        .offer { margin: 10px 0 6px; font-size: 8pt; }
+        .goods th, .goods td { border: 1px solid #000; padding: 3px 5px; }
+        .goods th { font-weight: bold; }
+        .totals td { padding: 2px 5px; }
+        .totals .k { text-align: right; font-weight: bold; }
+        .totals .v { text-align: right; width: 22%; font-weight: bold; }
         .right { text-align: right; }
         .center { text-align: center; }
-        .sign { margin-top: 26px; }
-        .sign td { padding: 10px 6px 0; }
-        .sign .line { border-bottom: 1px solid #000; min-width: 150px; }
+        .nb { white-space: nowrap; }
+        .terms { font-size: 7.6pt; margin-top: 10px; text-align: justify; }
+        .terms p { margin: 0 0 2px; }
+        .sign { margin-top: 12px; border-top: 2px solid #000; padding-top: 8px; }
+        .sign td { vertical-align: bottom; padding: 6px 4px 0; }
+        .sign .role { width: 16%; font-weight: bold; font-size: 10pt; }
+        .sign .line { border-bottom: 1px solid #000; height: 46px; text-align: center; position: relative; }
+        .sign .cap { font-size: 7pt; color: #333; text-align: center; padding-top: 2px; }
+        .sign .name { font-weight: bold; text-align: center; }
+        .sign img.s { max-height: 44px; max-width: 120px; }
+        .sign .stamp { width: 20%; text-align: center; vertical-align: middle; }
+        .sign .stamp img { width: 140px; }
     </style>
 </head>
 <body>
-    <table class="bank">
+    <table class="head">
         <tr>
-            <td style="width: 55%;">
-                <div>{{ $bank->bank_name ?? '' }}</div>
-                <div class="muted">Банк получателя</div>
-            </td>
-            <td style="width: 12%;">
-                <div>БИК</div>
-                <div>Сч. №</div>
-            </td>
-            <td style="width: 33%;">
-                <div>{{ $bank->bic ?? '' }}</div>
-                <div>{{ $bank->corr_account ?? '' }}</div>
-            </td>
-        </tr>
-        <tr>
+            <td class="logo">@if($logo)<img src="{{ $logo }}" alt="">@endif</td>
             <td>
-                <div>ИНН {{ $org->inn ?? '' }} @if(!empty($org->kpp)) КПП {{ $org->kpp }} @endif</div>
-                <div>{{ $org->name ?? '' }}</div>
-                <div class="muted">Получатель</div>
+                <table class="bank">
+                    <tr>
+                        <td style="width: 58%;">
+                            <div>{{ $bank->bank_name ?? '' }}</div>
+                            <div class="lbl">Банк получателя</div>
+                        </td>
+                        <td style="width: 12%;">
+                            <div>БИК</div>
+                            <div>Сч. №</div>
+                        </td>
+                        <td style="width: 30%;">
+                            <div>{{ $bank->bic ?? '' }}</div>
+                            <div>{{ $bank->corr_account ?? '' }}</div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div>ИНН {{ $org->inn ?? '' }} @if(!empty($org->kpp)) &nbsp; КПП {{ $org->kpp }} @endif</div>
+                            <div>{{ $org->name ?? '' }}</div>
+                            <div class="lbl">Получатель</div>
+                        </td>
+                        <td>Сч. №</td>
+                        <td>{{ $bank->account ?? ($org->account ?? '') }}</td>
+                    </tr>
+                </table>
             </td>
-            <td>Сч. №</td>
-            <td>{{ $bank->account ?? ($org->account ?? '') }}</td>
         </tr>
     </table>
 
-    <div class="title">Счет на оплату № {{ $number }} от {{ $date }}</div>
+    <div class="title">Счет-Договор № {{ $number }} от {{ $date }} г</div>
     <div class="hr"></div>
 
-    <p>
-        <b>Поставщик:</b>
-        {{ $org->name ?? '' }}@if(!empty($org->inn)), ИНН {{ $org->inn }}@endif @if(!empty($org->kpp)), КПП {{ $org->kpp }}@endif @if(!empty($org->address) || !empty($org->fact_address)), {{ $org->address ?: $org->fact_address }}@endif
-    </p>
-    <p>
-        <b>Покупатель:</b>
-        @if($companyName !== ''){{ $companyName }}@if(!empty($company->inn)), ИНН {{ $company->inn }}@endif @if(!empty($company->kpp)), КПП {{ $company->kpp }}@endif @if(!empty($company->address)), {{ $company->address }}@endif @if($buyer !== '') ({{ $buyer }})@endif @else{{ $buyer !== '' ? $buyer : '—' }}@endif
-    </p>
-    @if($dealName !== '')
-        <p><b>Основание:</b> Заказ покупателя «{{ $dealName }}» № {{ $dealId }}</p>
-    @endif
-
-    <table class="goods" style="margin-top: 8px;">
+    <table class="party">
         <tr>
-            <th style="width: 5%;">№</th>
-            <th>Товары (работы, услуги)</th>
-            <th style="width: 10%;">Кол-во</th>
-            <th style="width: 15%;">Цена, руб.</th>
-            <th style="width: 15%;">Сумма, руб.</th>
+            <td class="k">Поставщик<br>(исполнитель):</td>
+            <td class="v">{{ $org->name ?? '' }}@if(!empty($org->inn)), &nbsp;ИНН {{ $org->inn }}@endif @if(!empty($org->kpp)), &nbsp;КПП {{ $org->kpp }}@endif @if(!empty($org->address) || !empty($org->fact_address)), &nbsp;{{ $org->address ?: $org->fact_address }}@endif</td>
+        </tr>
+        <tr>
+            <td class="k">Покупатель<br>(заказчик):</td>
+            <td class="v">
+                @if($companyName !== ''){{ $companyName }}@if(!empty($company->inn)), &nbsp;ИНН {{ $company->inn }}@endif @if(!empty($company->kpp)), &nbsp;КПП {{ $company->kpp }}@endif @if(!empty($company->address)), &nbsp;{{ $company->address }}@endif @if($companyPhone !== ''), &nbsp;тел.: {{ $companyPhone }}@endif @if($buyer !== '') ({{ $buyer }})@endif @else{{ $buyer !== '' ? $buyer : '—' }}@endif
+            </td>
+        </tr>
+    </table>
+
+    <div class="offer">
+        Настоящий Счет-договор является письменным предложением (офертой) Поставщика согласно ст.432 по ст.444 ГК РФ включительно. Акцепт оферты согласно ст.434 и ст.438 ГК РФ осуществляется путем оплаты Покупателем Счет-договора и означает полное и безоговорочное согласие Покупателя с условиями оплаты и поставки, определенных Счет-договором, что считается соблюдением письменной формы договора (п.3, ст. 434 ГК РФ).<br>
+        Предмет Счет-договора:
+    </div>
+
+    <table class="goods">
+        <tr>
+            <th style="width: 4%;">№</th>
+            <th>Товар (Услуга)</th>
+            <th style="width: 9%;">Кол-во</th>
+            <th style="width: 8%;">Ед.</th>
+            <th style="width: 9%;">НДС, %</th>
+            <th style="width: 12%;">Цена</th>
+            <th style="width: 14%;">Сумма</th>
         </tr>
         @forelse($products as $i => $product)
             <tr>
                 <td class="center">{{ $i + 1 }}</td>
                 <td>{{ $product['name'] ?? '' }}</td>
-                <td class="center">{{ $product['count'] ?? '' }}</td>
-                <td class="right nb">{{ number_format((float) ($product['price'] ?? 0), 2, ',', ' ') }}</td>
-                <td class="right nb">{{ number_format((float) ($product['total'] ?? 0), 2, ',', ' ') }}</td>
+                <td class="right">{{ $product['count'] ?? '' }}</td>
+                <td class="center">{{ $product['unit'] ?? 'шт' }}</td>
+                <td class="right">{{ $product['tax_label'] ?? '' }}</td>
+                <td class="right nb">{{ number_format((float) ($product['price'] ?? 0), 2, '.', ' ') }}</td>
+                <td class="right nb">{{ number_format((float) ($product['total'] ?? 0), 2, '.', ' ') }}</td>
             </tr>
         @empty
             <tr>
                 <td class="center">1</td>
                 <td>@if($dealId !== '')По заказу покупателя № {{ $dealId }}@else Товары и услуги по счету № {{ $number }}@endif</td>
-                <td class="center">1</td>
-                <td class="right nb">{{ number_format($total, 2, ',', ' ') }}</td>
-                <td class="right nb">{{ number_format($total, 2, ',', ' ') }}</td>
+                <td class="right">1</td>
+                <td class="center">шт</td>
+                <td class="right">{{ $vatRate === null ? 'Без НДС' : rtrim(rtrim(number_format($vatRate, 2, '.', ''), '0'), '.') }}</td>
+                <td class="right nb">{{ number_format($total, 2, '.', ' ') }}</td>
+                <td class="right nb">{{ number_format($total, 2, '.', ' ') }}</td>
             </tr>
         @endforelse
-        <tr>
-            <td colspan="4" class="right" style="border: none; padding-top: 6px;"><b>Итого:</b></td>
-            <td class="right nb" style="border: none; padding-top: 6px;"><b>{{ number_format($total, 2, ',', ' ') }}</b></td>
-        </tr>
     </table>
 
-    <p style="margin-top: 10px;">
-        Всего наименований {{ max(count($products), 1) }}, на сумму {{ number_format($total, 2, ',', ' ') }} руб.
-    </p>
+    <table class="totals" style="margin-top: 14px;">
+        <tr><td class="k">Итого:</td><td class="v nb">{{ number_format($total, 2, '.', ' ') }} руб.</td></tr>
+        <tr><td class="k">В том числе НДС:</td><td class="v nb">{{ $vatTotal > 0 ? number_format($vatTotal, 2, '.', ' ') . ' руб.' : 'Без НДС' }}</td></tr>
+        <tr><td class="k">Всего к оплате:</td><td class="v nb" style="font-size: 10pt;">{{ number_format($total, 2, '.', ' ') }} руб.</td></tr>
+    </table>
+
+    <p style="margin: 14px 0 0;">Всего наименований {{ max(count($products), 1) }}, на сумму {{ number_format($total, 2, '.', ' ') }} руб.</p>
+    <p style="margin: 2px 0 0;"><b>{{ $totalWords }}</b></p>
+
+    <div class="terms">
+        <p><b>1.</b> Цена товара: Цены поставляемого товара, включая НДС, стоимость упаковки, маркировки, согласовываются сторонами в Счет-договоре, выставляемом Поставщиком. Цены на одни и те же товары в разных партиях товаров могут отличаться, что устанавливается соответствующим Счет-договором. В случае просрочки оплаты Счет-договора, расчеты за товар производятся по ценам, действующим на дату отгрузки товара.</p>
+        <p><b>2.</b> Порядок расчетов: Счет-договор действителен для оплаты в течение 3 банковских дней. Датой платежа является дата поступления 100% денежных средств на расчетный счет Поставщика. Оплата Счет-договора третьим лицом и/или без указания в платежном поручении номера Счет-договора, а также неполная (частичная) оплата Счет-договора не допускается. Оплата товара производится Покупателем денежными средствами в российских рублях, путём перечисления денежных сумм на расчетный счет Поставщика не позднее срока, указанного в Счет-договоре на поставляемый товар. В случае неоплаты стоимости товара в сумме и сроки, указанные в Счет-договоре на поставляемый товар, заявка аннулируется. Покупатель при последующей необходимости в приобретении товара направляет Поставщику новую заявку и оплачивает товар в установленный срок.</p>
+        <p><b>3.</b> Поставка: Товар отпускается со склада Поставщика на самовывоз, либо доставляется силами Поставщика за счет Покупателя в адрес Грузополучателя. Моментом поставки считается момент передачи товара представителю Покупателя. Право собственности на Товар переходит к Покупателю с момента подписания товарно-транспортной накладной и/или УПД (универсального передаточного документа) представителями сторон, либо с момента подписания представителями сторон перевозочных документов при передаче товара. С этого же момента к Покупателю переходит риск случайной гибели и/или повреждения товара.</p>
+        <p><b>3.1.</b> Самовывоз: При самовывозе покупатель обязан получить товар в течение 5 (пяти) рабочих дней с момента поступления денег на расчетный счет Поставщика после уведомления менеджера-представителя Поставщика о возможности забора товара со склада Поставщика. При получении Товара со склада представитель Покупателя должен иметь при себе ПАСПОРТ и ДОВЕРЕННОСТЬ, оформленную надлежащим образом. При отсутствии вышеназванных документов Товар не отпускается.</p>
+        <p><b>3.2.</b> Перегруз: Во избежание перегруза транспортного средства, при погрузке товаров Покупатель обязан при подаче транспортного средства под погрузку товаров учитывать технические характеристики транспортного средства, указанные в свидетельстве о регистрации ТС. В случае подачи ТС грузоподъёмностью менее необходимой для загрузки количества товара, чем указано в поступившей заявке, Покупатель обязан известить об этом Поставщика. Поставщик в этом случае производит отгрузку товара в количестве, соответствующем техническим характеристикам транспортного средства, указанным в свидетельстве о регистрации ТС, а Покупатель обязуется вывезти отгруженный товар. В случае, когда Покупатель заведомо ввел Поставщика в заблуждение или же не предоставил достоверной информации о технических характеристиках транспортного средства, ответственность за перегруз транспортного средства ложится целиком и полностью на Покупателя. В связи с чем, Покупатель возмещает Поставщику убытки в размере штрафа за перегруз транспортного средства, предусмотренного действующим законодательством.</p>
+        <p><b>3.3.</b> Доставка: Расходы по доставке товара транспортом Поставщика оговариваются сторонами отдельно. Адрес, на который Поставщик должен доставить товар, Покупатель обязан сообщить в письменной форме до момента выставления настоящего Счет-договора и не позднее, чем за 2 (два) рабочих дня до даты поставки. При доставке товара транспортом Поставщика, разгрузочные работы осуществляются силами и средствами Покупателя, если иное не предусмотрено в Счет-договоре. Обязанности Поставщика по поставке считаются исполненными в момент сдачи товара в месте доставки, что подтверждается подписанной товарно-транспортной накладной и/или УПД (универсальным передаточным документом). С момента доставки на Адрес, Покупателю отводится 60 минут на разгрузку и оформление документов. В случае превышения указанного времени на разгрузку, с 61й минуты с Покупателя взимается штраф в размере 1700 рублей за каждый полный/неполный последующий час. Моментом доставки товара на Адрес является телефонное оповещение Покупателя (или его представителя), а также иной возможный способ оповещения. При отсутствии полномочий (отсутствие доверенности и (или) печати) по принятию Покупателем Товара по Адресу доставки; физическом отсутствии представителя Покупателя по адресу доставки; невозможности связаться по телефону (3 и более не принятых звонка) с представителем Покупателя, услуга по доставке считается оказанной, Товар перемещается на склад Поставщика с последующим самовывозом Покупателем или оформлением нового заказа на доставку.</p>
+        <p><b>4.</b> Хранение на складе по истечении срока, установленного п.3, готовый к передаче товар, оплачивается Покупателем с учетом неустойки в размере 0,3% (Ноль целых три десятых процента) от общей суммы Счет-договора, за каждый день хранения (если не было предварительной письменной договоренности с Поставщиком о хранении товара). При невыполнении п.2 и п.3 настоящего Договор-счета наличие материала на складе не гарантируется.</p>
+        <p><b>5.</b> При приеме товара Покупателю необходимо сверить соответствие всех принимаемых позиций, а также проверить товары на наличие/отсутствие дефектов. В случае обнаружения дефектов и/или некомплектности товара Покупателем составляется Акт. При отказе Покупателя от составления Акта последующие предъявления претензий о некомплектности товара и/или его видимых дефектов Поставщиком не принимаются.</p>
+        <p><b>6.</b> Подписание Покупателем или его уполномоченным представителем УПД (универсальный передаточный документ) означает согласие Покупателя с комплектностью и надлежащим качеством товара.</p>
+        <p><b>7.</b> В случае не поставки товара, денежные средства возвращаются на основании письма о возврате денег, направленного в адрес Поставщика в оригинале.</p>
+    </div>
 
     <table class="sign">
         <tr>
-            <td style="width: 18%;"><b>Руководитель</b></td>
-            <td class="line" style="width: 32%;"></td>
-            <td style="width: 18%;"><b>Гл. бухгалтер</b></td>
-            <td class="line" style="width: 32%;"></td>
+            <td class="role">Руководитель</td>
+            <td style="width: 30%;">
+                <div class="line">@if($directorSignature)<img class="s" src="{{ $directorSignature }}" alt="">@endif</div>
+                <div class="cap">подпись</div>
+            </td>
+            <td class="stamp" rowspan="2">@if($stamp)<img src="{{ $stamp }}" alt="">@endif</td>
+            <td>
+                <div class="line name" style="height: auto; padding-top: 30px;">{{ $org->director ?? '' }}</div>
+                <div class="cap">расшифровка подписи</div>
+            </td>
         </tr>
         <tr>
-            <td></td>
-            <td class="muted center">{{ $org->director ?? '' }}</td>
-            <td></td>
-            <td class="muted center">{{ $org->accountant ?? '' }}</td>
+            <td class="role">Бухгалтер</td>
+            <td>
+                <div class="line">@if($accountantSignature)<img class="s" src="{{ $accountantSignature }}" alt="">@endif</div>
+                <div class="cap">подпись</div>
+            </td>
+            <td>
+                <div class="line name" style="height: auto; padding-top: 30px;">{{ $org->accountant ?? '' }}</div>
+                <div class="cap">расшифровка подписи</div>
+            </td>
         </tr>
     </table>
 </body>

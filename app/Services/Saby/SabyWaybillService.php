@@ -548,8 +548,7 @@ class SabyWaybillService
         $vehicle['ТипВлад'] = $ownership !== '' ? $ownership : '1';
 
         $params = [];
-        $mark = $car->mark;
-        $markName = $mark ? trim((string) $mark->name) : '';
+        $markName = trim(trim((string) $this->attr($car, 'brand')) . ' ' . trim((string) $this->attr($car, 'car_model')));
         if ($markName === '') {
             $markName = trim((string) $car->name);
         }
@@ -557,10 +556,6 @@ class SabyWaybillService
             $params['Марка'] = $markName;
         }
         $type = $this->fieldOptionLabel('cars', 'vehicle_type', $this->attr($car, 'vehicle_type'));
-        if ($type === '') {
-            $model = $car->model;
-            $type = $model ? trim((string) $model->name) : '';
-        }
         if ($type !== '') {
             $params['Тип'] = $type;
         }

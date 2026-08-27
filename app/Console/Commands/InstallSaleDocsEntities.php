@@ -54,6 +54,18 @@ class InstallSaleDocsEntities extends Command
     public const BANK_FIELD_TITLE = 'Банковские реквизиты';
     public const BANK_FIELD_ENTITIES = ['payment_invoices', 'deals'];
 
+    public const VAT_FIELD = 'vat';
+    public const VAT_TITLE = 'НДС';
+    public const VAT_OPTIONS = [
+        ['label' => 'Без НДС', 'value' => 'none'],
+        ['label' => '0%', 'value' => '0'],
+        ['label' => '5%', 'value' => '5'],
+        ['label' => '7%', 'value' => '7'],
+        ['label' => '10%', 'value' => '10'],
+        ['label' => '20%', 'value' => '20'],
+        ['label' => '22%', 'value' => '22'],
+    ];
+
     public const DEAL_SUM_FIELD = 'sum';
     public const DEAL_SUM_TITLE = 'Сумма';
 
@@ -122,6 +134,10 @@ class InstallSaleDocsEntities extends Command
         }
 
         foreach (self::ensureDealSumField($db) as $line) {
+            $this->line("    [{$label}] {$line}");
+        }
+
+        foreach (self::ensureCompanyVatField($db) as $line) {
             $this->line("    [{$label}] {$line}");
         }
 
@@ -384,6 +400,63 @@ SQL);
                 $db->table('local_cache')
                     ->whereIn('url', array_map(fn ($s) => 'fields/' . $s, self::BANK_FIELD_ENTITIES))
                     ->update(['updated_at' => now()]);
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return $lines;
+    }
+
+    public static function ensureCompanyVatField($db): array
+    {
+        $sb = $db->getSchemaBuilder();
+        $lines = [];
+        $typeId = $db->table('data_types')->where('slug', 'companies')->value('id');
+        if (!$typeId || !$sb->hasTable('companies')) {
+            return $lines;
+        }
+        if (!$sb->hasColumn('companies', self::VAT_FIELD)) {
+            $db->statement("ALTER TABLE `companies` ADD COLUMN `" . self::VAT_FIELD . "` VARCHAR(16) NULL");
+        }
+
+        $attrs = [
+            'type' => 'select_dropdown', 'title' => self::VAT_TITLE,
+            'details' => json_encode(['options' => self::VAT_OPTIONS], JSON_UNESCAPED_UNICODE),
+            'is_remove' => 0, 'hide' => 0,
+        ];
+        $existing = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', self::VAT_FIELD)->first();
+        if ($existing) {
+            $db->table('data_rows')->where('id', $existing->id)->update($attrs);
+            return $lines;
+        }
+
+        $kpp = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', 'kpp')->first();
+        $sectionId = (int) ($kpp->section_id ?? 0);
+        if (!$sectionId) {
+            $sectionId = (int) ($db->table('field_sections')
+                ->where('page', 'companies')
+                ->where(fn ($q) => $q->whereNull('module')->orWhere('module', ''))
+                ->orderBy('sort')
+                ->value('id') ?: 0);
+        }
+        $sort = $kpp ? (int) $kpp->sort + 1 : (int) $db->table('data_rows')->where('data_type_id', $typeId)->max('sort') + 1;
+        $vatId = $db->table('data_rows')->insertGetId(array_merge(self::baseRow((int) $typeId, $sectionId), $attrs, [
+            'field' => self::VAT_FIELD, 'sort' => $sort, 'is_permanent' => 0,
+            'group_id' => $kpp->group_id ?? null,
+        ]));
+        if (!empty($kpp->group_id)) {
+            $group = $db->table('data_rows')->where('id', $kpp->group_id)->first();
+            $subfields = json_decode((string) ($group->subfields ?? ''), true);
+            if (is_array($subfields) && !in_array($vatId, $subfields)) {
+                $subfields[] = $vatId;
+                $db->table('data_rows')->where('id', $group->id)->update(['subfields' => json_encode($subfields)]);
+            }
+        }
+        $lines[] = 'companies: добавлено поле «' . self::VAT_TITLE . '»';
+
+        try {
+            if ($sb->hasTable('local_cache')) {
+                $db->table('local_cache')->where('url', 'fields/companies')->update(['updated_at' => now()]);
             }
         } catch (\Throwable $e) {
         }
