@@ -1682,7 +1682,12 @@ class EntityObject
 
         if($request->order_id && $slug == 'products') {
 
-            $order_class = $request->order_entity == 'deals' ? \App\Models\Deal::class : \App\Models\Task::class;
+            $order_class = [
+                'deals' => \App\Models\Deal::class,
+                'payment_invoices' => \App\Models\PaymentInvoice::class,
+                'expense_invoices' => \App\Models\ExpenseInvoice::class,
+                'product_returns' => \App\Models\ProductReturn::class,
+            ][$request->order_entity] ?? \App\Models\Task::class;
             $order = $order_class::withTrashed()->where(['id' => $request->order_id])->first();
 
             if($order) {

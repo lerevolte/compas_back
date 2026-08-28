@@ -24,6 +24,21 @@ class TaskController extends Controller
         return $this->saveProductsFor('deals', \App\Models\Deal::class, $id, $request);
     }
 
+    public function set_payment_invoice_products($id, Request $request)
+    {
+        return $this->saveProductsFor('payment_invoices', \App\Models\PaymentInvoice::class, $id, $request);
+    }
+
+    public function set_expense_invoice_products($id, Request $request)
+    {
+        return $this->saveProductsFor('expense_invoices', \App\Models\ExpenseInvoice::class, $id, $request);
+    }
+
+    public function set_product_return_products($id, Request $request)
+    {
+        return $this->saveProductsFor('product_returns', \App\Models\ProductReturn::class, $id, $request);
+    }
+
     private function saveProductsFor($slug, $class, $id, Request $request)
     {
         $user = Auth::user();

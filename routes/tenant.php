@@ -464,6 +464,21 @@ Route::middleware([
             [App\Http\Controllers\Api\TaskController::class, 'set_deal_products']
         );
 
+        Route::put(
+            'payment_invoices/{id}/set_products',
+            [App\Http\Controllers\Api\TaskController::class, 'set_payment_invoice_products']
+        );
+
+        Route::put(
+            'expense_invoices/{id}/set_products',
+            [App\Http\Controllers\Api\TaskController::class, 'set_expense_invoice_products']
+        );
+
+        Route::put(
+            'product_returns/{id}/set_products',
+            [App\Http\Controllers\Api\TaskController::class, 'set_product_return_products']
+        );
+
         Route::get(
             'analytics', 
             [App\Http\Controllers\Api\AnalyticsController::class, 'get_all_analytics']

@@ -47,6 +47,8 @@ class InstallSaleDocsEntities extends Command
         ],
     ];
 
+    public const PRODUCTS_TAB_ENTITIES = ['expense_invoices', 'product_returns'];
+
     public const PRINT_TAB = 'print_docs';
     public const PRINT_TAB_TITLE = 'Печать документов';
 
@@ -124,6 +126,8 @@ class InstallSaleDocsEntities extends Command
         }
 
         $this->ensurePrintTab($db, $label);
+
+        $this->ensureProductsTabs($db, $label);
 
         foreach (self::ensureBankRequisiteFields($db) as $line) {
             $this->line("    [{$label}] {$line}");
@@ -318,6 +322,58 @@ SQL);
         }
 
         $this->line("    [{$label}] {$slug}: data_type={$typeId}");
+    }
+
+    private function ensureProductsTabs($db, string $label): void
+    {
+        foreach (self::PRODUCTS_TAB_ENTITIES as $slug) {
+            $typeId = $db->table('data_types')->where('slug', $slug)->value('id');
+            if (!$typeId) {
+                continue;
+            }
+            $existing = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', 'products')->first();
+            $attrs = ['type' => 'json', 'title' => 'Состав', 'only_read' => 1, 'is_permanent' => 1, 'is_remove' => 0, 'hide' => 0];
+            if ($existing) {
+                $db->table('data_rows')->where('id', $existing->id)->update($attrs);
+            } else {
+                $sectionId = (int) ($db->table('field_sections')
+                    ->where('page', $slug)
+                    ->where(fn ($q) => $q->whereNull('module')->orWhere('module', ''))
+                    ->orderBy('sort')
+                    ->value('id') ?: 0);
+                $maxSort = (int) $db->table('data_rows')->where('data_type_id', $typeId)->max('sort');
+                $db->table('data_rows')->insert(array_merge(self::baseRow((int) $typeId, $sectionId), $attrs, [
+                    'field' => 'products', 'sort' => $maxSort + 1,
+                ]));
+                $this->line("    [{$label}] {$slug}: добавлено поле «Состав»");
+            }
+
+            $menus = $db->table('settings')->where(['type' => 'menu', 'entity' => $slug])->get();
+            foreach ($menus as $menu) {
+                $tabs = json_decode($menu->value, true);
+                if (!is_array($tabs) || collect($tabs)->contains(fn ($tab) => ($tab['tab'] ?? null) === 'products')) {
+                    continue;
+                }
+                $maxId = 0;
+                foreach ($tabs as $tab) {
+                    $maxId = max($maxId, (int) ($tab['id'] ?? 0));
+                }
+                $ordered = [];
+                $inserted = false;
+                foreach ($tabs as $tab) {
+                    $ordered[] = $tab;
+                    if (!$inserted && ($tab['tab'] ?? null) === 'order') {
+                        $ordered[] = ['title' => 'Товары и услуги', 'tab' => 'products', 'sort' => (int) ($tab['sort'] ?? 0) + 1, 'enabled' => 1, 'id' => $maxId + 1];
+                        $inserted = true;
+                    }
+                }
+                if (!$inserted) {
+                    $ordered[] = ['title' => 'Товары и услуги', 'tab' => 'products', 'sort' => count($ordered), 'enabled' => 1, 'id' => $maxId + 1];
+                }
+                $db->table('settings')->where('id', $menu->id)->update(['value' => json_encode($ordered, JSON_UNESCAPED_SLASHES)]);
+                $this->line("    [{$label}] {$slug}: добавлена вкладка «Товары и услуги»");
+            }
+        }
     }
 
     private function ensurePrintTab($db, string $label): void

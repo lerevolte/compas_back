@@ -306,8 +306,11 @@ class SaleDocumentService
 
         if ($supplier) {
             $org = $this->companyAsOrganization($supplier);
-            $bank = $this->documentBank($doc, fn (BankRequisite $b) => (int) $b->company_id === (int) $supplier->id)
-                ?: $supplier->defaultBankRequisite();
+            $supplierInn = preg_replace('/\D/', '', (string) ($supplier->inn ?? ''));
+            $bank = $this->documentBank($doc, fn (BankRequisite $b) => (int) $b->company_id === (int) $supplier->id
+                    || ($supplierInn !== '' && $this->companyInn($b->company_id) === $supplierInn))
+                ?: ($supplier->defaultBankRequisite()
+                    ?: ($supplierInn !== '' ? $this->orgBank((object) ['inn' => $supplierInn]) : null));
         } else {
             $org = $this->ourOrganization();
             $orgInn = preg_replace('/\D/', '', (string) ($org->inn ?? ''));
