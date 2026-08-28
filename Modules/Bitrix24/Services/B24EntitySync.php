@@ -1077,6 +1077,52 @@ class B24EntitySync
         return trim($value);
     }
 
+    public function fixInvoiceTimes(?callable $progress = null): array
+    {
+        $stat = ['checked' => 0, 'fixed' => 0];
+        if (!$this->paymentInvoicesReady()) {
+            return $stat;
+        }
+
+        $rows = DB::table('payment_invoices')
+            ->whereNull('deleted_at')
+            ->whereNotNull('b24_id')
+            ->where('b24_id', '!=', '')
+            ->whereRaw("TIME(created_at) = '00:00:00'")
+            ->pluck('b24_id', 'id');
+
+        foreach (array_chunk($rows->all(), 50, true) as $chunk) {
+            $cmd = [];
+            foreach ($chunk as $localId => $b24Id) {
+                $cmd['inv_' . $localId] = 'crm.invoice.get?id=' . $b24Id;
+            }
+            $res = $this->b24Batch($cmd);
+            foreach ($chunk as $localId => $b24Id) {
+                $stat['checked']++;
+                $inv = $res['inv_' . $localId] ?? null;
+                if (!is_array($inv) || empty($inv['DATE_BILL']) || empty($inv['DATE_INSERT'])) {
+                    continue;
+                }
+                try {
+                    $billDate = \Carbon\Carbon::parse($inv['DATE_BILL'])->setTimezone(config('app.timezone', 'Europe/Moscow'))->startOfDay();
+                    $insertAt = \Carbon\Carbon::parse($inv['DATE_INSERT'])->setTimezone(config('app.timezone', 'Europe/Moscow'));
+                } catch (\Throwable $e) {
+                    continue;
+                }
+                if (!$insertAt->isSameDay($billDate) || $insertAt->format('H:i:s') === '00:00:00') {
+                    continue;
+                }
+                DB::table('payment_invoices')->where('id', $localId)->update(['created_at' => $insertAt->format('Y-m-d H:i:s')]);
+                $stat['fixed']++;
+            }
+            if ($progress) {
+                $progress($stat);
+            }
+        }
+
+        return $stat;
+    }
+
     public function pullInvoiceById($invoiceId): ?\App\Models\PaymentInvoice
     {
         if (!$this->paymentInvoicesReady()) {
