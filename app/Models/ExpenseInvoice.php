@@ -63,4 +63,21 @@ class ExpenseInvoice extends Model
         $this->saveQuietly();
         $this->regeneratePdf();
     }
+
+    public function getHtmlProducts()
+    {
+        $html = '';
+        if ($this->products) {
+            $products = json_decode($this->products, true);
+            foreach ((is_array($products) ? $products : []) as $product) {
+                if (!is_array($product)) {
+                    continue;
+                }
+                $html .= (is_array($product['name'] ?? null) ? $product['name'][0] : ($product['name'] ?? '')) . ' <b>' . ($product['count'] ?? 0) . ' шт.</b><br>';
+            }
+        }
+
+        return $html;
+    }
+
 }
