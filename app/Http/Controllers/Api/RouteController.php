@@ -1053,6 +1053,10 @@ class RouteController extends Controller
         if (is_string($companyId) && is_array($decodedCompany = json_decode($companyId, true))) {
             $companyId = $decodedCompany[0] ?? null;
         }
+        $shipmentCompanyId = $address->shipment_company_id ?? null;
+        if (is_string($shipmentCompanyId) && is_array($decodedShipment = json_decode($shipmentCompanyId, true))) {
+            $shipmentCompanyId = $decodedShipment[0] ?? null;
+        }
         $contactIds = array_values(array_map('intval', array_filter(
             (array) json_decode((string) $address->contact_id, true),
             'is_numeric'
@@ -1077,6 +1081,9 @@ class RouteController extends Controller
             'company_id'            => $companyId,
             'contact_id'            => $contactIds,
         ];
+        if ($shipmentCompanyId) {
+            $row['shipment_company_id'] = (int) $shipmentCompanyId;
+        }
 
         $result = $crud->batch('logistic_tasks', [$row]);
         $newId = $result['id'] ?? null;
@@ -1125,6 +1132,10 @@ class RouteController extends Controller
         if (is_string($companyId) && is_array($decodedCompany = json_decode($companyId, true))) {
             $companyId = $decodedCompany[0] ?? null;
         }
+        $shipmentCompanyId = $warehouse->shipment_company_id ?? null;
+        if (is_string($shipmentCompanyId) && is_array($decodedShipment = json_decode($shipmentCompanyId, true))) {
+            $shipmentCompanyId = $decodedShipment[0] ?? null;
+        }
         $contactIds = array_values(array_map('intval', array_filter(
             (array) json_decode((string) $warehouse->contact_id, true),
             'is_numeric'
@@ -1150,6 +1161,9 @@ class RouteController extends Controller
             'company_id'            => $companyId,
             'contact_id'            => $contactIds,
         ];
+        if ($shipmentCompanyId) {
+            $row['shipment_company_id'] = (int) $shipmentCompanyId;
+        }
 
         $result = $crud->batch('logistic_tasks', [$row]);
         $newId = $result['id'] ?? null;

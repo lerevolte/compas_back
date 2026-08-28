@@ -52,7 +52,7 @@ class InstallSaleDocsEntities extends Command
 
     public const BANK_FIELD = 'bank_requisite_id';
     public const BANK_FIELD_TITLE = 'Банковские реквизиты';
-    public const BANK_FIELD_ENTITIES = ['payment_invoices', 'deals'];
+    public const BANK_FIELD_ENTITIES = ['payment_invoices'];
 
     public const VAT_FIELD = 'vat';
     public const VAT_TITLE = 'НДС';
@@ -358,8 +358,29 @@ SQL);
         $sb = $db->getSchemaBuilder();
         $lines = [];
 
+        $dealsTypeId = $db->table('data_types')->where('slug', 'deals')->value('id');
+        if ($dealsTypeId) {
+            $dealRows = $db->table('data_rows')->where('data_type_id', $dealsTypeId)->where('field', self::BANK_FIELD)->pluck('id');
+            if ($dealRows->count()) {
+                $db->table('section_fields_sort')->whereIn('field_id', $dealRows)->delete();
+                $db->table('data_rows')->whereIn('id', $dealRows)->delete();
+                $lines[] = 'deals: поле «' . self::BANK_FIELD_TITLE . '» удалено (не используется)';
+            }
+            $menus = $db->table('settings')->where(['type' => 'menu', 'entity' => 'deals'])->get();
+            foreach ($menus as $menu) {
+                $tabs = json_decode($menu->value, true);
+                if (!is_array($tabs)) {
+                    continue;
+                }
+                $kept = array_values(array_filter($tabs, fn ($tab) => ($tab['tab'] ?? null) !== self::BANK_FIELD));
+                if (count($kept) !== count($tabs)) {
+                    $db->table('settings')->where('id', $menu->id)->update(['value' => json_encode($kept, JSON_UNESCAPED_SLASHES)]);
+                }
+            }
+        }
+
         if (!$db->table('data_types')->where('slug', 'bank_requisites')->exists() || !$sb->hasTable('bank_requisites')) {
-            $lines[] = 'модуль «Банковские реквизиты» не установлен — поле «' . self::BANK_FIELD_TITLE . '» у счетов/заказов не добавлено';
+            $lines[] = 'модуль «Банковские реквизиты» не установлен — поле «' . self::BANK_FIELD_TITLE . '» у счетов не добавлено';
             return $lines;
         }
 

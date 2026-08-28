@@ -564,6 +564,31 @@ class B24ProductSync
     private function writeSyncCreatedHistory($id): void
     {
         try {
+            $attributes = (array) \DB::table('products')->where('id', $id)->first();
+            $row = ['id' => $id, 'is_new' => 1];
+            foreach ($attributes as $field => $value) {
+                if (in_array($field, ['id', 'password', 'created_at', 'updated_at', 'deleted_at', 'choosed_at', 'sort', 'color'], true)) {
+                    continue;
+                }
+                if ($value === null || $value === '' || $value === '[]') {
+                    continue;
+                }
+                $row[$field] = $value;
+            }
+            History::saveForObject('products', [$row]);
+            $created = History::where('entity', 'products')
+                ->where('entity_id', $id)
+                ->where('event', 'OBJECT_CREATED')
+                ->orderByDesc('id')
+                ->first();
+            if ($created && !str_contains((string) $created->text, 'Bitrix24')) {
+                $created->text .= ' (синхронизировано из Bitrix24)';
+                $created->saveQuietly();
+            }
+            return;
+        } catch (\Throwable $e) {
+        }
+        try {
             $history = new History([
                 'entity'    => 'products',
                 'entity_id' => $id,

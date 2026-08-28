@@ -175,7 +175,9 @@ class ObjectRelationController extends Controller
             'entity_title' => ($type->title_plural ?? '') ?: (($type->title_singular ?? '') ?: $slug),
             'name' => $this->nameOf($row),
             'created_at' => isset($row->created_at) && $row->created_at
-                ? date('d.m.Y H:i:s', strtotime($row->created_at))
+                ? (date('H:i:s', strtotime($row->created_at)) === '00:00:00'
+                    ? date('d.m.Y', strtotime($row->created_at))
+                    : date('d.m.Y H:i:s', strtotime($row->created_at)))
                 : null,
         ];
     }

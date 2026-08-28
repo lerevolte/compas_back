@@ -743,6 +743,13 @@ class B24EntitySync
                 $model->sum = rtrim(rtrim(number_format((float) $deal['OPPORTUNITY'], 2, '.', ''), '0'), '.');
             }
 
+            if ($isNew && Schema::hasColumn('deals', 'shipment_company_id') && empty($model->shipment_company_id)) {
+                $defaultShipment = $this->defaultShipmentCompanyId();
+                if ($defaultShipment) {
+                    $model->shipment_company_id = $defaultShipment;
+                }
+            }
+
             if ($isNew) {
                 $model->save();
                 $this->writeSyncCreatedHistory('deals', $model->id);
@@ -973,9 +980,18 @@ class B24EntitySync
         $billDate = null;
         if (!empty($inv['DATE_BILL'])) {
             try {
-                $billDate = \Carbon\Carbon::parse($inv['DATE_BILL'])->setTimezone(config('app.timezone', 'Europe/Moscow'));
+                $billDate = \Carbon\Carbon::parse($inv['DATE_BILL'])->setTimezone(config('app.timezone', 'Europe/Moscow'))->startOfDay();
             } catch (\Throwable $e) {
                 $billDate = null;
+            }
+        }
+        if ($billDate && !empty($inv['DATE_INSERT'])) {
+            try {
+                $insertAt = \Carbon\Carbon::parse($inv['DATE_INSERT'])->setTimezone(config('app.timezone', 'Europe/Moscow'));
+                if ($insertAt->isSameDay($billDate)) {
+                    $billDate = $insertAt;
+                }
+            } catch (\Throwable $e) {
             }
         }
         if ($isNew) {
@@ -1294,6 +1310,32 @@ class B24EntitySync
     private function writeSyncCreatedHistory(string $slug, $id): void
     {
         try {
+            $attributes = (array) DB::table($slug)->where('id', $id)->first();
+            $row = ['id' => $id, 'is_new' => 1];
+            foreach ($attributes as $field => $value) {
+                if (in_array($field, ['id', 'password', 'created_at', 'updated_at', 'deleted_at', 'choosed_at', 'sort', 'color'], true)) {
+                    continue;
+                }
+                if ($value === null || $value === '' || $value === '[]') {
+                    continue;
+                }
+                $row[$field] = $value;
+            }
+            History::saveForObject($slug, [$row]);
+            $created = History::where('entity', $slug)
+                ->where('entity_id', $id)
+                ->where('event', 'OBJECT_CREATED')
+                ->orderByDesc('id')
+                ->first();
+            if ($created && !str_contains((string) $created->text, 'Bitrix24')) {
+                $created->text .= ' (синхронизировано из Bitrix24)';
+                $created->saveQuietly();
+            }
+            return;
+        } catch (\Throwable $e) {
+            Log::channel('bitrix24')->warning('entity-sync: created history failed', ['slug' => $slug, 'id' => $id, 'error' => $e->getMessage()]);
+        }
+        try {
             $history = new History([
                 'entity'    => $slug,
                 'entity_id' => $id,
@@ -1304,6 +1346,21 @@ class B24EntitySync
             $history->saveQuietly();
         } catch (\Throwable $e) {
         }
+    }
+
+    private $defaultShipmentCompany = null;
+
+    private function defaultShipmentCompanyId(): ?int
+    {
+        if ($this->defaultShipmentCompany === null) {
+            try {
+                $this->defaultShipmentCompany = (int) DB::table('settings')->where('type', 'b24_default_shipment_company')->value('value');
+            } catch (\Throwable $e) {
+                $this->defaultShipmentCompany = 0;
+            }
+        }
+
+        return $this->defaultShipmentCompany ?: null;
     }
 
     private function writeSyncFieldHistory(string $slug, $id, array $changed): void

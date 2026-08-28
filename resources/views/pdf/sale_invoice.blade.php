@@ -25,9 +25,9 @@
         .right { text-align: right; }
         .center { text-align: center; }
         .nb { white-space: nowrap; }
-        .terms { font-size: 7.6pt; margin-top: 10px; text-align: justify; }
-        .terms p { margin: 0 0 2px; }
-        .sign { margin-top: 12px; border-top: 2px solid #000; padding-top: 8px; }
+        .terms { font-size: 6.4pt; line-height: 1.25; margin-top: 8px; text-align: justify; }
+        .terms p { margin: 0 0 1px; }
+        .sign { margin-top: 8px; border-top: 2px solid #000; padding-top: 6px; }
         .sign td { vertical-align: bottom; padding: 6px 4px 0; }
         .sign .role { width: 16%; font-weight: bold; font-size: 10pt; }
         .sign .line { border-bottom: 1px solid #000; height: 46px; text-align: center; position: relative; }
@@ -126,13 +126,13 @@
         @endforelse
     </table>
 
-    <table class="totals" style="margin-top: 14px;">
+    <table class="totals" style="margin-top: 10px;">
         <tr><td class="k">Итого:</td><td class="v nb">{{ number_format($total, 2, '.', ' ') }} руб.</td></tr>
         <tr><td class="k">В том числе НДС:</td><td class="v nb">{{ $vatTotal > 0 ? number_format($vatTotal, 2, '.', ' ') . ' руб.' : 'Без НДС' }}</td></tr>
         <tr><td class="k">Всего к оплате:</td><td class="v nb" style="font-size: 10pt;">{{ number_format($total, 2, '.', ' ') }} руб.</td></tr>
     </table>
 
-    <p style="margin: 14px 0 0;">Всего наименований {{ max(count($products), 1) }}, на сумму {{ number_format($total, 2, '.', ' ') }} руб.</p>
+    <p style="margin: 8px 0 0;">Всего наименований {{ max(count($products), 1) }}, на сумму {{ number_format($total, 2, '.', ' ') }} руб.</p>
     <p style="margin: 2px 0 0;"><b>{{ $totalWords }}</b></p>
 
     <div class="terms">

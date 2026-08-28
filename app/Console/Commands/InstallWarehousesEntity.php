@@ -38,7 +38,7 @@ class InstallWarehousesEntity extends Command
         'id', 'created_at', 'updated_at', 'name', 'photo', 'service_time',
         'address', 'phone', 'time', 'car_requirements', 'employee_requirements',
         'client_id', 'user_id', 'comment', 'contact', 'weight', 'delivery_price', 'volume',
-        'company_id', 'contact_id',
+        'company_id', 'contact_id', 'shipment_company_id',
     ];
 
     public function handle(): int
@@ -189,7 +189,7 @@ class InstallWarehousesEntity extends Command
                 $arr['module_section_id'] = $this->isNonEmptyJsonArray($arr['module_section_id'] ?? null)
                     ? '['.$moduleSecId.']'
                     : ($arr['module_section_id'] ?? null);
-                if (in_array($row->field, ['company_id', 'contact_id'], true)) {
+                if (in_array($row->field, ['company_id', 'contact_id', 'shipment_company_id'], true)) {
                     $arr['module'] = '';
                     $arr['module_section_id'] = null;
                     $arr['required'] = 0;
@@ -262,6 +262,7 @@ class InstallWarehousesEntity extends Command
             'volume'                => $base(['field' => 'volume', 'type' => 'number', 'title' => 'Объем', 'unit' => 'л', 'sort' => 54]),
             'company_id'            => $base(['field' => 'company_id', 'type' => 'relation', 'title' => 'Компания', 'sort' => 54, 'details' => '{"table":"companies"}', 'relation_table' => 'companies']),
             'contact_id'            => $base(['field' => 'contact_id', 'type' => 'relation', 'title' => 'Контакт', 'sort' => 55, 'is_plural' => 1, 'details' => '{"table":"contacts"}', 'relation_table' => 'contacts']),
+            'shipment_company_id'   => $base(['field' => 'shipment_company_id', 'type' => 'relation', 'title' => 'Компания отгрузки', 'sort' => 56, 'details' => '{"table":"companies"}', 'relation_table' => 'companies']),
         ];
     }
 
@@ -311,11 +312,12 @@ CREATE TABLE IF NOT EXISTS `warehouses` (
   `volume` text DEFAULT NULL,
   `company_id` text DEFAULT NULL,
   `contact_id` text DEFAULT NULL,
+  `shipment_company_id` text DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL);
         $sb = $db->getSchemaBuilder();
-        foreach (['company_id', 'contact_id'] as $col) {
+        foreach (['company_id', 'contact_id', 'shipment_company_id'] as $col) {
             if (!$sb->hasColumn('warehouses', $col)) {
                 $db->statement("ALTER TABLE `warehouses` ADD COLUMN `$col` TEXT NULL");
             }
