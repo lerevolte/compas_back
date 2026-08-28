@@ -15,7 +15,7 @@ class SabyConfigController extends Controller
         'account_number' => 'Номер аккаунта Saby',
         'our_inn' => 'ИНН нашей организации',
         'our_kpp' => 'КПП нашей организации',
-        'number_prefix' => 'Префикс номера накладной',
+        'number_prefix' => 'Префикс номера заказа',
     ];
 
     public function show()
