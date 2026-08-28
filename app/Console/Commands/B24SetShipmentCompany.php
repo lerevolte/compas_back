@@ -12,9 +12,9 @@ class B24SetShipmentCompany extends Command
     public const ENTITIES = ['deals', 'payment_invoices', 'expense_invoices', 'product_returns', 'logistic_tasks', 'addresses', 'warehouses'];
 
     protected $signature = 'b24:set-shipment-company
-        {target=avixo : <tenant_id>}
-        {company_id? : id компании отгрузки по умолчанию (пусто с --show — только показать)}
-        {--backfill : проставить компанию всем записям сущностей с пустой «Компанией отгрузки»}
+        {target=avixo : tenant id портала}
+        {company_id? : id компании отгрузки по умолчанию}
+        {--backfill : проставить компанию всем записям сущностей с пустым значением}
         {--show : показать текущую настройку}';
 
     protected $description = 'Компания отгрузки по умолчанию для заказов из Bitrix24 (+ бэкфилл пустых значений по сущностям портала)';
