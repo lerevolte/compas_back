@@ -3,39 +3,39 @@
 <head>
     <meta charset="utf-8"/>
     <style>
-        @page { margin: 28px 34px; }
-        body { font-family: "DejaVu Sans", sans-serif; font-size: 8.5pt; color: #000; }
+        @page { margin: 16px 26px; }
+        body { font-family: "DejaVu Sans", sans-serif; font-size: 7.4pt; color: #000; }
         table { border-collapse: collapse; width: 100%; }
         .head td { vertical-align: top; }
         .logo { width: 22%; text-align: center; vertical-align: middle !important; }
-        .logo img { max-width: 150px; max-height: 70px; }
-        .bank td { border: 1px solid #000; padding: 3px 5px; vertical-align: top; }
+        .logo img { max-width: 130px; max-height: 56px; }
+        .bank td { border: 1px solid #000; padding: 2px 4px; vertical-align: top; }
         .bank .lbl { font-size: 7.5pt; color: #333; }
-        .title { font-size: 13.5pt; font-weight: bold; margin: 16px 0 6px; }
-        .hr { border-bottom: 2px solid #000; margin: 4px 0 10px; }
-        .party td { padding: 3px 0; vertical-align: top; }
+        .title { font-size: 11.5pt; font-weight: bold; margin: 7px 0 3px; }
+        .hr { border-bottom: 2px solid #000; margin: 2px 0 6px; }
+        .party td { padding: 2px 0; vertical-align: top; }
         .party .k { width: 15%; }
         .party .v { font-weight: bold; }
-        .offer { margin: 10px 0 6px; font-size: 8pt; }
-        .goods th, .goods td { border: 1px solid #000; padding: 3px 5px; }
+        .offer { margin: 4px 0 3px; font-size: 6.6pt; line-height: 1.15; }
+        .goods th, .goods td { border: 1px solid #000; padding: 2px 4px; }
         .goods th { font-weight: bold; }
-        .totals td { padding: 2px 5px; }
+        .totals td { padding: 1px 5px; }
         .totals .k { text-align: right; font-weight: bold; }
         .totals .v { text-align: right; width: 22%; font-weight: bold; }
         .right { text-align: right; }
         .center { text-align: center; }
         .nb { white-space: nowrap; }
-        .terms { font-size: 6.4pt; line-height: 1.25; margin-top: 8px; text-align: justify; }
+        .terms { font-size: 5.4pt; line-height: 1.1; margin-top: 4px; text-align: justify; }
         .terms p { margin: 0 0 1px; }
-        .sign { margin-top: 8px; border-top: 2px solid #000; padding-top: 6px; }
-        .sign td { vertical-align: bottom; padding: 6px 4px 0; }
-        .sign .role { width: 16%; font-weight: bold; font-size: 10pt; }
-        .sign .line { border-bottom: 1px solid #000; height: 46px; text-align: center; position: relative; }
+        .sign { margin-top: 6px; border-top: 2px solid #000; padding-top: 4px; }
+        .sign td { vertical-align: bottom; padding: 3px 4px 0; }
+        .sign .role { width: 16%; font-weight: bold; font-size: 9pt; }
+        .sign .line { border-bottom: 1px solid #000; height: 30px; text-align: center; position: relative; }
         .sign .cap { font-size: 7pt; color: #333; text-align: center; padding-top: 2px; }
         .sign .name { font-weight: bold; text-align: center; }
-        .sign img.s { max-height: 44px; max-width: 120px; }
-        .sign .stamp { width: 20%; text-align: center; vertical-align: middle; }
-        .sign .stamp img { width: 140px; }
+        .sign img.s { max-height: 30px; max-width: 95px; }
+        .sign .stamp { width: 18%; text-align: center; vertical-align: middle; }
+        .sign .stamp img { width: 95px; }
     </style>
 </head>
 <body>
@@ -126,13 +126,13 @@
         @endforelse
     </table>
 
-    <table class="totals" style="margin-top: 10px;">
+    <table class="totals" style="margin-top: 6px;">
         <tr><td class="k">Итого:</td><td class="v nb">{{ number_format($total, 2, '.', ' ') }} руб.</td></tr>
         <tr><td class="k">В том числе НДС:</td><td class="v nb">{{ $vatTotal > 0 ? number_format($vatTotal, 2, '.', ' ') . ' руб.' : 'Без НДС' }}</td></tr>
         <tr><td class="k">Всего к оплате:</td><td class="v nb" style="font-size: 10pt;">{{ number_format($total, 2, '.', ' ') }} руб.</td></tr>
     </table>
 
-    <p style="margin: 8px 0 0;">Всего наименований {{ max(count($products), 1) }}, на сумму {{ number_format($total, 2, '.', ' ') }} руб.</p>
+    <p style="margin: 5px 0 0;">Всего наименований {{ max(count($products), 1) }}, на сумму {{ number_format($total, 2, '.', ' ') }} руб.</p>
     <p style="margin: 2px 0 0;"><b>{{ $totalWords }}</b></p>
 
     <div class="terms">
@@ -157,7 +157,7 @@
             </td>
             <td class="stamp" rowspan="2">@if($stamp)<img src="{{ $stamp }}" alt="">@endif</td>
             <td>
-                <div class="line name" style="height: auto; padding-top: 30px;">{{ $org->director ?? '' }}</div>
+                <div class="line name" style="height: auto; padding-top: 18px;">{{ $org->director ?? '' }}</div>
                 <div class="cap">расшифровка подписи</div>
             </td>
         </tr>
@@ -168,7 +168,7 @@
                 <div class="cap">подпись</div>
             </td>
             <td>
-                <div class="line name" style="height: auto; padding-top: 30px;">{{ $org->accountant ?? '' }}</div>
+                <div class="line name" style="height: auto; padding-top: 18px;">{{ $org->accountant ?? '' }}</div>
                 <div class="cap">расшифровка подписи</div>
             </td>
         </tr>
