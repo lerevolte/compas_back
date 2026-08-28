@@ -176,6 +176,16 @@ class SabyWaybillController extends Controller
         return response()->json(['success' => true]);
     }
 
+    public function presentPublic(SabyWaybill $waybill): array
+    {
+        return $this->present($waybill);
+    }
+
+    public function presentLoadingTaskPublic($taskId): ?array
+    {
+        return $this->presentLoadingTask($taskId);
+    }
+
     private function present(SabyWaybill $waybill): array
     {
         return [

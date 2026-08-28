@@ -445,6 +445,11 @@ Route::middleware([
         Route::get('logistic_tasks/{id}/saby-waybills/route-tasks', [App\Http\Controllers\Api\SabyWaybillController::class, 'routeTasks'])->name('saby.waybills.route_tasks');
         Route::post('saby-waybills/{id}/refresh', [App\Http\Controllers\Api\SabyWaybillController::class, 'refresh'])->name('saby.waybills.refresh');
         Route::delete('saby-waybills/{id}', [App\Http\Controllers\Api\SabyWaybillController::class, 'destroy'])->name('saby.waybills.destroy');
+        Route::get('logistic_tasks/{id}/saby-orders', [App\Http\Controllers\Api\SabyOrderController::class, 'index'])->name('saby.orders');
+        Route::post('logistic_tasks/{id}/saby-orders', [App\Http\Controllers\Api\SabyOrderController::class, 'store'])->name('saby.orders.store');
+        Route::get('logistic_tasks/{id}/saby-orders/check', [App\Http\Controllers\Api\SabyOrderController::class, 'check'])->name('saby.orders.check');
+        Route::post('saby-orders/{id}/refresh', [App\Http\Controllers\Api\SabyOrderController::class, 'refresh'])->name('saby.orders.refresh');
+        Route::delete('saby-orders/{id}', [App\Http\Controllers\Api\SabyOrderController::class, 'destroy'])->name('saby.orders.destroy');
         Route::get('saby/settings', [App\Http\Controllers\Api\SabyConfigController::class, 'show'])->name('saby.settings');
         Route::put('saby/settings', [App\Http\Controllers\Api\SabyConfigController::class, 'update'])->name('saby.settings.update');
         // Настройки полей вкладки «Маршрут списком» (общие на портал).
