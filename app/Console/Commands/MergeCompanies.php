@@ -274,9 +274,10 @@ class MergeCompanies extends Command
             DB::table('histories')->where('entity', 'companies')->where('entity_id', $from)->update(['entity_id' => $to]);
         }
         if ($mentions) {
-            DB::table('histories')->where('text', 'LIKE', "%{$needle}%")->update([
-                'text' => DB::raw("REPLACE(text, '{$needle}', 'data-slug=''companies'' data-id=''{$to}''')"),
-            ]);
+            DB::statement(
+                'UPDATE `histories` SET `text` = REPLACE(`text`, ?, ?) WHERE `text` LIKE ?',
+                [$needle, "data-slug='companies' data-id='{$to}'", "%{$needle}%"]
+            );
         }
     }
 
