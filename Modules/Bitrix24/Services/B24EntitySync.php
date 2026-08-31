@@ -674,6 +674,7 @@ class B24EntitySync
 
             [$products, $deliveryPrice, $allWeight] = $this->fetchDealProducts($dealId, $pre['product_rows'] ?? null);
             if ($products) {
+                $products = \App\Services\ShipmentService::carryShipped($model->products, $products);
                 $model->products = json_encode($products, JSON_UNESCAPED_UNICODE);
             }
             $model->weight = $allWeight;

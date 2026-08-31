@@ -17,6 +17,7 @@ class ObjectRelationController extends Controller
             'source_id' => 'required|integer',
             'target_slug' => 'required|string|max:64',
             'target_id' => 'required|integer',
+            'copy_products' => 'nullable|boolean',
         ]);
 
         if (!ObjectRelation::ready()) {
@@ -32,12 +33,19 @@ class ObjectRelationController extends Controller
             $data['target_id']
         );
 
-        $productsCopied = ObjectRelation::copyProducts(
-            $data['source_slug'],
-            $data['source_id'],
-            $data['target_slug'],
-            $data['target_id']
-        );
+        $productsCopied = false;
+        if (($data['copy_products'] ?? true) !== false) {
+            $productsCopied = ObjectRelation::copyProducts(
+                $data['source_slug'],
+                $data['source_id'],
+                $data['target_slug'],
+                $data['target_id']
+            );
+        }
+
+        if ($data['target_slug'] === \App\Services\ShipmentService::DOCUMENT) {
+            \App\Services\ShipmentService::recalcForDocument((int) $data['target_id']);
+        }
 
         $printGenerated = \App\Services\SaleDocumentService::generateFor(
             $data['target_slug'],
@@ -179,7 +187,25 @@ class ObjectRelationController extends Controller
                     ? date('d.m.Y', strtotime($row->created_at))
                     : date('d.m.Y H:i:s', strtotime($row->created_at)))
                 : null,
+            'products' => $slug === \App\Services\ShipmentService::DOCUMENT ? $this->productsOf($row) : [],
         ];
+    }
+
+    private function productsOf($row): array
+    {
+        $result = [];
+        foreach (\App\Services\ShipmentService::decode($row->products ?? null) as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            $name = \App\Services\ShipmentService::plainName($product['name'] ?? '');
+            if ($name === '') {
+                continue;
+            }
+            $result[] = ['name' => $name, 'count' => $product['count'] ?? 0];
+        }
+
+        return $result;
     }
 
     private function nameOf($row): string

@@ -42,6 +42,12 @@ class Deal extends Model
 
         static::saved(function ($model) {
             $changedKeys = array_keys($model->getChanges());
+            if (in_array('products', $changedKeys, true)) {
+                try {
+                    \App\Services\ShipmentService::recalcForDeal((int) $model->id);
+                } catch (\Throwable $e) {
+                }
+            }
             if (count(array_intersect($changedKeys, ['products', 'sum']))) {
                 try {
                     \App\Services\SaleDocumentService::syncFromDeal($model);

@@ -100,7 +100,7 @@ class SaleDocumentService
             if (!$doc) {
                 continue;
             }
-            if (trim((string) ($doc->b24_id ?? '')) !== '') {
+            if (trim((string) ($doc->b24_id ?? '')) !== '' || $slug === ShipmentService::DOCUMENT) {
                 $queued[] = [$slug, $id];
                 continue;
             }

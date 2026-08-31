@@ -66,6 +66,9 @@ class TaskController extends Controller
             return response()->json(['error' => 404, 'text' => 'Задача не найдена'], 404);
         }
         $object->setProducts($products);
+        if ($slug === \App\Services\ShipmentService::SOURCE) {
+            \App\Services\ShipmentService::recalcForDeal((int) $id);
+        }
 
         $ids = array_values(array_filter(array_map(function ($p) { return (int) $p['id']; }, $products)));
         if (count($ids)) {

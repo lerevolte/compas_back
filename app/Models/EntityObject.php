@@ -2087,6 +2087,7 @@ class EntityObject
                         $data['product_weight'] = $product['weight'];
                         $data['product_volume'] = $product['volume'] ?? 0;
                         $data['product_sum'] = $product['sum'];
+                        $data['product_shipped'] = $product['shipped'] ?? 0;
                         $data['sort'] = $num;
                         $products_objects[] = $data;
                     } elseif(empty($product['id'])) {
@@ -2115,6 +2116,7 @@ class EntityObject
                             'product_weight' => $product['weight'] ?? null,
                             'product_volume' => $product['volume'] ?? 0,
                             'product_sum' => $product['sum'] ?? null,
+                            'product_shipped' => $product['shipped'] ?? 0,
                             'sort' => $num,
                         );
                     }

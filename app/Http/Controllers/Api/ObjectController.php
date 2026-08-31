@@ -335,7 +335,7 @@ class ObjectController extends Controller
         if (in_array($slug, ['logistic_tasks', 'deals', 'payment_invoices', 'expense_invoices', 'product_returns'], true)) {
             $productsPerms = $this->getProductsFieldPerms($user, $entity->id, $isExternalAccess, $slug);
             if ($productsPerms['read']) {
-                $tableKeys = Table::get_order_products();
+                $tableKeys = Table::get_order_products($slug);
                 if (!$productsPerms['write']) {
                     foreach ($tableKeys as $tk => $tableKey) {
                         $tableKeys[$tk]['read_only'] = 1;
@@ -431,7 +431,7 @@ class ObjectController extends Controller
             $productsPerms = $this->getProductsFieldPerms($user, $dataTypeId, !$user);
             if ($productsPerms['read']) {
                 $products = EntityObject::list('products', new Request(['order_id' => $id]));
-                $tableKeys = Table::get_order_products();
+                $tableKeys = Table::get_order_products($slug);
                 if (!$productsPerms['write']) {
                     foreach ($tableKeys as $tk => $tableKey) {
                         $tableKeys[$tk]['read_only'] = 1;
@@ -440,7 +440,7 @@ class ObjectController extends Controller
                 }
             }
         } else {
-            $tableKeys = Table::get_order_products();
+            $tableKeys = Table::get_order_products($slug);
         }
 
         $permissions = [];

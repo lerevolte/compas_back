@@ -601,7 +601,26 @@ class Table
         return $table_columns;
     }
 
-    public static function get_order_products()
+    private static function shippedColumn(int $index): array
+    {
+        return array(
+            'id' => null,
+            'title' => 'Отгружено',
+            'key' => 'product_shipped',
+            'width' => '200px',
+            'enabled' => 1,
+            'sort_order' => '',
+            'type' => 'number',
+            'fixed' => '',
+            'index' => $index,
+            'fixTarget' => '0px',
+            'read_only' => 1,
+            "mask" => "",
+            'is_another_title' => 0
+        );
+    }
+
+    public static function get_order_products($parentSlug = null)
     {
         $user = \Auth::user();
         if(!$user)
@@ -661,7 +680,7 @@ class Table
             $table_columns = collect($tables['order_products']['fields']);
             $table_columns = $table_columns->keyBy('key')->toArray();
             foreach($table_columns as $key => $column) {
-                if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'remnant_name' && $key != 'product_name' && $key != 'product_id' && $key != 'product_price' && $key != 'product_count' && $key != 'product_weight' && $key != 'product_volume' && $key != 'product_sum' && $key != 'iconDrag' && $key != 'iconDelete' || $key == 'price' || $key == 'name' || $key == 'weight' || $key == 'volume' || $key == 'price')
+                if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'remnant_name' && $key != 'product_name' && $key != 'product_id' && $key != 'product_price' && $key != 'product_count' && $key != 'product_weight' && $key != 'product_volume' && $key != 'product_sum' && $key != 'product_shipped' && $key != 'iconDrag' && $key != 'iconDelete' || $key == 'price' || $key == 'name' || $key == 'weight' || $key == 'volume' || $key == 'price')
                     unset($table_columns[$key]);
             }
             foreach ($model_fields as $field) {
@@ -810,6 +829,10 @@ class Table
                     "mask" => "",
                     'is_another_title' => 0
                 );
+            if($parentSlug === 'deals' && !isset($table_columns['product_shipped']))
+                $table_columns['product_shipped'] = self::shippedColumn(count($table_columns));
+            if($parentSlug !== 'deals')
+                unset($table_columns['product_shipped']);
             // if(!isset($table_columns['isChoose'])) {
             //     $table_columns['isChoose'] = array(
             //         "id" => 0,
@@ -990,6 +1013,8 @@ class Table
                 "mask" => "",
                 'is_another_title' => 0
             );
+            if($parentSlug === 'deals')
+                $table_columns['product_shipped'] = self::shippedColumn(6);
 
             if(!isset($table_columns['iconDrag'])) {
                 $table_columns['isChoose'] = array(

@@ -38,6 +38,17 @@ class ExpenseInvoice extends Model
             if ($model->wasRecentlyCreated || count(array_intersect(array_keys($model->getChanges()), self::REGENERATE_FIELDS))) {
                 $model->regeneratePdf();
             }
+            if ($model->wasRecentlyCreated || array_key_exists('products', $model->getChanges())) {
+                \App\Services\ShipmentService::recalcForDocument((int) $model->id);
+            }
+        });
+
+        static::deleted(function ($model) {
+            \App\Services\ShipmentService::recalcForDocument((int) $model->id);
+        });
+
+        static::restored(function ($model) {
+            \App\Services\ShipmentService::recalcForDocument((int) $model->id);
         });
     }
 
@@ -62,6 +73,7 @@ class ExpenseInvoice extends Model
         }
         $this->saveQuietly();
         $this->regeneratePdf();
+        \App\Services\ShipmentService::recalcForDocument((int) $this->id);
     }
 
     public function getHtmlProducts()
