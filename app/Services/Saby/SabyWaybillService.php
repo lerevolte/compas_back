@@ -492,10 +492,11 @@ class SabyWaybillService
             $employeeId = \DB::table('logistic_task_employee')->where('logistic_task_id', $task->id)->value('employee_id');
         }
 
-        if (!$employeeId) {
-            return null;
-        }
+        return $employeeId ? $this->driverByEmployee((int) $employeeId) : null;
+    }
 
+    protected function driverByEmployee(int $employeeId): ?array
+    {
         $employee = Employee::find($employeeId);
         if (!$employee) {
             return null;

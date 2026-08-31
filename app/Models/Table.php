@@ -225,9 +225,10 @@ class Table
         if(!$permissions) {
             $data_types = \DB::table('data_types')->where('enable', 1)->where('hidden', 0)->get()->keyBy('id')->toArray();
             $res = \App\Models\Permission::whereNotNull('entity_id')->where('role_id', \Auth::user()->role_id)->get()->keyBy('entity_id')->toArray();
+            $isAdminRole = (bool) (\Auth::user()->role->is_admin ?? false);
             foreach($data_types as $entity_id => $data_type) {
                 if(!array_key_exists($entity_id, $res)) {
-                    \DB::table('permissions')->insert([['entity_id' => $entity_id, 'role_id' => \Auth::user()->role_id]]);
+                    \DB::table('permissions')->insert([\App\Models\Permission::newEntityRow((int) $entity_id, (int) \Auth::user()->role_id, $isAdminRole)]);
                 }
             }
             $permissions = \Auth::user()->role->permissions()->select([
@@ -360,6 +361,8 @@ class Table
                 };
                 if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->type != 'password' && (!isset($settings[$slug]['perms'][$field->field]['read']) || $settings[$slug]['perms'][$field->field]['read'])) {
                     if($field->type == 'relation' && $field->relation_table && !$settings['models'][$field->relation_table]->enable)
+                        continue;
+                    if($field->type == 'waybills' && !\App\Services\Saby\SabyOrderService::ready())
                         continue;
                     $table_columns[$field->field] = array(
                         'id' => $field->id,
@@ -524,6 +527,8 @@ class Table
                 };
                 if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->type != 'password' && (!isset($settings[$slug]['perms'][$field->field]['read']) || $settings[$slug]['perms'][$field->field]['read'])) {
                     if($field->type == 'relation' && $field->relation_table && !$settings['models'][$field->relation_table]->enable)
+                        continue;
+                    if($field->type == 'waybills' && !\App\Services\Saby\SabyOrderService::ready())
                         continue;
                     $table_columns[$field->field] = array(
                         'id' => $field->id,

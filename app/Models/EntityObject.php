@@ -327,8 +327,12 @@ class EntityObject
         }
 
         $isTrashedCurrent = isset($current->deleted_at) && (bool) $current->deleted_at;
+        $sabyReady = \App\Services\Saby\SabyOrderService::ready();
 
         foreach ($model_fields as $field) {
+            if ($field->type == 'waybills' && !$sabyReady) {
+                continue;
+            }
             if (!$isAuthenticated
                 && !empty($field->roles_read)
                 && !in_array(trim((string) $field->roles_read), ['', '[]', '0'], true)) {
@@ -832,8 +836,12 @@ class EntityObject
             $success_payments = \Modules\Gibdd\Entities\Module::getSuccessPayments();
         }
 
+        $sabyReady = \App\Services\Saby\SabyOrderService::ready();
+
         foreach($model_fields as $field) {
             if(!isset($settings[$slug]['field_data'][$field->field]))
+                continue;
+            if($field->type == 'waybills' && !$sabyReady)
                 continue;
             if(!array_key_exists($field->field, $fields_data) && (!isset($settings[$slug]['perms'][$field->field]['read']) || $settings[$slug]['perms'][$field->field]['read'] || \Auth::user()->is_admin)) {
                 if($field->type == 'relation' && $field->relation_table && !$settings['models'][$field->relation_table]->enable)

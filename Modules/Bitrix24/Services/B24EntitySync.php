@@ -1043,6 +1043,17 @@ class B24EntitySync
             }
         }
 
+        if (Schema::hasColumn('payment_invoices', 'shipment_company_id') && $this->isEmptyRelation($model->shipment_company_id)) {
+            $shipment = null;
+            if ($deal && Schema::hasColumn('deals', 'shipment_company_id') && !$this->isEmptyRelation($deal->shipment_company_id)) {
+                $shipment = $deal->shipment_company_id;
+            }
+            $shipment = $shipment ?: $this->defaultShipmentCompanyId();
+            if ($shipment) {
+                $model->shipment_company_id = $shipment;
+            }
+        }
+
         $changed = false;
         if ($isNew) {
             $model->saveQuietly();
@@ -1395,6 +1406,22 @@ class B24EntitySync
     }
 
     private $defaultShipmentCompany = null;
+
+    private function isEmptyRelation($value): bool
+    {
+        if ($value === null || $value === '' || $value === 0 || $value === '0') {
+            return true;
+        }
+        if (is_array($value)) {
+            return !count(array_filter($value));
+        }
+        $decoded = json_decode((string) $value, true);
+        if (is_array($decoded)) {
+            return !count(array_filter($decoded));
+        }
+
+        return false;
+    }
 
     private function defaultShipmentCompanyId(): ?int
     {

@@ -62,9 +62,10 @@ class RoleController extends Controller
         $res = \App\Models\Permission::whereNotNull('entity_id')->where('role_id', $id)->get()->keyBy('entity_id')->toArray();
 
         $new_permissions_exist = false;
+        $isAdminRole = (bool) ($role->is_admin ?? false);
         foreach($data_types as $entity_id => $entity) {
             if(!array_key_exists($entity_id, $res)) {
-                \DB::table('permissions')->insert([['entity_id' => $entity_id, 'role_id' => $id]]);
+                \DB::table('permissions')->insert([\App\Models\Permission::newEntityRow((int) $entity_id, (int) $id, $isAdminRole)]);
                 $new_permissions_exist = true;
             }
         }

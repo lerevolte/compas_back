@@ -950,9 +950,10 @@ class ObjectController extends Controller
             ->pluck('id');
 
         $toInsert = [];
+        $isAdminRole = (bool) ($user->role->is_admin ?? false);
         foreach ($dataTypes as $id) {
             if (!in_array($id, $existingPermissions)) {
-                $toInsert[] = ['entity_id' => $id, 'role_id' => $user->role_id];
+                $toInsert[] = Permission::newEntityRow((int) $id, (int) $user->role_id, $isAdminRole);
             }
         }
 

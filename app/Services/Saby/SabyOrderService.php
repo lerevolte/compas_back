@@ -16,6 +16,7 @@ class SabyOrderService extends SabyWaybillService
     public const ORDER_DOC_TYPE = 'TransportOrder';
     public const ORDER_REGULATION = 'Заказ на перевозку';
     public const WAYBILL_LOOKBACK_DAYS = 45;
+    public const OPTIONAL_KEYS = ['Водитель', 'ТС'];
 
     public const ORDER_STATES = [
         '0' => 'Черновик — отправьте заказ перевозчику в Saby',
@@ -45,17 +46,33 @@ class SabyOrderService extends SabyWaybillService
         $substitutions = $this->buildOrder($task, $loadingTask, $massMethod);
         $config = $this->client->config();
 
-        $generated = $this->client->call('СБИС.СгенерироватьВложение', [
+        $generate = fn (array $substitution) => $this->client->call('СБИС.СгенерироватьВложение', [
             'Документ' => [
                 'Вложение' => [[
                     'Тип' => 'ЗаказЗаявка',
                     'Подтип' => self::ORDER_KND,
                     'ВерсияФормата' => (string) $config->param('order_format_version', self::FORMAT_VERSION),
                     'ПодверсияФормата' => '',
-                    'Подстановка' => $substitutions,
+                    'Подстановка' => $substitution,
                 ]],
             ],
         ]);
+
+        $optional = array_intersect_key($substitutions, array_flip(self::OPTIONAL_KEYS));
+        try {
+            $generated = $generate($substitutions);
+        } catch (SabyException $e) {
+            if (!count($optional)) {
+                throw $e;
+            }
+            $this->log('warning', 'order generate failed with optional keys, retrying without', [
+                'task_id' => $task->id,
+                'keys' => array_keys($optional),
+                'error' => $e->getMessage(),
+            ]);
+            $substitutions = array_diff_key($substitutions, $optional);
+            $generated = $generate($substitutions);
+        }
 
         $file = $generated['Вложение'][0]['Файл'] ?? null;
         if (!isset($file['ДвоичныеДанные'])) {
@@ -255,7 +272,26 @@ class SabyOrderService extends SabyWaybillService
             $substitutions['ПараметрыТС'] = $vehicle;
         }
 
+        $driver = $this->driver($task) ?: ($route ? $this->routeDriver($route) : null);
+        if ($driver) {
+            $substitutions['Водитель'] = $driver;
+        }
+        $transport = $route ? $this->vehicle($route) : null;
+        if ($transport) {
+            $substitutions['ТС'] = isset($transport[0]) ? $transport : [$transport];
+        }
+
         return $substitutions;
+    }
+
+    protected function routeDriver(Route $route): ?array
+    {
+        $ids = Route::parseIdList($this->attr($route, 'employee_id'));
+        $employeeId = count($ids) ? $ids[0] : null;
+        if (!$employeeId && \Schema::hasTable('route_employee')) {
+            $employeeId = \DB::table('route_employee')->where('route_id', $route->id)->value('employee_id');
+        }
+        return $employeeId ? $this->driverByEmployee((int) $employeeId) : null;
     }
 
     protected function orderParty(Company $company): array
