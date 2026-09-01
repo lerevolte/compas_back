@@ -2063,6 +2063,16 @@ class B24EntitySync
         ), fn ($v) => $v !== ''));
     }
 
+    public static function num($value)
+    {
+        if ($value === null || $value === '') {
+            return 0;
+        }
+        $float = round((float) str_replace(',', '.', (string) $value), 4);
+
+        return $float == (int) $float ? (int) $float : $float;
+    }
+
     private function fetchDealProducts($dealId, ?array $rows = null): array
     {
         $deliveryPrice = 0;
@@ -2080,16 +2090,17 @@ class B24EntitySync
                 $deliveryPrice += (float) ($product['PRICE'] ?? 0) * ($product['QUANTITY'] ?? 0);
             }
             if ($prod) {
-                $qty = $product['QUANTITY'] ?? 0;
-                $weight = $prod->weight ?? 0;
+                $qty = self::num($product['QUANTITY'] ?? 0);
+                $price = self::num($product['PRICE'] ?? 0);
+                $weight = self::num($prod->weight ?? 0);
                 $allWeight += ((float) $weight) * $qty;
                 $products[] = [
                     'id'     => $prod->id,
                     'name'   => B24ProductSync::nameText($prod->name),
-                    'price'  => $product['PRICE'] ?? 0,
+                    'price'  => $price,
                     'count'  => $qty,
                     'weight' => $weight,
-                    'sum'    => ($product['PRICE'] ?? 0) * $qty,
+                    'sum'    => self::num($price * $qty),
                 ];
             } elseif (!$isDelivery) {
                 $deliveryPrice += (float) ($product['PRICE'] ?? 0) * ($product['QUANTITY'] ?? 0);
