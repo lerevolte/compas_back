@@ -51,6 +51,8 @@ class InstallSaleDocsEntities extends Command
 
     public const PRINT_TAB = 'print_docs';
     public const PRINT_TAB_TITLE = 'Печать документов';
+    public const PRINT_TAB_ENTITIES = ['logistic_tasks', 'pickups'];
+    public const PRINT_TAB_REMOVE_FROM = ['deals'];
 
     public const BANK_FIELD = 'bank_requisite_id';
     public const BANK_FIELD_TITLE = 'Банковские реквизиты';
@@ -378,7 +380,29 @@ SQL);
 
     private function ensurePrintTab($db, string $label): void
     {
-        $menus = $db->table('settings')->where(['type' => 'menu', 'entity' => 'deals'])->get();
+        foreach (self::PRINT_TAB_REMOVE_FROM as $entity) {
+            foreach ($db->table('settings')->where(['type' => 'menu', 'entity' => $entity])->get() as $menu) {
+                $tabs = json_decode($menu->value, true);
+                if (!is_array($tabs) || !collect($tabs)->contains(fn ($tab) => ($tab['tab'] ?? null) === self::PRINT_TAB)) {
+                    continue;
+                }
+                $tabs = array_values(array_filter($tabs, fn ($tab) => ($tab['tab'] ?? null) !== self::PRINT_TAB));
+                $db->table('settings')->where('id', $menu->id)->update(['value' => json_encode($tabs, JSON_UNESCAPED_SLASHES)]);
+                $this->line("    [{$label}] {$entity}: вкладка «" . self::PRINT_TAB_TITLE . "» убрана");
+            }
+        }
+
+        foreach (self::PRINT_TAB_ENTITIES as $entity) {
+            if (!$db->table('data_types')->where('slug', $entity)->exists()) {
+                continue;
+            }
+            $this->ensurePrintTabFor($db, $label, $entity);
+        }
+    }
+
+    private function ensurePrintTabFor($db, string $label, string $entity): void
+    {
+        $menus = $db->table('settings')->where(['type' => 'menu', 'entity' => $entity])->get();
         foreach ($menus as $menu) {
             $tabs = json_decode($menu->value, true);
             if (!is_array($tabs)) {
@@ -405,7 +429,7 @@ SQL);
             $db->table('settings')->where('id', $menu->id)->update([
                 'value' => json_encode($tabs, JSON_UNESCAPED_SLASHES),
             ]);
-            $this->line("    [{$label}] deals: добавлена вкладка «" . self::PRINT_TAB_TITLE . "»");
+            $this->line("    [{$label}] {$entity}: добавлена вкладка «" . self::PRINT_TAB_TITLE . "»");
         }
     }
 

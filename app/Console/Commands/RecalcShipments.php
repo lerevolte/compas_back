@@ -11,9 +11,9 @@ class RecalcShipments extends Command
 {
     protected $signature = 'shipments:recalc
         {target=avixo : all-tenants | <tenant_id>}
-        {--deal= : пересчитать только один заказ}';
+        {--source= : пересчитать только один объект, формат slug:id (например logistic_tasks:2119)}';
 
-    protected $description = 'Пересчитать колонку «Отгружено» в составе заказов покупателей по связанным расходным накладным';
+    protected $description = 'Пересчитать колонку «Отгружено» в составе задач логистики и самовывозов по связанным расходным накладным';
 
     public function handle(): int
     {
@@ -54,23 +54,27 @@ class RecalcShipments extends Command
             return;
         }
 
-        $dealId = (int) $this->option('deal');
-        $dealIds = $dealId
-            ? [$dealId]
-            : ObjectRelation::where('source_slug', ShipmentService::SOURCE)
+        $only = (string) $this->option('source');
+        if ($only !== '' && str_contains($only, ':')) {
+            [$slug, $id] = explode(':', $only, 2);
+            $sources = [[$slug, (int) $id]];
+        } else {
+            $sources = ObjectRelation::whereIn('source_slug', ShipmentService::SOURCES)
                 ->where('target_slug', ShipmentService::DOCUMENT)
-                ->distinct()
-                ->pluck('source_id')
-                ->map(fn ($id) => (int) $id)
+                ->get(['source_slug', 'source_id'])
+                ->map(fn ($r) => [(string) $r->source_slug, (int) $r->source_id])
+                ->unique(fn ($r) => $r[0] . ':' . $r[1])
+                ->values()
                 ->all();
+        }
 
         $changed = 0;
-        foreach ($dealIds as $id) {
-            if (ShipmentService::recalcForDeal($id)) {
+        foreach ($sources as [$slug, $id]) {
+            if (ShipmentService::recalcForSource($slug, $id)) {
                 $changed++;
             }
         }
 
-        $this->info("  [{$label}] заказов со связями: " . count($dealIds) . ", обновлено: {$changed}");
+        $this->info("  [{$label}] объектов со связями: " . count($sources) . ", обновлено: {$changed}");
     }
 }

@@ -39,6 +39,11 @@ class TaskController extends Controller
         return $this->saveProductsFor('product_returns', \App\Models\ProductReturn::class, $id, $request);
     }
 
+    public function set_pickup_products($id, Request $request)
+    {
+        return $this->saveProductsFor('pickups', \App\Models\Pickup::class, $id, $request);
+    }
+
     private function saveProductsFor($slug, $class, $id, Request $request)
     {
         $user = Auth::user();
@@ -66,8 +71,8 @@ class TaskController extends Controller
             return response()->json(['error' => 404, 'text' => 'Задача не найдена'], 404);
         }
         $object->setProducts($products);
-        if ($slug === \App\Services\ShipmentService::SOURCE) {
-            \App\Services\ShipmentService::recalcForDeal((int) $id);
+        if (\App\Services\ShipmentService::isSource($slug)) {
+            \App\Services\ShipmentService::recalcForSource($slug, (int) $id);
         }
 
         $ids = array_values(array_filter(array_map(function ($p) { return (int) $p['id']; }, $products)));

@@ -389,7 +389,6 @@ class InstallSabyModule extends Command
         'logistic_tasks' => ['saby_waybills', 'shipment_company_id', 'company_id', 'contact_id', 'employee_id', 'address', 'products', 'weight', 'delivery_date'],
         'routes' => ['company_id', 'car_id'],
         'companies' => ['name', 'inn', 'kpp', 'address'],
-        'employees' => ['name', 'phone', 'inn', 'snils', 'driver_license'],
         'cars' => ['name', 'brand', 'car_model', 'number', 'ownership_type', 'vehicle_type', 'trailer_number', 'osago_mark', 'osago_model', 'weight_max', 'volume_max'],
         'products' => ['name', 'packing_method', 'tare_type', 'weight', 'volume'],
         'contacts' => ['name', 'phones', 'inn'],
@@ -400,6 +399,8 @@ class InstallSabyModule extends Command
     private const OBSOLETE_FIELDS = [
         'routes' => ['receiver_company_id', 'request_number', 'request_date', 'saby_waybills'],
     ];
+
+    private const DETACH_ENTITIES = ['employees'];
 
     private const OWNERSHIP_TYPES = [
         ['value' => '1', 'label' => 'Собственность'],
@@ -614,8 +615,65 @@ class InstallSabyModule extends Command
         }
     }
 
+    private function detachEntities(ConnectionInterface $db, string $label): void
+    {
+        foreach (self::DETACH_ENTITIES as $entity) {
+            $sectionIds = $db->table('field_sections')
+                ->where('page', $entity)
+                ->where('module', self::MODULE_SLUG)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            $typeId = $db->table('data_types')->where('slug', $entity)->value('id');
+            $rows = $typeId
+                ? $db->table('data_rows')->where('data_type_id', $typeId)->where('module', 'LIKE', '%' . self::MODULE_SLUG . '%')->get(['id', 'module', 'module_section_id'])
+                : collect();
+            foreach ($rows as $row) {
+                $modules = array_values(array_filter($this->decodeJsonList($row->module), fn ($m) => $m !== self::MODULE_SLUG));
+                $sections = array_values(array_filter(array_map('intval', $this->decodeJsonList($row->module_section_id)), fn ($s) => !in_array($s, $sectionIds, true)));
+                $db->table('data_rows')->where('id', $row->id)->update([
+                    'module' => $modules ? json_encode($modules) : '',
+                    'module_section_id' => $sections ? json_encode($sections) : null,
+                ]);
+            }
+
+            if ($sectionIds) {
+                $db->table('section_fields_sort')->whereIn('section_id', $sectionIds)->delete();
+                $db->table('field_sections')->whereIn('id', $sectionIds)->delete();
+            }
+
+            foreach ($db->table('settings')->where(['type' => 'menu', 'entity' => $entity])->get() as $menu) {
+                $tabs = json_decode($menu->value, true);
+                if (!is_array($tabs)) {
+                    continue;
+                }
+                $changed = false;
+                foreach ($tabs as $k => $tab) {
+                    if (($tab['tab'] ?? null) !== 'modules' || !isset($tab['childs'])) {
+                        continue;
+                    }
+                    $childs = array_values(array_filter($tab['childs'], fn ($c) => ($c['alias'] ?? null) !== self::MODULE_SLUG));
+                    if (count($childs) !== count($tab['childs'])) {
+                        $tabs[$k]['childs'] = $childs;
+                        $changed = true;
+                    }
+                }
+                if ($changed) {
+                    $db->table('settings')->where('id', $menu->id)->update(['value' => json_encode($tabs, JSON_UNESCAPED_SLASHES)]);
+                }
+            }
+
+            if ($rows->count() || $sectionIds) {
+                $db->table('local_cache')->where('url', "fields/{$entity}")->update(['updated_at' => now()]);
+                $this->line("      [{$entity}] модуль отвязан (полей: {$rows->count()}, секций: " . count($sectionIds) . ')');
+            }
+        }
+    }
+
     private function installModuleTab(ConnectionInterface $db, string $label): void
     {
+        $this->detachEntities($db, $label);
         $now = now();
 
         if (!$db->table('modules')->where('slug', self::MODULE_SLUG)->exists()) {

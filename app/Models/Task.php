@@ -27,6 +27,16 @@ class Task extends Model
                 $model->user_id = $user->id;
        });
 
+       static::saved(function($model)
+       {
+            if (array_key_exists('products', $model->getChanges())) {
+                try {
+                    \App\Services\ShipmentService::recalcForSource('logistic_tasks', (int) $model->id);
+                } catch (\Throwable $e) {
+                }
+            }
+       });
+
        static::saving(function($model)
        {
             if (is_array($model->employee_id)) {

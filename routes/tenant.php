@@ -438,6 +438,7 @@ Route::middleware([
         Route::get('routes/{id}/task_filter', [App\Http\Controllers\Api\RouteController::class, 'task_filter'])->name('routes.task_filter');
         Route::post('object-relations', [App\Http\Controllers\Api\ObjectRelationController::class, 'store'])->name('object_relations.store');
         Route::get('object-relations/{slug}/{id}', [App\Http\Controllers\Api\ObjectRelationController::class, 'tree'])->name('object_relations.tree');
+        Route::get('object-relations/{slug}/{id}/products-check', [App\Http\Controllers\Api\ObjectRelationController::class, 'productsCheck'])->name('object_relations.products_check');
         Route::get('object-relations/{slug}/{id}/print-documents', [App\Http\Controllers\Api\ObjectRelationController::class, 'printDocuments'])->name('object_relations.print_documents');
         Route::get('logistic_tasks/{id}/saby-waybills', [App\Http\Controllers\Api\SabyWaybillController::class, 'index'])->name('saby.waybills');
         Route::post('logistic_tasks/{id}/saby-waybills', [App\Http\Controllers\Api\SabyWaybillController::class, 'store'])->name('saby.waybills.store');
@@ -482,6 +483,11 @@ Route::middleware([
         Route::put(
             'product_returns/{id}/set_products',
             [App\Http\Controllers\Api\TaskController::class, 'set_product_return_products']
+        );
+
+        Route::put(
+            'pickups/{id}/set_products',
+            [App\Http\Controllers\Api\TaskController::class, 'set_pickup_products']
         );
 
         Route::get(

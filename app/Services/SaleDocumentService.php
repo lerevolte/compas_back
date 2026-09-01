@@ -42,8 +42,14 @@ class SaleDocumentService
 
     public static function generateFor(string $targetSlug, $targetId, string $sourceSlug, $sourceId): bool
     {
-        if (!isset(self::TARGETS[$targetSlug]) || $sourceSlug !== 'deals') {
+        if (!isset(self::TARGETS[$targetSlug])) {
             return false;
+        }
+        if ($sourceSlug !== 'deals') {
+            if (!in_array($sourceSlug, ShipmentService::SOURCES, true)) {
+                return false;
+            }
+            return self::run($targetSlug, (int) $targetId, self::dealIdFor($targetSlug, (int) $targetId));
         }
 
         return self::run($targetSlug, (int) $targetId, (int) $sourceId);
@@ -147,12 +153,28 @@ class SaleDocumentService
             return [];
         }
 
-        return ObjectRelation::where('source_slug', 'deals')
+        $direct = ObjectRelation::where('source_slug', 'deals')
             ->whereIn('source_id', $dealIds)
             ->whereIn('target_slug', array_keys(self::TARGETS))
             ->get(['target_slug', 'target_id'])
             ->map(fn ($r) => [(string) $r->target_slug, (int) $r->target_id])
             ->all();
+
+        $middle = ObjectRelation::where('source_slug', 'deals')
+            ->whereIn('source_id', $dealIds)
+            ->whereIn('target_slug', ShipmentService::SOURCES)
+            ->get(['target_slug', 'target_id']);
+        $nested = [];
+        foreach ($middle->groupBy('target_slug') as $slug => $items) {
+            $nested = array_merge($nested, ObjectRelation::where('source_slug', $slug)
+                ->whereIn('source_id', $items->pluck('target_id')->map(fn ($v) => (int) $v)->all())
+                ->whereIn('target_slug', array_keys(self::TARGETS))
+                ->get(['target_slug', 'target_id'])
+                ->map(fn ($r) => [(string) $r->target_slug, (int) $r->target_id])
+                ->all());
+        }
+
+        return array_values(array_unique(array_merge($direct, $nested), SORT_REGULAR));
     }
 
     public static function docsForCompany(int $companyId): array
@@ -247,6 +269,23 @@ class SaleDocumentService
         $dealId = ObjectRelation::where('source_slug', 'deals')
             ->where('target_slug', $slug)
             ->where('target_id', $id)
+            ->orderBy('id')
+            ->value('source_id');
+        if ($dealId) {
+            return (int) $dealId;
+        }
+
+        $parent = ObjectRelation::whereIn('source_slug', ShipmentService::SOURCES)
+            ->where('target_slug', $slug)
+            ->where('target_id', $id)
+            ->orderBy('id')
+            ->first(['source_slug', 'source_id']);
+        if (!$parent) {
+            return null;
+        }
+        $dealId = ObjectRelation::where('source_slug', 'deals')
+            ->where('target_slug', $parent->source_slug)
+            ->where('target_id', (int) $parent->source_id)
             ->orderBy('id')
             ->value('source_id');
 

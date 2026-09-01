@@ -332,7 +332,7 @@ class ObjectController extends Controller
         $products = [];
         $tableKeys = [];
 
-        if (in_array($slug, ['logistic_tasks', 'deals', 'payment_invoices', 'expense_invoices', 'product_returns'], true)) {
+        if (in_array($slug, ['logistic_tasks', 'pickups', 'deals', 'payment_invoices', 'expense_invoices', 'product_returns'], true)) {
             $productsPerms = $this->getProductsFieldPerms($user, $entity->id, $isExternalAccess, $slug);
             if ($productsPerms['read']) {
                 $tableKeys = Table::get_order_products($slug);

@@ -57,14 +57,74 @@ class ObjectRelationController extends Controller
         return response()->json(['ok' => true, 'products_copied' => $productsCopied, 'b24_copied' => $b24Copied, 'print_generated' => $printGenerated]);
     }
 
+    public function productsCheck($slug, $id)
+    {
+        $id = (int) $id;
+        $empty = ['parent' => null, 'limits' => [], 'usage' => []];
+        if (!ObjectRelation::ready()) {
+            return response()->json($empty);
+        }
+
+        $usage = [];
+        $childSlugs = \App\Services\ShipmentService::childSlugsOf($slug);
+        if (count($childSlugs)) {
+            $used = \App\Services\ShipmentService::usageByChildren($slug, $id, $childSlugs);
+            $row = Schema::hasTable($slug) ? DB::table($slug)->where('id', $id)->first() : null;
+            $products = \App\Services\ShipmentService::decode($row->products ?? null);
+            $services = \App\Services\ShipmentService::serviceIds(array_map(fn ($p) => $p['id'] ?? 0, array_filter($products, 'is_array')));
+            foreach ($products as $product) {
+                if (!is_array($product)) {
+                    continue;
+                }
+                $usage[] = [
+                    'id' => (int) ($product['id'] ?? 0) ?: null,
+                    'name' => \App\Services\ShipmentService::plainName($product['name'] ?? ''),
+                    'is_service' => in_array((int) ($product['id'] ?? 0), $services, true),
+                    'count' => (float) ($product['count'] ?? 0),
+                    'used' => \App\Services\ShipmentService::lookup($used, $product),
+                ];
+            }
+        }
+
+        $parent = \App\Services\ShipmentService::parentOf($slug, $id);
+        $limits = [];
+        $parentInfo = null;
+        if ($parent) {
+            [$parentSlug, $parentId] = $parent;
+            $parentInfo = $this->objectInfo($parentSlug, $parentId);
+            if ($parentInfo) {
+                unset($parentInfo['products']);
+            }
+            $siblingSlugs = \App\Services\ShipmentService::childSlugsOf($parentSlug);
+            $usedOthers = \App\Services\ShipmentService::usageByChildren($parentSlug, $parentId, $siblingSlugs, [$slug, $id]);
+            $row = DB::table($parentSlug)->where('id', $parentId)->first();
+            $products = \App\Services\ShipmentService::decode($row->products ?? null);
+            $services = \App\Services\ShipmentService::serviceIds(array_map(fn ($p) => $p['id'] ?? 0, array_filter($products, 'is_array')));
+            foreach ($products as $product) {
+                if (!is_array($product)) {
+                    continue;
+                }
+                $limits[] = [
+                    'id' => (int) ($product['id'] ?? 0) ?: null,
+                    'name' => \App\Services\ShipmentService::plainName($product['name'] ?? ''),
+                    'is_service' => in_array((int) ($product['id'] ?? 0), $services, true),
+                    'count' => (float) ($product['count'] ?? 0),
+                    'price' => (float) ($product['price'] ?? 0),
+                    'used_others' => \App\Services\ShipmentService::lookup($usedOthers, $product),
+                ];
+            }
+        }
+
+        return response()->json(['parent' => $parentInfo, 'limits' => $limits, 'usage' => $usage]);
+    }
+
     public function printDocuments($slug, $id)
     {
         if (!ObjectRelation::ready()) {
             return response()->json(['data' => []]);
         }
 
-        $root = $this->rootOf($slug, (int) $id);
-        $tree = $this->buildNode($root['slug'], $root['id'], (int) $id, $slug, []);
+        $tree = $this->buildNode($slug, (int) $id, (int) $id, $slug, []);
 
         $flat = [];
         $walk = function ($node) use (&$walk, &$flat) {
@@ -187,7 +247,7 @@ class ObjectRelationController extends Controller
                     ? date('d.m.Y', strtotime($row->created_at))
                     : date('d.m.Y H:i:s', strtotime($row->created_at)))
                 : null,
-            'products' => $slug === \App\Services\ShipmentService::DOCUMENT ? $this->productsOf($row) : [],
+            'products' => in_array($slug, array_merge([\App\Services\ShipmentService::DOCUMENT], \App\Services\ShipmentService::SOURCES), true) ? $this->productsOf($row) : [],
         ];
     }
 

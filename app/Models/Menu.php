@@ -102,7 +102,7 @@ class Menu
                 unset($menu[$k]);
             } elseif(isset($menu_item['has_roles_read']) && $menu_item['has_roles_read'] && isset($menu_item['roles_read']) && count($menu_item['roles_read']) && !in_array($user->role_id, $menu_item['roles_read']) && !$user->is_admin) {
                 unset($menu[$k]);
-            } elseif(in_array($slug, ['logistic_tasks', 'deals', 'payment_invoices', 'expense_invoices', 'product_returns']) && isset($menu_item['tab']) && $menu_item['tab'] == 'products' && !$user->is_admin
+            } elseif(in_array($slug, ['logistic_tasks', 'pickups', 'deals', 'payment_invoices', 'expense_invoices', 'product_returns']) && isset($menu_item['tab']) && $menu_item['tab'] == 'products' && !$user->is_admin
                 && isset($s[$slug]['perms']['products']['read']) && !$s[$slug]['perms']['products']['read']) {
                 unset($menu[$k]);
             } elseif(isset($menu_item['tab']) && $menu_item['tab'] == 'modules') {
