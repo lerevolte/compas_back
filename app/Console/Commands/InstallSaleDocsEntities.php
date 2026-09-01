@@ -47,7 +47,7 @@ class InstallSaleDocsEntities extends Command
         ],
     ];
 
-    public const PRODUCTS_TAB_ENTITIES = ['expense_invoices', 'product_returns'];
+    public const PRODUCTS_TAB_ENTITIES = ['payment_invoices', 'expense_invoices', 'product_returns'];
 
     public const PRINT_TAB = 'print_docs';
     public const PRINT_TAB_TITLE = 'Печать документов';
