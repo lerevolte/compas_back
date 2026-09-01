@@ -85,17 +85,19 @@ class AuthController extends Controller
                     break;
                 }
             }
-            return response()->json([
-                'code' => 200, 
-                'token' => $token, 
-                'url' => isset($first_active_menu['is_group']) && $first_active_menu['is_group'] ? 
-                            (isset($first_active_menu['children'][0]['link']) ? 
-                                $first_active_menu['children'][0]['link'] 
+            $response = response()->json([
+                'code' => 200,
+                'token' => $token,
+                'url' => isset($first_active_menu['is_group']) && $first_active_menu['is_group'] ?
+                            (isset($first_active_menu['children'][0]['link']) ?
+                                $first_active_menu['children'][0]['link']
                                 : null
                             ) : (isset($first_active_menu) ? $first_active_menu['link'] : null)
                         ,
                 'group' => isset($first_active_menu['is_group']) && $first_active_menu['is_group'] ? $first_active_menu['id'] : null
-            ])->withCookie(cookie('user_id', $user->id, 60))->withCookie(cookie('account_id', tenant('id'), 60));
+            ]);
+
+            return $this->withAppCookies($response, $user->id, tenant('id'));
         }
         if($user && $user->password && $user->password != Hash::check($request->password, $user->password)) {
             throw new HttpResponseException(response()->json([
@@ -117,6 +119,40 @@ class AuthController extends Controller
         
     }
 
+    public const APP_COOKIE_MINUTES = 2628000;
+
+    private function withAppCookies($response, $userId, $accountId)
+    {
+        $domain = $this->appCookieDomain();
+        foreach (['user_id' => $userId, 'account_id' => $accountId] as $name => $value) {
+            if ($value === null || $value === '') {
+                continue;
+            }
+            $response = $response->withCookie(cookie($name, (string) $value, self::APP_COOKIE_MINUTES, '/', $domain, null, false, false, 'lax'));
+        }
+
+        return $response;
+    }
+
+    private function appCookieDomain(): ?string
+    {
+        $host = request()->getHost();
+        foreach ((array) config('tenancy.central_domains', []) as $central) {
+            $central = ltrim((string) $central, '.');
+            if ($central === '' || $central === 'localhost' || filter_var($central, FILTER_VALIDATE_IP)) {
+                continue;
+            }
+            if ($host === $central || str_ends_with($host, '.' . $central)) {
+                $parts = explode('.', $central);
+                $root = implode('.', array_slice($parts, -2));
+
+                return '.' . $root;
+            }
+        }
+
+        return null;
+    }
+
     public function loginByUser($id)
     {
         if(Auth::user()->isAdmin()) {
@@ -135,17 +171,19 @@ class AuthController extends Controller
                     break;
                 }
             }
-            return response()->json([
-                'code' => 200, 
-                'token' => $token, 
-                'url' => isset($first_active_menu['is_group']) && $first_active_menu['is_group'] ? 
-                            (isset($first_active_menu['children'][0]['link']) ? 
-                                $first_active_menu['children'][0]['link'] 
+            $response = response()->json([
+                'code' => 200,
+                'token' => $token,
+                'url' => isset($first_active_menu['is_group']) && $first_active_menu['is_group'] ?
+                            (isset($first_active_menu['children'][0]['link']) ?
+                                $first_active_menu['children'][0]['link']
                                 : null
                             ) : $first_active_menu['link']
                         ,
                 'group' => isset($first_active_menu['is_group']) && $first_active_menu['is_group'] ? $first_active_menu['id'] : null
             ]);
+
+            return $this->withAppCookies($response, $user->id, tenant('id'));
         }
 
         return response()->json(['code' => 403, 'message' => 'Доступ запрещен']);
@@ -170,18 +208,22 @@ class AuthController extends Controller
                     }
                 }
                 return [
-                    'code' => 200, 
-                    'token' => $token, 
-                    'url' => isset($first_active_menu['is_group']) && $first_active_menu['is_group'] ? 
-                                (isset($first_active_menu['children'][0]['link']) ? 
-                                    $first_active_menu['children'][0]['link'] 
+                    'code' => 200,
+                    'token' => $token,
+                    'user_id' => $user->id,
+                    'url' => isset($first_active_menu['is_group']) && $first_active_menu['is_group'] ?
+                                (isset($first_active_menu['children'][0]['link']) ?
+                                    $first_active_menu['children'][0]['link']
                                     : null
                                 ) : $first_active_menu['link']
                             ,
                    'group' => isset($first_active_menu['is_group']) && $first_active_menu['is_group'] ? $first_active_menu['id'] : null
                 ];
             });
-            return response()->json($res);
+            $userId = $res['user_id'];
+            unset($res['user_id']);
+
+            return $this->withAppCookies(response()->json($res), $userId, $tenant->id);
         };
 
         return response()->json(['code' => 403, 'message' => 'Доступ запрещен']);

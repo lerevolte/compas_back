@@ -30,6 +30,9 @@ class GeopositionController extends Controller
             return response()->json(['ok' => true]);
         }
 
+        $cookieTenantId = $request->cookie('account_id');
+        $cookieUserId = $request->cookie('user_id');
+
         $byTenant = [];
         $skipped = [];
         foreach ($points as $point) {
@@ -37,8 +40,10 @@ class GeopositionController extends Controller
                 $skipped[] = 'point is not array';
                 continue;
             }
-            $tenantId = $point['accountId'] ?? null;
-            $userId = $point['userId'] ?? null;
+            $tenantId = ($point['accountId'] ?? null) ?: $cookieTenantId;
+            $userId = ($point['userId'] ?? null) ?: $cookieUserId;
+            $point['accountId'] = $tenantId;
+            $point['userId'] = $userId;
             $location = $point['location'] ?? null;
             if (!$tenantId || !$userId || !is_array($location)) {
                 $skipped[] = 'missing fields: '.implode(',', array_filter([
