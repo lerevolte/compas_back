@@ -299,16 +299,27 @@ class ShipmentService
                 $price = (float) ($product['price'] ?? 0);
                 $limitCount = (float) ($limit['count'] ?? 0);
                 $limitPrice = (float) ($limit['price'] ?? 0);
-                if (!in_array((int) ($limit['id'] ?? 0), $services, true)) {
+                if (in_array((int) ($limit['id'] ?? 0), $services, true)) {
+                    if ($limitPrice > 0) {
+                        $lineTotal = $price * ($count > 0 ? $count : 1);
+                        $limitTotal = $limitPrice * ($limitCount > 0 ? $limitCount : 1);
+                        $othersPrice = self::lookupPrice($usedOthers, $limit);
+                        if ($lineTotal + $othersPrice > $limitTotal + 0.0001) {
+                            $errors[] = "«{$name}»: стоимость услуги {$format($lineTotal)}"
+                                . ($othersPrice > 0 ? " + в других документах {$format($othersPrice)}" : '')
+                                . " — превышает {$format($limitTotal)} в основании";
+                        }
+                    }
+                } else {
                     $others = self::lookup($usedOthers, $limit);
                     if ($count + $others > $limitCount + 0.0001) {
                         $errors[] = "«{$name}»: в основании {$format($limitCount)} шт, здесь {$format($count)} шт"
                             . ($others > 0 ? " + в других документах {$format($others)} шт" : '')
                             . " — превышение на {$format($count + $others - $limitCount)} шт";
                     }
-                }
-                if ($limitPrice > 0 && $price > $limitPrice + 0.0001) {
-                    $errors[] = "«{$name}»: цена {$format($price)} выше цены в основании {$format($limitPrice)}";
+                    if ($limitPrice > 0 && $price > $limitPrice + 0.0001) {
+                        $errors[] = "«{$name}»: цена {$format($price)} выше цены в основании {$format($limitPrice)}";
+                    }
                 }
             }
 
