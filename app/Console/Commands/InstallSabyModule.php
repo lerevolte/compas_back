@@ -390,7 +390,7 @@ class InstallSabyModule extends Command
         'routes' => ['company_id', 'car_id'],
         'companies' => ['name', 'inn', 'kpp', 'address'],
         'cars' => ['name', 'brand', 'car_model', 'number', 'ownership_type', 'vehicle_type', 'trailer_number', 'osago_mark', 'osago_model', 'weight_max', 'volume_max'],
-        'products' => ['name', 'packing_method', 'tare_type', 'weight', 'volume'],
+        'products' => ['name', 'product_type', 'packing_method', 'tare_type', 'weight', 'volume'],
         'contacts' => ['name', 'phones', 'inn'],
         'addresses' => ['company_id', 'contact_id', 'address', 'weight'],
         'warehouses' => ['company_id', 'contact_id', 'address', 'weight'],

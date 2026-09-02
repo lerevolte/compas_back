@@ -42,7 +42,7 @@ class InstallAddressesEntity extends Command
         'id', 'created_at', 'updated_at', 'name', 'photo', 'service_time',
         'address', 'phone', 'time', 'car_requirements', 'employee_requirements',
         'client_id', 'user_id', 'comment', 'contact', 'weight', 'delivery_price',
-        'company_id', 'contact_id', 'shipment_company_id',
+        'company_id', 'contact_id', 'shipment_company_id', 'products',
     ];
 
     public function handle(): int
@@ -280,10 +280,11 @@ class InstallAddressesEntity extends Command
             'company_id'            => $base(['field' => 'company_id', 'type' => 'relation', 'title' => 'Компания', 'sort' => 54, 'details' => '{"table":"companies"}', 'relation_table' => 'companies']),
             'contact_id'            => $base(['field' => 'contact_id', 'type' => 'relation', 'title' => 'Контакт', 'sort' => 55, 'is_plural' => 1, 'details' => '{"table":"contacts"}', 'relation_table' => 'contacts']),
             'shipment_company_id'   => $base(['field' => 'shipment_company_id', 'type' => 'relation', 'title' => 'Компания отгрузки', 'sort' => 56, 'details' => '{"table":"companies"}', 'relation_table' => 'companies']),
+            'products'              => $base(['field' => 'products', 'type' => 'json', 'title' => 'Состав', 'sort' => 57, 'only_read' => 1]),
         ];
     }
 
-    /** Меню карточки сущности (как у logistic_tasks, без вкладки «Товары и услуги»). */
+    /** Меню карточки сущности (как у logistic_tasks). */
     private function menuJson(): string
     {
         return json_encode([
@@ -296,6 +297,7 @@ class InstallAddressesEntity extends Command
                 'component' => ['name' => 'AsyncComponentWrapper'],
                 'roles_read' => [], 'has_roles_read' => false,
             ],
+            ['title' => 'Товары и услуги', 'tab' => 'products', 'sort' => 2, 'enabled' => 1, 'id' => 2],
             ['title' => 'История изменений', 'tab' => 'history', 'sort' => 3, 'enabled' => true, 'id' => 3, 'has_roles_read' => false, 'roles_read' => null],
         ], JSON_UNESCAPED_SLASHES);
     }
@@ -331,6 +333,7 @@ CREATE TABLE IF NOT EXISTS `addresses` (
   `company_id` text DEFAULT NULL,
   `contact_id` text DEFAULT NULL,
   `shipment_company_id` text DEFAULT NULL,
+  `products` longtext DEFAULT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL);
@@ -339,6 +342,9 @@ SQL);
             if (!$sb->hasColumn('addresses', $col)) {
                 $db->statement("ALTER TABLE `addresses` ADD COLUMN `$col` TEXT NULL");
             }
+        }
+        if (!$sb->hasColumn('addresses', 'products')) {
+            $db->statement('ALTER TABLE `addresses` ADD COLUMN `products` LONGTEXT NULL');
         }
     }
 }

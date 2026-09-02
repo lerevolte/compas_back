@@ -102,7 +102,7 @@ class ShipmentService
 
     public static function shippedBySource(string $slug, int $id): array
     {
-        $result = ['id' => [], 'name' => []];
+        $result = ['id' => [], 'name' => [], 'price_id' => [], 'price_name' => []];
 
         $documentIds = ObjectRelation::where('source_slug', $slug)
             ->where('source_id', $id)
@@ -123,7 +123,7 @@ class ShipmentService
 
     public static function usageByChildren(string $slug, int $id, array $childSlugs, ?array $except = null): array
     {
-        $result = ['id' => [], 'name' => []];
+        $result = ['id' => [], 'name' => [], 'price_id' => [], 'price_name' => []];
         if (!ObjectRelation::ready() || !count($childSlugs)) {
             return $result;
         }
@@ -197,6 +197,125 @@ class ShipmentService
         }
 
         return 0.0;
+    }
+
+    public static function lookupPrice(array $used, array $product): float
+    {
+        $id = (int) ($product['id'] ?? 0);
+        if ($id && isset($used['price_id'][$id])) {
+            return (float) $used['price_id'][$id];
+        }
+        $name = self::nameKey($product['name'] ?? '');
+        if ($name !== '' && isset($used['price_name'][$name])) {
+            return (float) $used['price_name'][$name];
+        }
+
+        return 0.0;
+    }
+
+    public static function residualProducts(string $sourceSlug, int $sourceId, array $products, ?array $exceptTarget = null): array
+    {
+        $childSlugs = self::childSlugsOf($sourceSlug);
+        if (!count($childSlugs) || !count($products)) {
+            return $products;
+        }
+        $used = self::usageByChildren($sourceSlug, $sourceId, $childSlugs, $exceptTarget);
+        $services = self::serviceIds(array_map(fn ($p) => is_array($p) ? ($p['id'] ?? 0) : 0, $products));
+
+        $result = [];
+        foreach ($products as $product) {
+            if (!is_array($product)) {
+                $result[] = $product;
+                continue;
+            }
+            $count = (float) ($product['count'] ?? 0);
+            $price = (float) ($product['price'] ?? 0);
+            if (in_array((int) ($product['id'] ?? 0), $services, true)) {
+                $rest = max(0, $price - self::lookupPrice($used, $product));
+                $product['price'] = $rest == (int) $rest ? (int) $rest : round($rest, 2);
+                $product['sum'] = round($product['price'] * $count, 2);
+                $result[] = $product;
+                continue;
+            }
+            $rest = max(0, $count - self::lookup($used, $product));
+            if ($rest <= 0) {
+                continue;
+            }
+            $product['count'] = $rest == (int) $rest ? (int) $rest : $rest;
+            $product['sum'] = round($price * $rest, 2);
+            $result[] = $product;
+        }
+
+        return array_values($result);
+    }
+
+    public static function validateAgainstParent(string $slug, int $id, array $products): array
+    {
+        try {
+            $parent = self::parentOf($slug, $id);
+            if (!$parent || !count($products)) {
+                return [];
+            }
+            [$parentSlug, $parentId] = $parent;
+            if (!Schema::hasTable($parentSlug) || !Schema::hasColumn($parentSlug, 'products')) {
+                return [];
+            }
+            $row = DB::table($parentSlug)->where('id', $parentId)->first();
+            $parentProducts = array_values(array_filter(self::decode($row->products ?? null), 'is_array'));
+            if (!count($parentProducts)) {
+                return [];
+            }
+            $services = self::serviceIds(array_map(fn ($p) => $p['id'] ?? 0, $parentProducts));
+            $usedOthers = self::usageByChildren($parentSlug, $parentId, self::childSlugsOf($parentSlug), [$slug, $id]);
+
+            $findLimit = function (array $product) use ($parentProducts) {
+                $id = (int) ($product['id'] ?? 0);
+                $name = self::nameKey($product['name'] ?? '');
+                foreach ($parentProducts as $limit) {
+                    $limitId = (int) ($limit['id'] ?? 0);
+                    if ($id && $limitId === $id) {
+                        return $limit;
+                    }
+                    if (!$id && $name !== '' && self::nameKey($limit['name'] ?? '') === $name) {
+                        return $limit;
+                    }
+                }
+                return null;
+            };
+
+            $format = fn ($v) => rtrim(rtrim(number_format((float) $v, 2, '.', ''), '0'), '.');
+            $errors = [];
+            foreach ($products as $product) {
+                if (!is_array($product)) {
+                    continue;
+                }
+                $name = self::plainName($product['name'] ?? '') ?: 'Товар';
+                $limit = $findLimit($product);
+                if (!$limit) {
+                    $errors[] = "«{$name}»: нет в составе документа-основания";
+                    continue;
+                }
+                $count = (float) ($product['count'] ?? 0);
+                $price = (float) ($product['price'] ?? 0);
+                $limitCount = (float) ($limit['count'] ?? 0);
+                $limitPrice = (float) ($limit['price'] ?? 0);
+                if (!in_array((int) ($limit['id'] ?? 0), $services, true)) {
+                    $others = self::lookup($usedOthers, $limit);
+                    if ($count + $others > $limitCount + 0.0001) {
+                        $errors[] = "«{$name}»: в основании {$format($limitCount)} шт, здесь {$format($count)} шт"
+                            . ($others > 0 ? " + в других документах {$format($others)} шт" : '')
+                            . " — превышение на {$format($count + $others - $limitCount)} шт";
+                    }
+                }
+                if ($limitPrice > 0 && $price > $limitPrice + 0.0001) {
+                    $errors[] = "«{$name}»: цена {$format($price)} выше цены в основании {$format($limitPrice)}";
+                }
+            }
+
+            return $errors;
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     public static function serviceIds(array $ids): array
@@ -285,13 +404,16 @@ class ShipmentService
             if ($count <= 0) {
                 continue;
             }
+            $price = (float) ($product['price'] ?? 0) * $count;
             $id = (int) ($product['id'] ?? 0);
             if ($id) {
                 $result['id'][$id] = ($result['id'][$id] ?? 0) + $count;
+                $result['price_id'][$id] = ($result['price_id'][$id] ?? 0) + $price;
             }
             $name = self::nameKey($product['name'] ?? '');
             if ($name !== '') {
                 $result['name'][$name] = ($result['name'][$name] ?? 0) + $count;
+                $result['price_name'][$name] = ($result['price_name'][$name] ?? 0) + $price;
             }
         }
     }

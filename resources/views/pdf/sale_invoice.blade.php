@@ -128,11 +128,11 @@
 
     <table class="totals" style="margin-top: 6px;">
         <tr><td class="k">Итого:</td><td class="v nb">{{ number_format($total, 2, '.', ' ') }} руб.</td></tr>
-        <tr><td class="k">В том числе НДС:</td><td class="v nb">{{ $vatTotal > 0 ? number_format($vatTotal, 2, '.', ' ') . ' руб.' : 'Без НДС' }}</td></tr>
-        <tr><td class="k">Всего к оплате:</td><td class="v nb" style="font-size: 10pt;">{{ number_format($total, 2, '.', ' ') }} руб.</td></tr>
+        <tr><td class="k">{{ ($vatOnTop ?? 0) > 0 ? 'НДС:' : 'В том числе НДС:' }}</td><td class="v nb">{{ $vatTotal > 0 ? number_format($vatTotal, 2, '.', ' ') . ' руб.' : 'Без НДС' }}</td></tr>
+        <tr><td class="k">Всего к оплате:</td><td class="v nb" style="font-size: 10pt;">{{ number_format($grandTotal ?? $total, 2, '.', ' ') }} руб.</td></tr>
     </table>
 
-    <p style="margin: 5px 0 0;">Всего наименований {{ max(count($products), 1) }}, на сумму {{ number_format($total, 2, '.', ' ') }} руб.</p>
+    <p style="margin: 5px 0 0;">Всего наименований {{ max(count($products), 1) }}, на сумму {{ number_format($grandTotal ?? $total, 2, '.', ' ') }} руб.</p>
     <p style="margin: 2px 0 0;"><b>{{ $totalWords }}</b></p>
 
     <div class="terms">

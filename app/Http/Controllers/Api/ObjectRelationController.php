@@ -82,6 +82,7 @@ class ObjectRelationController extends Controller
                     'is_service' => in_array((int) ($product['id'] ?? 0), $services, true),
                     'count' => (float) ($product['count'] ?? 0),
                     'used' => \App\Services\ShipmentService::lookup($used, $product),
+                    'used_price' => \App\Services\ShipmentService::lookupPrice($used, $product),
                 ];
             }
         }
@@ -111,6 +112,7 @@ class ObjectRelationController extends Controller
                     'count' => (float) ($product['count'] ?? 0),
                     'price' => (float) ($product['price'] ?? 0),
                     'used_others' => \App\Services\ShipmentService::lookup($usedOthers, $product),
+                    'used_others_price' => \App\Services\ShipmentService::lookupPrice($usedOthers, $product),
                 ];
             }
         }

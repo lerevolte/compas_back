@@ -364,6 +364,7 @@ Route::middleware([
         Route::post('objects/{model}/restore', [App\Http\Controllers\Api\ObjectController::class, 'restore'])->name('objects.restore');
         Route::post('objects/{model}/{id}/restore', [App\Http\Controllers\Api\ObjectController::class, 'restore_single'])->name('objects.restore_single');
         Route::get('objects/{model}/{id}/compose', [App\Http\Controllers\Api\ObjectController::class, 'compose_show'])->name('objects.compose_show');
+        Route::post('objects/{model}/{id}/attach-employee', [App\Http\Controllers\Api\ObjectController::class, 'attach_employee'])->name('objects.attach_employee');
 
         Route::put('objects/{model}/{id}', [App\Http\Controllers\Api\ObjectController::class, 'update'])->name('objects.update');
         Route::get('objects/{model}/{id}/{module}/compose', [App\Http\Controllers\Api\ObjectController::class, 'compose_show_module'])->name('objects.compose_show_module');
@@ -488,6 +489,11 @@ Route::middleware([
         Route::put(
             'pickups/{id}/set_products',
             [App\Http\Controllers\Api\TaskController::class, 'set_pickup_products']
+        );
+
+        Route::put(
+            'addresses/{id}/set_products',
+            [App\Http\Controllers\Api\TaskController::class, 'set_address_products']
         );
 
         Route::get(

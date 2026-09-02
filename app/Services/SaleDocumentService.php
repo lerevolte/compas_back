@@ -380,18 +380,35 @@ class SaleDocumentService
         $dealName = $deal ? $this->plainName($deal->name ?? '') : '';
 
         $vatRate = $supplier ? $this->vatRate($supplier->vat ?? null) : null;
+        $productVat = $this->productVatMap($products);
         $vatTotal = 0.0;
+        $vatOnTop = 0.0;
         foreach ($products as $k => $product) {
-            $rate = isset($product['tax']) && is_numeric($product['tax']) ? (float) $product['tax'] : $vatRate;
+            $info = $productVat[(int) ($product['id'] ?? 0)] ?? null;
+            if (isset($product['tax']) && is_numeric($product['tax'])) {
+                $rate = (float) $product['tax'];
+            } elseif ($info) {
+                $rate = $info['rate'];
+            } else {
+                $rate = $vatRate;
+            }
+            $included = $info ? $info['included'] : true;
             $products[$k]['tax_label'] = $rate === null ? 'Без НДС' : rtrim(rtrim(number_format($rate, 2, '.', ''), '0'), '.');
             $products[$k]['unit'] = trim((string) ($product['unit'] ?? ($product['measure'] ?? 'шт')));
             if ($rate !== null && $rate > 0) {
-                $vatTotal += (float) $products[$k]['total'] * $rate / (100 + $rate);
+                if ($included) {
+                    $vatTotal += (float) $products[$k]['total'] * $rate / (100 + $rate);
+                } else {
+                    $vat = (float) $products[$k]['total'] * $rate / 100;
+                    $vatTotal += $vat;
+                    $vatOnTop += $vat;
+                }
             }
         }
         if (!count($products) && $vatRate !== null && $vatRate > 0) {
             $vatTotal = $total * $vatRate / (100 + $vatRate);
         }
+        $grandTotal = $total + $vatOnTop;
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView($meta['view'], [
             'number' => $number,
@@ -403,9 +420,11 @@ class SaleDocumentService
             'companyPhone' => $company ? $this->companyPhone($company) : '',
             'products' => $products,
             'total' => $total,
+            'grandTotal' => $grandTotal,
             'vatTotal' => $vatTotal,
             'vatRate' => $vatRate,
-            'totalWords' => $this->amountInWords($total),
+            'vatOnTop' => $vatOnTop,
+            'totalWords' => $this->amountInWords($grandTotal),
             'buyer' => $buyer,
             'dealName' => $dealName,
             'dealId' => $dealId ?? '',
@@ -520,6 +539,40 @@ class SaleDocumentService
             $out[] = ['name' => (string) ($item['name'] ?? 'Документ'), 'url' => $link];
         }
         return $out;
+    }
+
+    private function productVatMap(array $products): array
+    {
+        $ids = array_values(array_filter(array_map(fn ($p) => (int) ($p['id'] ?? 0), $products)));
+        if (!count($ids) || !Schema::hasTable('products') || !Schema::hasColumn('products', 'nds')) {
+            return [];
+        }
+        $hasIncluded = Schema::hasColumn('products', 'nds_included');
+        $columns = $hasIncluded ? ['id', 'nds', 'nds_included'] : ['id', 'nds'];
+
+        $map = [];
+        foreach (DB::table('products')->whereIn('id', $ids)->get($columns) as $row) {
+            $nds = $this->listValue($row->nds);
+            if ($nds === null || $nds === '') {
+                continue;
+            }
+            $included = $hasIncluded ? $this->listValue($row->nds_included) : null;
+            $map[(int) $row->id] = [
+                'rate' => is_numeric($nds) ? (float) $nds : null,
+                'included' => $included === null || $included === '' ? true : $included !== '0',
+            ];
+        }
+
+        return $map;
+    }
+
+    private function listValue($raw): ?string
+    {
+        if (is_string($raw) && is_array($decoded = json_decode($raw, true))) {
+            $raw = $decoded[0] ?? null;
+        }
+
+        return $raw === null ? null : trim((string) $raw);
     }
 
     private function vatRate($value): ?float

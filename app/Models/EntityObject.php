@@ -251,6 +251,10 @@ class EntityObject
                 $current->{$mf->field} = $mf->default_value;
             }
 
+            if ($slug == 'pickups' && empty($current->delivery_date)) {
+                $current->delivery_date = date('Y-m-d');
+            }
+
             if ($slug == 'osago_polises') {
                 $local_module = \DB::table('modules')->where('slug', 'osago')->first();
                 if ($local_module) {
@@ -1696,6 +1700,7 @@ class EntityObject
                 'expense_invoices' => \App\Models\ExpenseInvoice::class,
                 'product_returns' => \App\Models\ProductReturn::class,
                 'pickups' => \App\Models\Pickup::class,
+                'addresses' => \App\Models\Address::class,
             ][$request->order_entity] ?? \App\Models\Task::class;
             $order = $order_class::withTrashed()->where(['id' => $request->order_id])->first();
 

@@ -1093,6 +1093,7 @@ class RouteController extends Controller
         }
 
         \App\Models\ObjectRelation::link('addresses', $address->id, 'logistic_tasks', $newId);
+        \App\Models\ObjectRelation::copyProducts('addresses', $address->id, 'logistic_tasks', $newId);
 
         if ($address->client_id) {
             $task = Task::find($newId);

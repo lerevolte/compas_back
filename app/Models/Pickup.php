@@ -24,6 +24,9 @@ class Pickup extends Model
             if (!$model->user_id && $user) {
                 $model->user_id = $user->id;
             }
+            if (empty($model->delivery_date)) {
+                $model->delivery_date = date('Y-m-d');
+            }
         });
 
         static::saving(function ($model) {

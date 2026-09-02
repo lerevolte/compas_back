@@ -208,7 +208,7 @@ class B24ProductSync
             'filter' => $filter,
             'select' => [
                 'ID', 'NAME', 'PRICE', 'SECTION_ID', 'CATALOG_ID', 'TIMESTAMP_X',
-                'PREVIEW_PICTURE', 'DETAIL_PICTURE',
+                'PREVIEW_PICTURE', 'DETAIL_PICTURE', 'VAT_ID', 'VAT_INCLUDED',
                 self::LINK_PROPERTY, self::WEIGHT_PROPERTY, self::TYPE_PROPERTY,
             ],
             'order'  => $since ? ['TIMESTAMP_X' => 'ASC'] : ['ID' => 'ASC'],
@@ -268,6 +268,33 @@ class B24ProductSync
         return ($url !== null && $url !== '') ? (string) $url : null;
     }
 
+    private ?array $vatRates = null;
+
+    private function ndsFromVatId($vatId): ?string
+    {
+        $vatId = (string) $vatId;
+        if ($vatId === '' || $vatId === '0') {
+            return null;
+        }
+        if ($this->vatRates === null) {
+            $this->vatRates = [];
+            try {
+                $resp = $this->b24('crm.vat.list', ['select' => ['ID', 'RATE']]);
+                foreach ($resp['result'] ?? [] as $vat) {
+                    $this->vatRates[(string) ($vat['ID'] ?? '')] = (float) ($vat['RATE'] ?? 0);
+                }
+            } catch (\Throwable $e) {
+                Log::channel('bitrix24')->warning('product-sync: crm.vat.list failed', ['error' => $e->getMessage()]);
+            }
+        }
+        if (!array_key_exists($vatId, $this->vatRates)) {
+            return null;
+        }
+        $rate = $this->vatRates[$vatId];
+
+        return $rate > 0 ? rtrim(rtrim(number_format($rate, 2, '.', ''), '0'), '.') : 'none';
+    }
+
     private function propertyValue($raw): ?string
     {
         if (is_array($raw)) {
@@ -319,6 +346,12 @@ class B24ProductSync
             }
             if (Schema::hasColumn('products', 'product_type') && array_key_exists(self::TYPE_PROPERTY, $row)) {
                 $model->product_type = $this->propertyValue($row[self::TYPE_PROPERTY]) === self::TYPE_SERVICE_ENUM ? '1' : '0';
+            }
+            if (Schema::hasColumn('products', 'nds') && array_key_exists('VAT_ID', $row)) {
+                $model->nds = $this->ndsFromVatId($row['VAT_ID']);
+            }
+            if (Schema::hasColumn('products', 'nds_included') && array_key_exists('VAT_INCLUDED', $row)) {
+                $model->nds_included = $row['VAT_INCLUDED'] === 'N' ? '0' : '1';
             }
             if (array_key_exists('SECTION_ID', $row)) {
                 $model->category_id = $row['SECTION_ID']

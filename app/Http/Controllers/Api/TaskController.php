@@ -44,6 +44,11 @@ class TaskController extends Controller
         return $this->saveProductsFor('pickups', \App\Models\Pickup::class, $id, $request);
     }
 
+    public function set_address_products($id, Request $request)
+    {
+        return $this->saveProductsFor('addresses', \App\Models\Address::class, $id, $request);
+    }
+
     private function saveProductsFor($slug, $class, $id, Request $request)
     {
         $user = Auth::user();
@@ -69,6 +74,13 @@ class TaskController extends Controller
         $object = $class::find($id);
         if(!$object) {
             return response()->json(['error' => 404, 'text' => 'Задача не найдена'], 404);
+        }
+        $errors = \App\Services\ShipmentService::validateAgainstParent($slug, (int) $id, $products);
+        if (count($errors)) {
+            return response()->json([
+                'message' => 'Расхождение по составу с документом-основанием — сохранение запрещено',
+                'errors' => $errors,
+            ], 422);
         }
         $object->setProducts($products);
         if (\App\Services\ShipmentService::isSource($slug)) {

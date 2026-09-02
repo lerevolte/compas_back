@@ -34,6 +34,10 @@ class Task extends Model
                     \App\Services\ShipmentService::recalcForSource('logistic_tasks', (int) $model->id);
                 } catch (\Throwable $e) {
                 }
+                try {
+                    $model->recalcServicesPrice();
+                } catch (\Throwable $e) {
+                }
             }
        });
 
@@ -215,6 +219,36 @@ class Task extends Model
     public function employees()
     {
         return $this->belongsToMany(Employee::class, 'logistic_task_employee', 'logistic_task_id', 'employee_id');
+    }
+
+    public function recalcServicesPrice(): void
+    {
+        if (!\Schema::hasColumn('products', 'product_type') || !\Schema::hasColumn($this->getTable(), 'delivery_price')) {
+            return;
+        }
+        $products = json_decode((string) $this->products, true);
+        if (!is_array($products)) {
+            return;
+        }
+        $products = array_values(array_filter($products, 'is_array'));
+        $services = \App\Services\ShipmentService::serviceIds(array_map(fn ($p) => $p['id'] ?? 0, $products));
+        $total = 0.0;
+        foreach ($products as $product) {
+            if (!in_array((int) ($product['id'] ?? 0), $services, true)) {
+                continue;
+            }
+            $count = isset($product['count']) ? (float) $product['count'] : 0;
+            $price = isset($product['price']) ? (float) $product['price'] : 0;
+            $total += $count * $price;
+        }
+        $formatted = $total > 0 ? rtrim(rtrim(number_format($total, 2, '.', ''), '0'), '.') : (count($products) ? '0' : null);
+        if ($formatted === null || (string) $this->delivery_price === $formatted) {
+            return;
+        }
+        $this->delivery_price = $formatted;
+        $this->timestamps = false;
+        $this->saveQuietly();
+        $this->timestamps = true;
     }
 
     public function setProducts(array $products)

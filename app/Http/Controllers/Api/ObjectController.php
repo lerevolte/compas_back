@@ -111,6 +111,70 @@ class ObjectController extends Controller
         ]);
     }
 
+    public function attach_employee($slug, $id): JsonResponse
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        $entity = DB::table('data_types')->where('slug', $slug)->first();
+        if (!$entity || !\Schema::hasTable($slug)) {
+            return response()->json(['message' => 'Entity not found'], 404);
+        }
+
+        $permissions = $this->getPermissions($user, $slug, $entity->id);
+        if (($permissions['read_p'] ?? 'A') === 'N' && !$user->is_admin) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $field = DB::table('data_rows')
+            ->where('data_type_id', $entity->id)
+            ->where('type', 'relation')
+            ->where('relation_table', 'employees')
+            ->where('is_plural', 1)
+            ->where('is_remove', 0)
+            ->first();
+        if (!$field || !\Schema::hasColumn($slug, $field->field)) {
+            return response()->json(['message' => 'У сущности нет множественного поля «Сотрудник»'], 422);
+        }
+
+        $query = DB::table($slug)->where('id', (int) $id);
+        if (\Schema::hasColumn($slug, 'deleted_at')) {
+            $query->whereNull('deleted_at');
+        }
+        $object = $query->first();
+        if (!$object) {
+            return response()->json(['message' => 'Объект не найден'], 404);
+        }
+
+        $employeeId = \App\Models\Employee::idsForUser($user)[0] ?? null;
+        if (!$employeeId) {
+            return response()->json(['message' => 'У вашего пользователя нет привязанного сотрудника'], 422);
+        }
+
+        $current = json_decode((string) $object->{$field->field}, true);
+        if (!is_array($current)) {
+            $current = array_filter([$object->{$field->field}]);
+        }
+        $current = array_values(array_map('intval', array_filter($current, 'is_numeric')));
+
+        if (in_array((int) $employeeId, $current, true)) {
+            return response()->json(['ok' => true, 'attached' => false]);
+        }
+
+        $current[] = (int) $employeeId;
+        $result = app(\App\Services\CrudService::class)->batch($slug, [[
+            'id' => (int) $id,
+            $field->field => $current,
+        ]]);
+        if (isset($result['status']) && $result['status'] >= 400) {
+            return response()->json(['message' => $result['message'] ?? 'Не удалось привязать сотрудника'], $result['status']);
+        }
+
+        return response()->json(['ok' => true, 'attached' => true]);
+    }
+
     public function compose_show($slug, $id, Request $request): JsonResponse
     {
         $user = Auth::guard('api')->user(); // Получаем юзера корректно для API
@@ -332,7 +396,7 @@ class ObjectController extends Controller
         $products = [];
         $tableKeys = [];
 
-        if (in_array($slug, ['logistic_tasks', 'pickups', 'deals', 'payment_invoices', 'expense_invoices', 'product_returns'], true)) {
+        if (in_array($slug, ['logistic_tasks', 'pickups', 'deals', 'payment_invoices', 'expense_invoices', 'product_returns', 'addresses'], true)) {
             $productsPerms = $this->getProductsFieldPerms($user, $entity->id, $isExternalAccess, $slug);
             if ($productsPerms['read']) {
                 $tableKeys = Table::get_order_products($slug);

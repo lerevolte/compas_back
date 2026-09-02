@@ -73,9 +73,19 @@ class ObjectRelation extends Model
                 return false;
             }
 
+            $isResidual = false;
+            if (in_array($targetSlug, \App\Services\ShipmentService::childSlugsOf($sourceSlug), true)) {
+                $residual = \App\Services\ShipmentService::residualProducts($sourceSlug, (int) $sourceId, $products, [$targetSlug, (int) $targetId]);
+                $isResidual = $residual !== $products;
+                $products = $residual;
+                if (!count($products)) {
+                    return false;
+                }
+            }
+
             if (!$dryRun) {
                 $sourceSum = (float) ($source->sum ?? 0);
-                $target->setProducts($products, $sourceSum > 0 ? $source->sum : null);
+                $target->setProducts($products, !$isResidual && $sourceSum > 0 ? $source->sum : null);
             }
 
             return true;
