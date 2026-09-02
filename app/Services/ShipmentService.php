@@ -253,10 +253,22 @@ class ShipmentService
     {
         try {
             $parent = self::parentOf($slug, $id);
-            if (!$parent || !count($products)) {
+            if (!$parent) {
                 return [];
             }
-            [$parentSlug, $parentId] = $parent;
+
+            return self::validateAgainstPair($parent[0], $parent[1], $slug, $id, $products);
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    public static function validateAgainstPair(string $parentSlug, int $parentId, string $childSlug, ?int $exceptChildId, array $products): array
+    {
+        try {
+            if (!count($products) || !in_array($childSlug, self::childSlugsOf($parentSlug), true)) {
+                return [];
+            }
             if (!Schema::hasTable($parentSlug) || !Schema::hasColumn($parentSlug, 'products')) {
                 return [];
             }
@@ -266,7 +278,12 @@ class ShipmentService
                 return [];
             }
             $services = self::serviceIds(array_map(fn ($p) => $p['id'] ?? 0, $parentProducts));
-            $usedOthers = self::usageByChildren($parentSlug, $parentId, self::childSlugsOf($parentSlug), [$slug, $id]);
+            $usedOthers = self::usageByChildren(
+                $parentSlug,
+                $parentId,
+                self::childSlugsOf($parentSlug),
+                $exceptChildId ? [$childSlug, $exceptChildId] : null
+            );
 
             $findLimit = function (array $product) use ($parentProducts) {
                 $id = (int) ($product['id'] ?? 0);

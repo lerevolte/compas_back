@@ -438,6 +438,7 @@ Route::middleware([
         Route::post('routes/task-from-warehouse', [App\Http\Controllers\Api\RouteController::class, 'task_from_warehouse'])->name('routes.task_from_warehouse');
         Route::get('routes/{id}/task_filter', [App\Http\Controllers\Api\RouteController::class, 'task_filter'])->name('routes.task_filter');
         Route::post('object-relations', [App\Http\Controllers\Api\ObjectRelationController::class, 'store'])->name('object_relations.store');
+        Route::post('object-relations/validate-products', [App\Http\Controllers\Api\ObjectRelationController::class, 'validateProducts'])->name('object_relations.validate_products');
         Route::get('object-relations/{slug}/{id}', [App\Http\Controllers\Api\ObjectRelationController::class, 'tree'])->name('object_relations.tree');
         Route::get('object-relations/{slug}/{id}/products-check', [App\Http\Controllers\Api\ObjectRelationController::class, 'productsCheck'])->name('object_relations.products_check');
         Route::get('object-relations/{slug}/{id}/print-documents', [App\Http\Controllers\Api\ObjectRelationController::class, 'printDocuments'])->name('object_relations.print_documents');

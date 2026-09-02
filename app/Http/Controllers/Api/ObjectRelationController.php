@@ -57,6 +57,40 @@ class ObjectRelationController extends Controller
         return response()->json(['ok' => true, 'products_copied' => $productsCopied, 'b24_copied' => $b24Copied, 'print_generated' => $printGenerated]);
     }
 
+    public function validateProducts(Request $request)
+    {
+        $data = $request->validate([
+            'source_slug' => 'required|string|max:64',
+            'source_id' => 'required|integer',
+            'target_slug' => 'required|string|max:64',
+            'target_id' => 'nullable|integer',
+            'products' => 'nullable|array',
+        ]);
+
+        $products = [];
+        foreach ((array) ($data['products'] ?? []) as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            $products[] = [
+                'id' => $product['id'] ?? null,
+                'name' => $product['product_name'] ?? ($product['name'] ?? ''),
+                'price' => $product['product_price'] ?? ($product['price'] ?? null),
+                'count' => $product['product_count'] ?? ($product['count'] ?? null),
+            ];
+        }
+
+        $errors = \App\Services\ShipmentService::validateAgainstPair(
+            $data['source_slug'],
+            (int) $data['source_id'],
+            $data['target_slug'],
+            isset($data['target_id']) ? (int) $data['target_id'] : null,
+            $products
+        );
+
+        return response()->json(['errors' => $errors]);
+    }
+
     public function productsCheck($slug, $id)
     {
         $id = (int) $id;
