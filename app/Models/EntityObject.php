@@ -347,7 +347,7 @@ class EntityObject
                  $settings[$slug]['perms'][$field->field]['read'] ||
                  $isAdmin))
             {
-                if ($field->type == 'relation' && $field->relation_table && !$settings['models'][$field->relation_table]->enable) {
+                if ($field->type == 'relation' && $field->relation_table && (!isset($settings['models'][$field->relation_table]) || !$settings['models'][$field->relation_table]->enable)) {
                     continue;
                 }
 
@@ -862,7 +862,7 @@ class EntityObject
             if($field->type == 'waybills' && !$sabyReady)
                 continue;
             if(!array_key_exists($field->field, $fields_data) && (!isset($settings[$slug]['perms'][$field->field]['read']) || $settings[$slug]['perms'][$field->field]['read'] || \Auth::user()->is_admin)) {
-                if($field->type == 'relation' && $field->relation_table && !$settings['models'][$field->relation_table]->enable)
+                if($field->type == 'relation' && $field->relation_table && (!isset($settings['models'][$field->relation_table]) || !$settings['models'][$field->relation_table]->enable))
                     continue;
                 if($field->type == 'status')
                     $fields_values[$field->field] = \App\Models\Field::getStatusesVisible($field->id);
@@ -1972,7 +1972,7 @@ class EntityObject
             );
             foreach($model_fields as $field) {
                 if(!array_key_exists($field->field, $data) && $field->type != 'text_group' && $field->type != 'password' && (!isset($settings[$slug]['perms'][$field->field]['read']) || $settings[$slug]['perms'][$field->field]['read'])) {
-                    if($field->type == 'relation' && $field->relation_table && !$settings['models'][$field->relation_table]->enable)
+                    if($field->type == 'relation' && $field->relation_table && (!isset($settings['models'][$field->relation_table]) || !$settings['models'][$field->relation_table]->enable))
                         continue;
                     $value = $item->{$field->field};
                     $field_value = ValueHelper::isJson($value) && $field->field != 'products' && is_array(json_decode($value, true)) ? json_decode($value, true) : $value;

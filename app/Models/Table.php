@@ -307,7 +307,7 @@ class Table
                 }
                 if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'iconDrag' && $key != 'iconDelete' || isset($settings[$slug]['perms'][$key]['read']) && !$settings[$slug]['perms'][$key]['read'])
                     unset($table_columns[$key]);
-                elseif(isset($model_fields[$key]) && $column['type'] == 'relation' && $model_fields[$key]->relation_table && !$settings['models'][$model_fields[$key]->relation_table]->enable)
+                elseif(isset($model_fields[$key]) && $column['type'] == 'relation' && $model_fields[$key]->relation_table && (!isset($settings['models'][$model_fields[$key]->relation_table]) || !$settings['models'][$model_fields[$key]->relation_table]->enable))
                     unset($table_columns[$key]);
             }
             if(!isset($table_columns['isChoose']) && $slug != 'balance_operations') {
@@ -360,7 +360,7 @@ class Table
                     }
                 };
                 if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->type != 'password' && (!isset($settings[$slug]['perms'][$field->field]['read']) || $settings[$slug]['perms'][$field->field]['read'])) {
-                    if($field->type == 'relation' && $field->relation_table && !$settings['models'][$field->relation_table]->enable)
+                    if($field->type == 'relation' && $field->relation_table && (!isset($settings['models'][$field->relation_table]) || !$settings['models'][$field->relation_table]->enable))
                         continue;
                     if($field->type == 'waybills' && !\App\Services\Saby\SabyOrderService::ready())
                         continue;
@@ -413,7 +413,7 @@ class Table
 
                     }
                 } elseif($field->type != 'text_group' && $field->type != 'password' && (!isset($settings[$slug]['perms'][$field->field]['read']) || $settings[$slug]['perms'][$field->field]['read'])) {
-                    if($field->type == 'relation' && $field->relation_table && !$settings['models'][$field->relation_table]->enable)
+                    if($field->type == 'relation' && $field->relation_table && (!isset($settings['models'][$field->relation_table]) || !$settings['models'][$field->relation_table]->enable))
                         continue;
                     $table_columns[$field->field] = array(
                         'id' => $field->id,
@@ -526,7 +526,7 @@ class Table
                     }
                 };
                 if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->type != 'password' && (!isset($settings[$slug]['perms'][$field->field]['read']) || $settings[$slug]['perms'][$field->field]['read'])) {
-                    if($field->type == 'relation' && $field->relation_table && !$settings['models'][$field->relation_table]->enable)
+                    if($field->type == 'relation' && $field->relation_table && (!isset($settings['models'][$field->relation_table]) || !$settings['models'][$field->relation_table]->enable))
                         continue;
                     if($field->type == 'waybills' && !\App\Services\Saby\SabyOrderService::ready())
                         continue;
