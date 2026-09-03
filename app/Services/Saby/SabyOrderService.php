@@ -356,6 +356,7 @@ class SabyOrderService extends SabyWaybillService
                 ]],
                 'Делимость' => '0',
                 'ГруженностьКонтейнера' => '0',
+                'РаспределениеГрузаПоПлатформе' => '0',
             ];
             $tare = $this->productAttr($item['id'], 'tare_type', $defaultTare);
             if ($tare !== '') {

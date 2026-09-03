@@ -770,7 +770,7 @@ class Settings extends Model
 		        $tree = \App\Models\SidebarItem::defaultOrder()->where('enabled', 1)->get()->toTree()->toArray();
 		        $settings['settings']['sidebar_items'] = $tree;
 		        $settings['modules'] = $modules;
-            	cache()->getMemcached()->set($cache_name, gzcompress(serialize($settings)));
+            	cache()->getMemcached()->set($cache_name, gzcompress(serialize($settings)), 21600);
 
 	            return $settings;
 	        } else {

@@ -584,6 +584,20 @@ class EntityObject
                                 $settings[$slug]['options'][$subfield->field] ?? $settings['list_values'][$subfield->id]
                             );
                         }
+                        if ((!isset($subfield_data['options']) || !count($subfield_data['options']))
+                            && $subfield->type == 'relation'
+                            && isset($settings['list_values'][$subfield->id])) {
+                            $subfield_options = array_slice($settings['list_values'][$subfield->id], 0, 10, true);
+                            $sub_current = $current->{$subfield->field} ?? null;
+                            if (is_string($sub_current) && ValueHelper::isJson($sub_current)) {
+                                $sub_decoded = json_decode($sub_current, true);
+                                $sub_current = is_array($sub_decoded) ? ($sub_decoded[0] ?? null) : $sub_current;
+                            }
+                            if ($sub_current && is_scalar($sub_current) && isset($settings['list_values'][$subfield->id][$sub_current])) {
+                                $subfield_options[$sub_current] = $settings['list_values'][$subfield->id][$sub_current];
+                            }
+                            $subfield_data['options'] = array_values($subfield_options);
+                        }
                         $subfield_data['can_read'] = $settings[$slug]['perms'][$subfield->field]['read'] || $isAdmin ? 1 : 0;
                         $subfield_data['can_edit'] = $subfield->only_read || !$settings[$slug]['perms'][$subfield->field]['write'] && !$isAdmin ? 0 : 1;
                         if(!$id && $permissions['create_p'] == 'Y' && $field->field == 'user_id' && !$isAdmin) {
@@ -1052,6 +1066,20 @@ class EntityObject
                                 $settings[$slug]['options'][$subfield->field] ?? $settings['list_values'][$subfield->id]
                             );
                         }
+                        if ((!isset($subfield_data['options']) || !count($subfield_data['options']))
+                            && $subfield->type == 'relation'
+                            && isset($settings['list_values'][$subfield->id])) {
+                            $subfield_options = array_slice($settings['list_values'][$subfield->id], 0, 10, true);
+                            $sub_current = $current->{$subfield->field} ?? null;
+                            if (is_string($sub_current) && ValueHelper::isJson($sub_current)) {
+                                $sub_decoded = json_decode($sub_current, true);
+                                $sub_current = is_array($sub_decoded) ? ($sub_decoded[0] ?? null) : $sub_current;
+                            }
+                            if ($sub_current && is_scalar($sub_current) && isset($settings['list_values'][$subfield->id][$sub_current])) {
+                                $subfield_options[$sub_current] = $settings['list_values'][$subfield->id][$sub_current];
+                            }
+                            $subfield_data['options'] = array_values($subfield_options);
+                        }
                         $subfield_data['can_read'] = $settings[$slug]['perms'][$subfield->field]['read'] || \Auth::user()->is_admin ? 1 : 0;
                         $subfield_data['can_edit'] = $subfield->only_read || !$settings[$slug]['perms'][$subfield->field]['write'] && !\Auth::user()->is_admin ? 0 : 1;
                         if(!$id && $permissions['create_p'] == 'Y' && $field->field == 'user_id' && !\Auth::user()->is_admin) {
@@ -1352,14 +1380,43 @@ class EntityObject
                 break;
             } elseif($field->field == $sort_field && $field->type == 'relation') {
 
-                $sorted_values = collect($settings['list_values'][$field->id])->sortBy(function ($item) {
-                    return $item['label']['text'];
-                });
-                $sorted_values = $sorted_values->pluck('value')->toArray();
+                $labels = array();
+                foreach((array)($settings['list_values'][$field->id] ?? array()) as $option) {
+                    if(isset($option['value']))
+                        $labels[(string)$option['value']] = mb_strtolower((string)($option['label']['text'] ?? ''));
+                }
+                $related_table = $field->relation_table ?: (json_decode($field->details ?? '', true)['table'] ?? null);
+                if(\App\Models\Settings::lazy_table($settings, $field->id) && $related_table && \Schema::hasTable($related_table)) {
+                    $labels_query = \DB::table($related_table)->select('id', 'name');
+                    if(\Schema::hasColumn($related_table, 'deleted_at'))
+                        $labels_query->whereNull('deleted_at');
+                    foreach($labels_query->pluck('name', 'id') as $related_id => $related_name) {
+                        if(ValueHelper::isJson($related_name)) {
+                            $decoded_name = json_decode($related_name, true);
+                            $related_name = is_array($decoded_name) ? ($decoded_name['value'] ?? '') : $related_name;
+                        }
+                        $labels[(string)$related_id] = mb_strtolower((string)$related_name);
+                    }
+                }
 
-                $sorted_values = implode(',', $sorted_values);
+                $objects = $entity_class::select('id', $sort_field);
+                if($request->trashed)
+                    $objects = $objects->onlyTrashed();
+                $sorted_ids = $objects->get()->sortBy(function($item) use ($sort_field, $labels) {
+                    $value = $item->{$sort_field};
+                    if(is_string($value) && ValueHelper::isJson($value)) {
+                        $decoded = json_decode($value, true);
+                        $value = is_array($decoded) ? ($decoded[0] ?? null) : $value;
+                    }
+                    if($value === null || $value === '' || !is_scalar($value))
+                        return '';
+                    return $labels[(string)$value] ?? '';
+                }, SORT_NATURAL, ($sort_order == 'asc' ? false : true))->pluck('id')->toArray();
 
-                $paginator = $entity_class::orderByRaw("FIELD($sort_field, $sorted_values) $sort_order");
+                if(count($sorted_ids)) {
+                    $sorted_values = implode(',', $sorted_ids);
+                    $paginator = $entity_class::orderByRaw("FIELD(id, $sorted_values)");
+                }
                 break;
             } elseif($field->field == $sort_field && $field->type == 'file') {
 
@@ -1565,10 +1622,11 @@ class EntityObject
                     if(isset($settings[$slug]['fields'][$field]) && $settings[$slug]['fields'][$field]->is_plural) {
                         if($settings[$slug]['fields'][$field]->type == 'relation' && $settings[$slug]['fields'][$field]->relation_table && method_exists($entity_class, $settings[$slug]['fields'][$field]->relation_table)) {
                             $paginator = $paginator->whereHas($settings[$slug]['fields'][$field]->relation_table, function($q) use($val) {
+                                $table = $q->getModel()->getTable();
                                 if (is_array($val)) {
-                                    $q->whereIn('id', array_map('intval', $val));
+                                    $q->whereIn($table . '.id', array_map('intval', $val));
                                 } else {
-                                    $q->where('id', '=', (int)$val);
+                                    $q->where($table . '.id', '=', (int)$val);
                                 }
                             });
 
@@ -1822,7 +1880,7 @@ class EntityObject
                         if(count($relations) && $field->is_plural) {
                             if($field->relation_table && method_exists($entity_class, $field->relation_table)) {
                                 $query->orWhereHas($field->relation_table, function($subquery) use($relations) {
-                                    $subquery->whereIntegerInRaw('id', $relations);
+                                    $subquery->whereIntegerInRaw($subquery->getModel()->getTable() . '.id', $relations);
                                 });
                             } else {
                                 $query->orWhere(function ($subquery) use ($relations, $field) {

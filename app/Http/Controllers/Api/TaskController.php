@@ -86,6 +86,9 @@ class TaskController extends Controller
         if (\App\Services\ShipmentService::isSource($slug)) {
             \App\Services\ShipmentService::recalcForSource($slug, (int) $id);
         }
+        if ($slug === 'deals') {
+            \App\Services\ShipmentService::recalcDealShipped((int) $id);
+        }
 
         $ids = array_values(array_filter(array_map(function ($p) { return (int) $p['id']; }, $products)));
         if (count($ids)) {

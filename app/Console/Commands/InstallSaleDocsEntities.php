@@ -26,15 +26,15 @@ class InstallSaleDocsEntities extends Command
             ],
         ],
         'expense_invoices' => [
-            'title_singular' => 'Расходная накладная',
-            'title_plural' => 'Расходные накладные',
+            'title_singular' => 'Отгрузка',
+            'title_plural' => 'Отгрузки',
             'model' => 'App\\Models\\ExpenseInvoice',
             'slug_singular' => 'expense_invoice',
             'color' => '#8E5AA8',
         ],
         'product_returns' => [
-            'title_singular' => 'Возврат',
-            'title_plural' => 'Возвраты',
+            'title_singular' => 'Оприходование',
+            'title_plural' => 'Оприходования',
             'model' => 'App\\Models\\ProductReturn',
             'slug_singular' => 'product_return',
             'color' => '#C0392B',
@@ -80,7 +80,7 @@ class InstallSaleDocsEntities extends Command
     protected $signature = 'entity:install-sale-docs
         {target=avixo : seeds | all-tenants | <tenant_id>}';
 
-    protected $description = 'Установить сущности «Счета на оплату», «Расходные накладные» и «Возвраты», переименовать deals в «Заказы покупателей», добавить вкладку «Печать документов», поле «Банковские реквизиты» у счетов и заказов и поле «Компания отгрузки» у заказов/счетов/накладных';
+    protected $description = 'Установить сущности «Счета на оплату», «Отгрузки» и «Оприходования», переименовать deals в «Заказы покупателей», добавить вкладку «Печать документов», поле «Банковские реквизиты» у счетов и заказов и поле «Компания отгрузки» у заказов/счетов/накладных';
 
     public function handle(): int
     {

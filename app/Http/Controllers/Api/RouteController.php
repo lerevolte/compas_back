@@ -548,12 +548,87 @@ class RouteController extends Controller
             }
         }
 
+        $actualPath = [];
+        $currentPosition = null;
+        if (\Schema::hasTable('user_geopositions')) {
+            $driverUserId = $this->routeDriverUserId($route);
+            if ($driverUserId) {
+                $date = $route->date ? date('Y-m-d', strtotime($route->date)) : date('Y-m-d');
+                $dayStart = strtotime($date . ' 00:00:00');
+                $dayEnd = $dayStart + 86399;
+
+                $points = \DB::table('user_geopositions')
+                    ->where('user_id', $driverUserId)
+                    ->where(function ($q) use ($dayStart, $dayEnd, $date) {
+                        $q->whereBetween('client_time', [$dayStart, $dayEnd])
+                            ->orWhere(function ($q) use ($dayStart, $dayEnd) {
+                                $q->whereNull('client_time')->whereBetween('gps_time', [$dayStart, $dayEnd]);
+                            })
+                            ->orWhere(function ($q) use ($date) {
+                                $q->whereNull('client_time')->whereNull('gps_time')->whereDate('created_at', $date);
+                            });
+                    })
+                    ->orderByRaw('COALESCE(client_time, gps_time, UNIX_TIMESTAMP(created_at))')
+                    ->limit(5000)
+                    ->get(['lat', 'lng', 'speed', 'client_time', 'gps_time', 'created_at']);
+
+                foreach ($points as $point) {
+                    $ts = $point->client_time ?: ($point->gps_time ?: ($point->created_at ? strtotime($point->created_at) : null));
+                    $actualPath[] = [
+                        'lat' => (float) $point->lat,
+                        'lon' => (float) $point->lng,
+                        'time' => $ts ? date('H:i', (int) $ts) : '',
+                        'speed' => $point->speed !== null ? round((float) $point->speed * 2.23694, 1) : 0,
+                    ];
+                }
+
+                if (\Schema::hasColumn('users', 'geoposition')) {
+                    $raw = \DB::table('users')->where('id', $driverUserId)->value('geoposition');
+                    $decoded = $raw ? json_decode($raw, true) : null;
+                    if (is_array($decoded) && isset($decoded['lat']) && isset($decoded['lng'])) {
+                        $time = isset($decoded['time']) && is_numeric($decoded['time']) ? (int) $decoded['time'] : null;
+                        if ($time && $time > 100000000000) {
+                            $time = (int) round($time / 1000);
+                        }
+                        $currentPosition = [
+                            'lat' => (float) $decoded['lat'],
+                            'lon' => (float) $decoded['lng'],
+                            'time' => $time ? date('d.m.Y H:i', $time) : '',
+                        ];
+                    }
+                }
+            }
+        }
+
         return response()->json([
-            'actual_path' => [],
+            'actual_path' => $actualPath,
+            'current_position' => $currentPosition,
             'loading_time' => $route->loading_time ?? '07:00',
             'color' => $colorValue ?: '#b6b6b6',
             'name' => $route->name,
         ]);
+    }
+
+    private function routeDriverUserId(Route $route): ?int
+    {
+        $employeeId = $route->employeeIds()[0] ?? null;
+        if (!$employeeId) {
+            return null;
+        }
+        if (\Schema::hasColumn('employees', 'related_user_id')) {
+            $userId = \DB::table('employees')->where('id', $employeeId)->value('related_user_id');
+            if ($userId) {
+                return (int) $userId;
+            }
+        }
+        if (\Schema::hasColumn('users', 'employee_id')) {
+            $userId = \DB::table('users')->where('employee_id', $employeeId)->value('id');
+            if ($userId) {
+                return (int) $userId;
+            }
+        }
+
+        return null;
     }
 
     private function writeRouteTasksHistory($route, array $oldIds, array $newIds)

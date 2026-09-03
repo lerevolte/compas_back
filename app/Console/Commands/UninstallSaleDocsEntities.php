@@ -11,7 +11,7 @@ class UninstallSaleDocsEntities extends Command
         {target=avixo : seeds | all-tenants | <tenant_id>}
         {--purge : удалить и данные (DROP таблиц, история)}';
 
-    protected $description = 'Удалить сущности «Счета на оплату», «Расходные накладные», «Возвраты», вкладку «Печать документов» и поле «Банковские реквизиты» у заказов';
+    protected $description = 'Удалить сущности «Счета на оплату», «Отгрузки», «Оприходования», вкладку «Печать документов» и поле «Банковские реквизиты» у заказов';
 
     public function handle(): int
     {

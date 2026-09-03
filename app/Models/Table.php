@@ -829,9 +829,9 @@ class Table
                     "mask" => "",
                     'is_another_title' => 0
                 );
-            if(\App\Services\ShipmentService::isSource((string) $parentSlug) && !isset($table_columns['product_shipped']))
+            if(\App\Services\ShipmentService::hasShippedColumn((string) $parentSlug) && !isset($table_columns['product_shipped']))
                 $table_columns['product_shipped'] = self::shippedColumn(count($table_columns));
-            if(!\App\Services\ShipmentService::isSource((string) $parentSlug))
+            if(!\App\Services\ShipmentService::hasShippedColumn((string) $parentSlug))
                 unset($table_columns['product_shipped']);
             // if(!isset($table_columns['isChoose'])) {
             //     $table_columns['isChoose'] = array(
@@ -1013,7 +1013,7 @@ class Table
                 "mask" => "",
                 'is_another_title' => 0
             );
-            if(\App\Services\ShipmentService::isSource((string) $parentSlug))
+            if(\App\Services\ShipmentService::hasShippedColumn((string) $parentSlug))
                 $table_columns['product_shipped'] = self::shippedColumn(6);
 
             if(!isset($table_columns['iconDrag'])) {

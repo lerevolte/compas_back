@@ -27,6 +27,11 @@ class ShipmentService
         return in_array($slug, self::SOURCES, true);
     }
 
+    public static function hasShippedColumn(string $slug): bool
+    {
+        return self::isSource($slug) || $slug === 'deals';
+    }
+
     public static function sourceFor(int $documentId): ?array
     {
         if (!self::ready()) {
@@ -61,11 +66,122 @@ class ShipmentService
                 return false;
             }
             $products = self::decode($object->products);
+            $shipped = self::shippedBySource($slug, $id);
+            $changed = false;
+            foreach ($products as $i => $product) {
+                if (!is_array($product)) {
+                    continue;
+                }
+                $value = self::lookup($shipped, $product);
+                if (!array_key_exists('shipped', $product) && $value == 0) {
+                    continue;
+                }
+                if (!array_key_exists('shipped', $product) || abs((float) ($product['shipped'] ?? 0) - $value) > 0.0001) {
+                    $products[$i]['shipped'] = $value == (int) $value ? (int) $value : $value;
+                    $changed = true;
+                }
+            }
+            if ($changed) {
+                $object->products = json_encode($products, JSON_UNESCAPED_UNICODE);
+                $object->timestamps = false;
+                $object->saveQuietly();
+                $object->timestamps = true;
+
+                try {
+                    \App\Events\ObjectUpdated::dispatch('ObjectUpdated', $object->getData(['products']));
+                } catch (\Throwable $e) {
+                }
+            }
+
+            try {
+                self::updateShipmentStatus($slug, $object, $products, $shipped);
+            } catch (\Throwable $e) {
+            }
+            try {
+                $parent = self::parentOf($slug, $id);
+                if ($parent && $parent[0] === 'deals') {
+                    self::recalcDealShipped((int) $parent[1]);
+                }
+            } catch (\Throwable $e) {
+            }
+
+            return $changed;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    public static function updateShipmentStatus(string $slug, $object, array $products, array $shipped): void
+    {
+        if (!Schema::hasColumn($slug, 'shipment_status')) {
+            return;
+        }
+        $typeId = DB::table('data_types')->where('slug', $slug)->value('id');
+        $fieldId = $typeId
+            ? DB::table('data_rows')->where('data_type_id', $typeId)->where('field', 'shipment_status')->value('id')
+            : null;
+        if (!$fieldId) {
+            return;
+        }
+
+        $hasAny = false;
+        $full = false;
+        $lines = 0;
+        foreach ($products as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            $count = (float) ($product['count'] ?? 0);
+            if ($count <= 0) {
+                continue;
+            }
+            $lines++;
+            $value = self::lookup($shipped, $product);
+            if ($value > 0.0001) {
+                $hasAny = true;
+            }
+            if ($lines === 1) {
+                $full = true;
+            }
+            if ($value + 0.0001 < $count) {
+                $full = false;
+            }
+        }
+        $label = !$lines || !$hasAny ? 'Не отгружено' : ($full ? 'Отгружено полностью' : 'Отгружено частично');
+
+        $valueId = DB::table('field_values')->where('field_id', $fieldId)->where('value', $label)->value('id');
+        if (!$valueId || (string) $object->shipment_status === (string) $valueId) {
+            return;
+        }
+
+        $object->shipment_status = (string) $valueId;
+        $object->timestamps = false;
+        $object->saveQuietly();
+        $object->timestamps = true;
+
+        try {
+            \App\Events\ObjectUpdated::dispatch('ObjectUpdated', $object->getData(['shipment_status']));
+        } catch (\Throwable $e) {
+        }
+    }
+
+    public static function recalcDealShipped(int $dealId): bool
+    {
+        if (!ObjectRelation::ready() || !Schema::hasTable('deals') || !Schema::hasColumn('deals', 'products')) {
+            return false;
+        }
+        try {
+            $class = self::modelClass('deals');
+            $deal = $class ? $class::withTrashed()->find($dealId) : null;
+            if (!$deal) {
+                return false;
+            }
+            $products = self::decode($deal->products);
             if (!count($products)) {
                 return false;
             }
 
-            $shipped = self::shippedBySource($slug, $id);
+            $shipped = self::shippedForDeal($dealId);
             $changed = false;
             foreach ($products as $i => $product) {
                 if (!is_array($product)) {
@@ -84,13 +200,13 @@ class ShipmentService
                 return false;
             }
 
-            $object->products = json_encode($products, JSON_UNESCAPED_UNICODE);
-            $object->timestamps = false;
-            $object->saveQuietly();
-            $object->timestamps = true;
+            $deal->products = json_encode($products, JSON_UNESCAPED_UNICODE);
+            $deal->timestamps = false;
+            $deal->saveQuietly();
+            $deal->timestamps = true;
 
             try {
-                \App\Events\ObjectUpdated::dispatch('ObjectUpdated', $object->getData(['products']));
+                \App\Events\ObjectUpdated::dispatch('ObjectUpdated', $deal->getData(['products']));
             } catch (\Throwable $e) {
             }
 
@@ -98,6 +214,40 @@ class ShipmentService
         } catch (\Throwable $e) {
             return false;
         }
+    }
+
+    public static function shippedForDeal(int $dealId): array
+    {
+        $result = ['id' => [], 'name' => [], 'price_id' => [], 'price_name' => []];
+
+        $children = ObjectRelation::where('source_slug', 'deals')
+            ->where('source_id', $dealId)
+            ->whereIn('target_slug', self::SOURCES)
+            ->get(['target_slug', 'target_id']);
+        if (!count($children)) {
+            return $result;
+        }
+
+        $documentIds = [];
+        foreach ($children as $child) {
+            $ids = ObjectRelation::where('source_slug', $child->target_slug)
+                ->where('source_id', (int) $child->target_id)
+                ->where('target_slug', self::DOCUMENT)
+                ->pluck('target_id')
+                ->map(fn ($v) => (int) $v)
+                ->all();
+            $documentIds = array_merge($documentIds, $ids);
+        }
+        $documentIds = array_values(array_unique($documentIds));
+        if (!count($documentIds)) {
+            return $result;
+        }
+
+        foreach (ExpenseInvoice::whereIn('id', $documentIds)->get(['id', 'products']) as $document) {
+            self::accumulate($result, $document->products);
+        }
+
+        return $result;
     }
 
     public static function shippedBySource(string $slug, int $id): array
