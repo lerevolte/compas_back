@@ -94,10 +94,10 @@ class Menu
         }
         foreach($menu as $k => $menu_item) {
             info($item->id);
-            if(isset($menu_item['slug']) && isset($s['models'][$menu_item['slug']]) && 
-                isset($permissions[$s['models'][$menu_item['slug']]->id]) && 
+            if(isset($menu_item['slug']) && isset($s['models'][$menu_item['slug']]) &&
+                isset($permissions[$s['models'][$menu_item['slug']]->id]) &&
                 $permissions[$s['models'][$menu_item['slug']]->id]->read_p == 'N' && !$user->is_admin ||
-                isset($menu_item['slug']) && !$s['models'][$menu_item['slug']]->enable
+                isset($menu_item['slug']) && (!isset($s['models'][$menu_item['slug']]) || !$s['models'][$menu_item['slug']]->enable)
             ) {
                 unset($menu[$k]);
             } elseif(isset($menu_item['has_roles_read']) && $menu_item['has_roles_read'] && isset($menu_item['roles_read']) && count($menu_item['roles_read']) && !in_array($user->role_id, $menu_item['roles_read']) && !$user->is_admin) {
