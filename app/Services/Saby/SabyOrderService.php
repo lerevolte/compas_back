@@ -61,6 +61,7 @@ class SabyOrderService extends SabyWaybillService
         if (!isset($file['ДвоичныеДанные'])) {
             throw new SabyException('Saby не вернул сформированный файл заказа на перевозку');
         }
+        $file['ДвоичныеДанные'] = $this->patchCargoDistribution($file['ДвоичныеДанные']);
 
         $written = $this->client->call('СБИС.ЗаписатьДокумент', ['Документ' => [
             'Тип' => self::ORDER_DOC_TYPE,
@@ -107,6 +108,30 @@ class SabyOrderService extends SabyWaybillService
         ]);
 
         return $order;
+    }
+
+    protected function patchCargoDistribution(string $base64): string
+    {
+        $xml = base64_decode($base64, true);
+        if ($xml === false || $xml === '') {
+            return $base64;
+        }
+        foreach (['windows-1251', 'utf-8'] as $encoding) {
+            $attr = @iconv('utf-8', $encoding, 'РаспрГр');
+            $needle = @iconv('utf-8', $encoding, '<ОпГруз ');
+            $replace = @iconv('utf-8', $encoding, '<ОпГруз РаспрГр="1" ');
+            if ($attr === false || $needle === false || $replace === false) {
+                continue;
+            }
+            if (strpos($xml, $attr) !== false) {
+                return $base64;
+            }
+            if (strpos($xml, $needle) !== false) {
+                return base64_encode(str_replace($needle, $replace, $xml));
+            }
+        }
+
+        return $base64;
     }
 
     public function deleteOrder(SabyOrder $order): void
@@ -356,7 +381,6 @@ class SabyOrderService extends SabyWaybillService
                 ]],
                 'Делимость' => '0',
                 'ГруженностьКонтейнера' => '0',
-                'РаспределениеГрузаПоПлатформе' => '0',
             ];
             $tare = $this->productAttr($item['id'], 'tare_type', $defaultTare);
             if ($tare !== '') {
