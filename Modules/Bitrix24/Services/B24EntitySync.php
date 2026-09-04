@@ -2094,7 +2094,7 @@ class B24EntitySync
                 $price = self::num($product['PRICE'] ?? 0);
                 $weight = self::num($prod->weight ?? 0);
                 $allWeight += ((float) $weight) * $qty;
-                $products[] = [
+                $line = [
                     'id'     => $prod->id,
                     'name'   => B24ProductSync::nameText($prod->name),
                     'price'  => $price,
@@ -2102,6 +2102,14 @@ class B24EntitySync
                     'weight' => $weight,
                     'sum'    => self::num($price * $qty),
                 ];
+                if (array_key_exists('TAX_RATE', $product)) {
+                    $taxRate = $product['TAX_RATE'];
+                    $line['nds'] = ($taxRate === null || $taxRate === '')
+                        ? 'none'
+                        : rtrim(rtrim(number_format((float) $taxRate, 2, '.', ''), '0'), '.');
+                    $line['nds_included'] = (($product['TAX_INCLUDED'] ?? 'Y') === 'N') ? '0' : '1';
+                }
+                $products[] = $line;
             } elseif (!$isDelivery) {
                 $deliveryPrice += (float) ($product['PRICE'] ?? 0) * ($product['QUANTITY'] ?? 0);
             }
