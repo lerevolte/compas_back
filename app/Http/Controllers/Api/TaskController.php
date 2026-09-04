@@ -69,6 +69,8 @@ class TaskController extends Controller
                 'weight' => $product['product_weight'] ?? null,
                 'volume' => $product['product_volume'] ?? 0,
                 'sum' => $product['product_sum'] ?? null,
+                'nds' => $product['product_nds'] ?? ($product['nds'] ?? null),
+                'nds_included' => $product['product_nds_included'] ?? ($product['nds_included'] ?? null),
             );
         }
         $object = $class::find($id);

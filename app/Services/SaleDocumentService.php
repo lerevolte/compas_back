@@ -385,14 +385,22 @@ class SaleDocumentService
         $vatOnTop = 0.0;
         foreach ($products as $k => $product) {
             $info = $productVat[(int) ($product['id'] ?? 0)] ?? null;
-            if (isset($product['tax']) && is_numeric($product['tax'])) {
+            $lineNds = $this->listValue($product['nds'] ?? null);
+            $lineIncluded = $this->listValue($product['nds_included'] ?? null);
+            if ($lineNds !== null && $lineNds !== '') {
+                $rate = is_numeric($lineNds) ? (float) $lineNds : null;
+            } elseif (isset($product['tax']) && is_numeric($product['tax'])) {
                 $rate = (float) $product['tax'];
             } elseif ($info) {
                 $rate = $info['rate'];
             } else {
                 $rate = $vatRate;
             }
-            $included = $info ? $info['included'] : true;
+            if ($lineIncluded !== null && $lineIncluded !== '') {
+                $included = $lineIncluded !== '0';
+            } else {
+                $included = $info ? $info['included'] : true;
+            }
             $products[$k]['tax_label'] = $rate === null ? 'Без НДС' : rtrim(rtrim(number_format($rate, 2, '.', ''), '0'), '.');
             $products[$k]['unit'] = trim((string) ($product['unit'] ?? ($product['measure'] ?? 'шт')));
             if ($rate !== null && $rate > 0) {

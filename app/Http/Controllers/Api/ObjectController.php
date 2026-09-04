@@ -392,6 +392,15 @@ class ObjectController extends Controller
             $permissions->external_link_read_p = $this->externalLinkRoleReadP($entity->id);
         }
 
+        $basedCreate = $this->basedCreatePermissions($user, $slug);
+        if ($basedCreate !== null) {
+            if (is_array($permissions)) {
+                $permissions['based_create'] = $basedCreate;
+            } elseif (is_object($permissions)) {
+                $permissions->based_create = $basedCreate;
+            }
+        }
+
         // 4. Дополнительные данные (продукты, история)
         $products = [];
         $tableKeys = [];
@@ -828,6 +837,40 @@ class ObjectController extends Controller
     /**
      * Получает права доступа пользователя к сущности
      */
+    private function basedCreatePermissions($user, string $slug): ?array
+    {
+        $targets = [
+            'deals' => ['logistic_tasks', 'pickups', 'payment_invoices'],
+            'logistic_tasks' => ['expense_invoices', 'product_returns'],
+            'pickups' => ['expense_invoices', 'product_returns'],
+            'addresses' => ['logistic_tasks'],
+        ][$slug] ?? null;
+        if ($targets === null) {
+            return null;
+        }
+
+        $result = [];
+        foreach ($targets as $target) {
+            $targetEntity = DB::table('data_types')->where('slug', $target)->where('enable', 1)->first();
+            if (!$targetEntity) {
+                $result[$target] = false;
+                continue;
+            }
+            if ($user && $user->is_admin) {
+                $result[$target] = true;
+                continue;
+            }
+            if (!$user) {
+                $result[$target] = false;
+                continue;
+            }
+            $targetPermissions = $this->getPermissions($user, $target, $targetEntity->id);
+            $result[$target] = ($targetPermissions['create_p'] ?? 'A') !== 'N';
+        }
+
+        return $result;
+    }
+
     private function getProductsFieldPerms($user, $entityId, $isExternalAccess = false, $slug = 'logistic_tasks'): array
     {
         if ($user && $user->is_admin) {

@@ -2152,6 +2152,16 @@ class EntityObject
                         $data['product_volume'] = $product['volume'] ?? 0;
                         $data['product_sum'] = $product['sum'];
                         $data['product_shipped'] = $product['shipped'] ?? 0;
+                        $line_nds = $product['nds'] ?? null;
+                        $line_nds_included = $product['nds_included'] ?? null;
+                        if ($line_nds === null && isset($item->nds)) {
+                            $line_nds = is_string($item->nds) && is_array($nds_decoded = json_decode($item->nds, true)) ? ($nds_decoded[0] ?? null) : $item->nds;
+                        }
+                        if ($line_nds_included === null && isset($item->nds_included)) {
+                            $line_nds_included = is_string($item->nds_included) && is_array($ndsi_decoded = json_decode($item->nds_included, true)) ? ($ndsi_decoded[0] ?? null) : $item->nds_included;
+                        }
+                        $data['product_nds'] = $line_nds;
+                        $data['product_nds_included'] = $line_nds_included === null || $line_nds_included === '' ? '1' : (string) $line_nds_included;
                         $data['sort'] = $num;
                         $products_objects[] = $data;
                     } elseif(empty($product['id'])) {
@@ -2181,6 +2191,8 @@ class EntityObject
                             'product_volume' => $product['volume'] ?? 0,
                             'product_sum' => $product['sum'] ?? null,
                             'product_shipped' => $product['shipped'] ?? 0,
+                            'product_nds' => $product['nds'] ?? null,
+                            'product_nds_included' => ($product['nds_included'] ?? null) === null || ($product['nds_included'] ?? null) === '' ? '1' : (string) $product['nds_included'],
                             'sort' => $num,
                         );
                     }

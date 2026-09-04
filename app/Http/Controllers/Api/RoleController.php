@@ -233,7 +233,16 @@ class RoleController extends Controller
         $role->save();
 
         foreach($data_types as $entity_id => $entity) {
-            \DB::table('permissions')->insert([['entity_id' => $entity_id, 'role_id' => $role->id]]);
+            \DB::table('permissions')->insert([[
+                'entity_id' => $entity_id,
+                'role_id' => $role->id,
+                'read_p' => 'N',
+                'create_p' => 'N',
+                'update_p' => 'N',
+                'delete_p' => 'N',
+                'export_p' => 'N',
+                'import_p' => 'N',
+            ]]);
         }
 
         \App\Models\Settings::clear_cache();

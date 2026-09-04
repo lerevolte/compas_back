@@ -497,6 +497,10 @@ Route::middleware([
             [App\Http\Controllers\Api\TaskController::class, 'set_address_products']
         );
 
+        Route::get('{model}/upd', [App\Http\Controllers\Api\UpdController::class, 'print'])
+            ->whereIn('model', ['logistic_tasks', 'pickups'])
+            ->name('upd.print');
+
         Route::get(
             'analytics', 
             [App\Http\Controllers\Api\AnalyticsController::class, 'get_all_analytics']

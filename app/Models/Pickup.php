@@ -27,6 +27,9 @@ class Pickup extends Model
             if (empty($model->delivery_date)) {
                 $model->delivery_date = date('Y-m-d');
             }
+            if (empty($model->number) && \Schema::hasColumn($model->getTable(), 'number')) {
+                $model->number = \App\Services\DocumentNumber::next();
+            }
         });
 
         static::saving(function ($model) {

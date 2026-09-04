@@ -74,6 +74,17 @@ class ObjectRelation extends Model
             }
 
             $isResidual = false;
+            if ($targetSlug === \App\Services\ShipmentService::RETURN_DOC && \App\Services\ShipmentService::isSource($sourceSlug)) {
+                $products = \App\Services\ShipmentService::returnDefaults($sourceSlug, (int) $sourceId, (int) $targetId);
+                if (!count($products)) {
+                    return false;
+                }
+                if (!$dryRun) {
+                    $target->setProducts($products, null);
+                }
+
+                return true;
+            }
             if (in_array($targetSlug, \App\Services\ShipmentService::childSlugsOf($sourceSlug), true)) {
                 $residual = \App\Services\ShipmentService::residualProducts($sourceSlug, (int) $sourceId, $products, [$targetSlug, (int) $targetId]);
                 $isResidual = $residual !== $products;

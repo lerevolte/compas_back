@@ -11,6 +11,7 @@ class ShipmentService
 {
     public const SOURCES = ['logistic_tasks', 'pickups'];
     public const DOCUMENT = 'expense_invoices';
+    public const RETURN_DOC = 'product_returns';
 
     public static function ready(): bool
     {
@@ -228,17 +229,47 @@ class ShipmentService
             return $result;
         }
 
-        $documentIds = [];
+        $returned = ['id' => [], 'name' => [], 'price_id' => [], 'price_name' => []];
         foreach ($children as $child) {
-            $ids = ObjectRelation::where('source_slug', $child->target_slug)
-                ->where('source_id', (int) $child->target_id)
-                ->where('target_slug', self::DOCUMENT)
-                ->pluck('target_id')
-                ->map(fn ($v) => (int) $v)
-                ->all();
-            $documentIds = array_merge($documentIds, $ids);
+            $result = self::mergeUsage($result, self::invoicesUsage((string) $child->target_slug, (int) $child->target_id));
+            $returned = self::mergeUsage($returned, self::returnsUsage((string) $child->target_slug, (int) $child->target_id));
         }
-        $documentIds = array_values(array_unique($documentIds));
+
+        return self::subtractUsage($result, $returned);
+    }
+
+    private static function mergeUsage(array $base, array $add): array
+    {
+        foreach (['id', 'name', 'price_id', 'price_name'] as $bucket) {
+            foreach ($add[$bucket] ?? [] as $key => $value) {
+                $base[$bucket][$key] = ($base[$bucket][$key] ?? 0) + $value;
+            }
+        }
+
+        return $base;
+    }
+
+    public static function shippedBySource(string $slug, int $id): array
+    {
+        $shipped = self::invoicesUsage($slug, $id);
+        $returned = self::returnsUsage($slug, $id);
+
+        return self::subtractUsage($shipped, $returned);
+    }
+
+    public static function invoicesUsage(string $slug, int $id, ?int $exceptId = null): array
+    {
+        $result = ['id' => [], 'name' => [], 'price_id' => [], 'price_name' => []];
+
+        $documentIds = ObjectRelation::where('source_slug', $slug)
+            ->where('source_id', $id)
+            ->where('target_slug', self::DOCUMENT)
+            ->pluck('target_id')
+            ->map(fn ($v) => (int) $v)
+            ->all();
+        if ($exceptId) {
+            $documentIds = array_values(array_diff($documentIds, [$exceptId]));
+        }
         if (!count($documentIds)) {
             return $result;
         }
@@ -250,25 +281,46 @@ class ShipmentService
         return $result;
     }
 
-    public static function shippedBySource(string $slug, int $id): array
+    public static function returnsUsage(string $slug, int $id, ?int $exceptId = null): array
     {
         $result = ['id' => [], 'name' => [], 'price_id' => [], 'price_name' => []];
+        if (!Schema::hasTable(self::RETURN_DOC)) {
+            return $result;
+        }
 
         $documentIds = ObjectRelation::where('source_slug', $slug)
             ->where('source_id', $id)
-            ->where('target_slug', self::DOCUMENT)
+            ->where('target_slug', self::RETURN_DOC)
             ->pluck('target_id')
             ->map(fn ($v) => (int) $v)
             ->all();
+        if ($exceptId) {
+            $documentIds = array_values(array_diff($documentIds, [$exceptId]));
+        }
         if (!count($documentIds)) {
             return $result;
         }
 
-        foreach (ExpenseInvoice::whereIn('id', $documentIds)->get(['id', 'products']) as $document) {
-            self::accumulate($result, $document->products);
+        $query = DB::table(self::RETURN_DOC)->whereIn('id', $documentIds);
+        if (Schema::hasColumn(self::RETURN_DOC, 'deleted_at')) {
+            $query->whereNull('deleted_at');
+        }
+        foreach ($query->pluck('products') as $products) {
+            self::accumulate($result, $products);
         }
 
         return $result;
+    }
+
+    public static function subtractUsage(array $base, array $minus): array
+    {
+        foreach (['id', 'name', 'price_id', 'price_name'] as $bucket) {
+            foreach ($minus[$bucket] ?? [] as $key => $value) {
+                $base[$bucket][$key] = max(0, ($base[$bucket][$key] ?? 0) - $value);
+            }
+        }
+
+        return $base;
     }
 
     public static function usageByChildren(string $slug, int $id, array $childSlugs, ?array $except = null): array
@@ -310,7 +362,9 @@ class ShipmentService
         if (!ObjectRelation::ready()) {
             return null;
         }
-        $parentSlugs = self::isSource($slug) ? ['deals'] : ($slug === self::DOCUMENT ? self::SOURCES : []);
+        $parentSlugs = self::isSource($slug)
+            ? ['deals']
+            : (in_array($slug, [self::DOCUMENT, self::RETURN_DOC], true) ? self::SOURCES : []);
         if (!count($parentSlugs)) {
             return null;
         }
@@ -416,7 +470,13 @@ class ShipmentService
     public static function validateAgainstPair(string $parentSlug, int $parentId, string $childSlug, ?int $exceptChildId, array $products): array
     {
         try {
-            if (!count($products) || !in_array($childSlug, self::childSlugsOf($parentSlug), true)) {
+            if (!count($products)) {
+                return [];
+            }
+            if ($childSlug === self::RETURN_DOC && self::isSource($parentSlug)) {
+                return self::validateReturn($parentSlug, $parentId, $exceptChildId, $products);
+            }
+            if (!in_array($childSlug, self::childSlugsOf($parentSlug), true)) {
                 return [];
             }
             if (!Schema::hasTable($parentSlug) || !Schema::hasColumn($parentSlug, 'products')) {
@@ -494,6 +554,68 @@ class ShipmentService
         } catch (\Throwable $e) {
             return [];
         }
+    }
+
+    public static function validateReturn(string $parentSlug, int $parentId, ?int $exceptChildId, array $products): array
+    {
+        try {
+            $available = self::subtractUsage(
+                self::invoicesUsage($parentSlug, $parentId),
+                self::returnsUsage($parentSlug, $parentId, $exceptChildId)
+            );
+            $format = fn ($v) => rtrim(rtrim(number_format((float) $v, 2, '.', ''), '0'), '.');
+
+            $errors = [];
+            foreach ($products as $product) {
+                if (!is_array($product)) {
+                    continue;
+                }
+                $count = (float) ($product['count'] ?? 0);
+                if ($count <= 0) {
+                    continue;
+                }
+                $name = self::plainName($product['name'] ?? '') ?: 'Товар';
+                $limit = self::lookup($available, $product);
+                if ($count > $limit + 0.0001) {
+                    $errors[] = "«{$name}»: возврат {$format($count)} шт превышает отгруженное — доступно к возврату {$format($limit)} шт";
+                }
+            }
+
+            return $errors;
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    public static function returnDefaults(string $parentSlug, int $parentId, ?int $exceptChildId = null): array
+    {
+        if (!self::isSource($parentSlug) || !Schema::hasTable($parentSlug) || !Schema::hasColumn($parentSlug, 'products')) {
+            return [];
+        }
+        $row = DB::table($parentSlug)->where('id', $parentId)->first();
+        $products = array_values(array_filter(self::decode($row->products ?? null), 'is_array'));
+        if (!count($products)) {
+            return [];
+        }
+        $available = self::subtractUsage(
+            self::invoicesUsage($parentSlug, $parentId),
+            self::returnsUsage($parentSlug, $parentId, $exceptChildId)
+        );
+
+        $result = [];
+        foreach ($products as $product) {
+            $limit = self::lookup($available, $product);
+            if ($limit <= 0) {
+                continue;
+            }
+            unset($product['shipped']);
+            $product['count'] = $limit == (int) $limit ? (int) $limit : $limit;
+            $price = (float) ($product['price'] ?? 0);
+            $product['sum'] = round($price * $limit, 2);
+            $result[] = $product;
+        }
+
+        return $result;
     }
 
     public static function serviceIds(array $ids): array

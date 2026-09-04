@@ -25,6 +25,31 @@ class ProductReturn extends Model
                 $model->user_id = $user->id;
             }
         });
+
+        static::saved(function ($model) {
+            if (array_key_exists('products', $model->getChanges())) {
+                self::recalcParentShipments((int) $model->id);
+            }
+        });
+
+        static::deleted(function ($model) {
+            self::recalcParentShipments((int) $model->id);
+        });
+
+        static::restored(function ($model) {
+            self::recalcParentShipments((int) $model->id);
+        });
+    }
+
+    public static function recalcParentShipments(int $id): void
+    {
+        try {
+            $parent = \App\Services\ShipmentService::parentOf('product_returns', $id);
+            if ($parent && \App\Services\ShipmentService::isSource($parent[0])) {
+                \App\Services\ShipmentService::recalcForSource($parent[0], (int) $parent[1]);
+            }
+        } catch (\Throwable $e) {
+        }
     }
 
     public function setProducts(array $products)
@@ -40,6 +65,7 @@ class ProductReturn extends Model
             $this->sum = rtrim(rtrim(number_format($total, 2, '.', ''), '0'), '.');
         }
         $this->saveQuietly();
+        self::recalcParentShipments((int) $this->id);
     }
 
     public function getHtmlProducts()

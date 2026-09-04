@@ -46,6 +46,9 @@ class ObjectRelationController extends Controller
         if ($data['target_slug'] === \App\Services\ShipmentService::DOCUMENT) {
             \App\Services\ShipmentService::recalcForDocument((int) $data['target_id']);
         }
+        if ($data['target_slug'] === \App\Services\ShipmentService::RETURN_DOC) {
+            \App\Models\ProductReturn::recalcParentShipments((int) $data['target_id']);
+        }
 
         $printGenerated = \App\Services\SaleDocumentService::generateFor(
             $data['target_slug'],
@@ -103,6 +106,9 @@ class ObjectRelationController extends Controller
         $childSlugs = \App\Services\ShipmentService::childSlugsOf($slug);
         if (count($childSlugs)) {
             $used = \App\Services\ShipmentService::usageByChildren($slug, $id, $childSlugs);
+            $returned = \App\Services\ShipmentService::isSource($slug)
+                ? \App\Services\ShipmentService::returnsUsage($slug, (int) $id)
+                : null;
             $row = Schema::hasTable($slug) ? DB::table($slug)->where('id', $id)->first() : null;
             $products = \App\Services\ShipmentService::decode($row->products ?? null);
             $services = \App\Services\ShipmentService::serviceIds(array_map(fn ($p) => $p['id'] ?? 0, array_filter($products, 'is_array')));
@@ -117,6 +123,7 @@ class ObjectRelationController extends Controller
                     'count' => (float) ($product['count'] ?? 0),
                     'used' => \App\Services\ShipmentService::lookup($used, $product),
                     'used_price' => \App\Services\ShipmentService::lookupPrice($used, $product),
+                    'returned' => $returned !== null ? \App\Services\ShipmentService::lookup($returned, $product) : 0,
                 ];
             }
         }
@@ -130,24 +137,43 @@ class ObjectRelationController extends Controller
             if ($parentInfo) {
                 unset($parentInfo['products']);
             }
-            $siblingSlugs = \App\Services\ShipmentService::childSlugsOf($parentSlug);
-            $usedOthers = \App\Services\ShipmentService::usageByChildren($parentSlug, $parentId, $siblingSlugs, [$slug, $id]);
             $row = DB::table($parentSlug)->where('id', $parentId)->first();
             $products = \App\Services\ShipmentService::decode($row->products ?? null);
-            $services = \App\Services\ShipmentService::serviceIds(array_map(fn ($p) => $p['id'] ?? 0, array_filter($products, 'is_array')));
-            foreach ($products as $product) {
-                if (!is_array($product)) {
-                    continue;
+            if ($slug === \App\Services\ShipmentService::RETURN_DOC) {
+                $shipped = \App\Services\ShipmentService::invoicesUsage($parentSlug, (int) $parentId);
+                $otherReturns = \App\Services\ShipmentService::returnsUsage($parentSlug, (int) $parentId, (int) $id);
+                foreach ($products as $product) {
+                    if (!is_array($product)) {
+                        continue;
+                    }
+                    $limits[] = [
+                        'id' => (int) ($product['id'] ?? 0) ?: null,
+                        'name' => \App\Services\ShipmentService::plainName($product['name'] ?? ''),
+                        'is_service' => false,
+                        'count' => \App\Services\ShipmentService::lookup($shipped, $product),
+                        'price' => 0,
+                        'used_others' => \App\Services\ShipmentService::lookup($otherReturns, $product),
+                        'used_others_price' => 0,
+                    ];
                 }
-                $limits[] = [
-                    'id' => (int) ($product['id'] ?? 0) ?: null,
-                    'name' => \App\Services\ShipmentService::plainName($product['name'] ?? ''),
-                    'is_service' => in_array((int) ($product['id'] ?? 0), $services, true),
-                    'count' => (float) ($product['count'] ?? 0),
-                    'price' => (float) ($product['price'] ?? 0),
-                    'used_others' => \App\Services\ShipmentService::lookup($usedOthers, $product),
-                    'used_others_price' => \App\Services\ShipmentService::lookupPrice($usedOthers, $product),
-                ];
+            } else {
+                $siblingSlugs = \App\Services\ShipmentService::childSlugsOf($parentSlug);
+                $usedOthers = \App\Services\ShipmentService::usageByChildren($parentSlug, $parentId, $siblingSlugs, [$slug, $id]);
+                $services = \App\Services\ShipmentService::serviceIds(array_map(fn ($p) => $p['id'] ?? 0, array_filter($products, 'is_array')));
+                foreach ($products as $product) {
+                    if (!is_array($product)) {
+                        continue;
+                    }
+                    $limits[] = [
+                        'id' => (int) ($product['id'] ?? 0) ?: null,
+                        'name' => \App\Services\ShipmentService::plainName($product['name'] ?? ''),
+                        'is_service' => in_array((int) ($product['id'] ?? 0), $services, true),
+                        'count' => (float) ($product['count'] ?? 0),
+                        'price' => (float) ($product['price'] ?? 0),
+                        'used_others' => \App\Services\ShipmentService::lookup($usedOthers, $product),
+                        'used_others_price' => \App\Services\ShipmentService::lookupPrice($usedOthers, $product),
+                    ];
+                }
             }
         }
 

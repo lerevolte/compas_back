@@ -601,6 +601,34 @@ class Table
         return $table_columns;
     }
 
+    private static function ndsColumn(string $key, string $title, string $type, int $index): array
+    {
+        $column = array(
+            'id' => null,
+            'title' => $title,
+            'key' => $key,
+            'width' => $key == 'product_nds' ? '150px' : '130px',
+            'enabled' => 1,
+            'sort_order' => '',
+            'type' => $type,
+            'fixed' => '',
+            'index' => $index,
+            'fixTarget' => '0px',
+            'read_only' => 0,
+            "mask" => "",
+            'is_another_title' => 0
+        );
+        if ($type == 'select_dropdown') {
+            $column['options'] = array_map(
+                fn ($option) => array('label' => $option['label'], 'value' => $option['value']),
+                \App\Console\Commands\InstallProductNdsFields::NDS_OPTIONS
+            );
+            $column['is_plural'] = 0;
+        }
+
+        return $column;
+    }
+
     private static function shippedColumn(int $index): array
     {
         return array(
@@ -680,9 +708,10 @@ class Table
             $table_columns = collect($tables['order_products']['fields']);
             $table_columns = $table_columns->keyBy('key')->toArray();
             foreach($table_columns as $key => $column) {
-                if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'remnant_name' && $key != 'product_name' && $key != 'product_id' && $key != 'product_price' && $key != 'product_count' && $key != 'product_weight' && $key != 'product_volume' && $key != 'product_sum' && $key != 'product_shipped' && $key != 'iconDrag' && $key != 'iconDelete' || $key == 'price' || $key == 'name' || $key == 'weight' || $key == 'volume' || $key == 'price')
+                if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'remnant_name' && $key != 'product_name' && $key != 'product_id' && $key != 'product_price' && $key != 'product_count' && $key != 'product_weight' && $key != 'product_volume' && $key != 'product_sum' && $key != 'product_shipped' && $key != 'product_nds' && $key != 'product_nds_included' && $key != 'iconDrag' || $key == 'price' || $key == 'name' || $key == 'weight' || $key == 'volume' || $key == 'price')
                     unset($table_columns[$key]);
             }
+            unset($table_columns['iconDelete']);
             foreach ($model_fields as $field) {
                 if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->field != 'price' && $field->field != 'name' && $field->field != 'weight' && $field->field != 'volume' && $field->field != 'price') {
                     $table_columns[$field->field] = array(
@@ -833,6 +862,10 @@ class Table
                 $table_columns['product_shipped'] = self::shippedColumn(count($table_columns));
             if(!\App\Services\ShipmentService::hasShippedColumn((string) $parentSlug))
                 unset($table_columns['product_shipped']);
+            if(!isset($table_columns['product_nds']))
+                $table_columns['product_nds'] = self::ndsColumn('product_nds', 'НДС', 'select_dropdown', count($table_columns));
+            if(!isset($table_columns['product_nds_included']))
+                $table_columns['product_nds_included'] = self::ndsColumn('product_nds_included', 'Включать НДС', 'checkbox', count($table_columns));
             // if(!isset($table_columns['isChoose'])) {
             //     $table_columns['isChoose'] = array(
             //         "id" => 0,
@@ -1015,6 +1048,8 @@ class Table
             );
             if(\App\Services\ShipmentService::hasShippedColumn((string) $parentSlug))
                 $table_columns['product_shipped'] = self::shippedColumn(6);
+            $table_columns['product_nds'] = self::ndsColumn('product_nds', 'НДС', 'select_dropdown', 7);
+            $table_columns['product_nds_included'] = self::ndsColumn('product_nds_included', 'Включать НДС', 'checkbox', 8);
 
             if(!isset($table_columns['iconDrag'])) {
                 $table_columns['isChoose'] = array(
