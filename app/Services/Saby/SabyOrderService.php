@@ -44,6 +44,8 @@ class SabyOrderService extends SabyWaybillService
     {
         $substitutions = $this->buildOrder($task, $loadingTask, $massMethod);
         $config = $this->client->config();
+        $route = $task->route_id ? Route::find($task->route_id) : null;
+        $carrier = $route ? $this->companyOf($route, 'company_id') : null;
 
         $generated = $this->client->call('СБИС.СгенерироватьВложение', [
             'Документ' => [
@@ -63,7 +65,7 @@ class SabyOrderService extends SabyWaybillService
         }
         $file['ДвоичныеДанные'] = $this->patchCargoDistribution($file['ДвоичныеДанные']);
 
-        $written = $this->client->call('СБИС.ЗаписатьДокумент', ['Документ' => [
+        $payload = [
             'Тип' => self::ORDER_DOC_TYPE,
             'Регламент' => ['Название' => self::ORDER_REGULATION],
             'НашаОрганизация' => $this->ourOrganization(),
@@ -73,7 +75,12 @@ class SabyOrderService extends SabyWaybillService
                     'Имя' => $file['Имя'] ?? null,
                 ]],
             ],
-        ]]);
+        ];
+        if ($carrier) {
+            $payload['Контрагент'] = $this->addressedCounterparty($carrier);
+        }
+
+        $written = $this->client->call('СБИС.ЗаписатьДокумент', ['Документ' => $payload]);
 
         $attachment = $written['Вложение'][0] ?? [];
         $state = $written['Состояние'] ?? [];

@@ -21,6 +21,8 @@ class SabyWaybillService
     public const DOC_TYPE = 'ConsignmentNote';
     public const REGULATION = 'Транспортная накладная';
     public const GEOCODE_RADIUS = 1000;
+    public const EDO_OPERATOR_PREFIX = '2BE';
+
     public const MASS_METHODS = [
         '1' => 'Взвешивание по общей массе',
         '2' => 'Взвешивание поосно',
@@ -83,7 +85,7 @@ class SabyWaybillService
             'Регламент' => ['Название' => self::REGULATION],
             'НашаОрганизация' => $this->ourOrganization(),
             'Грузоотправитель' => $this->counterparty($shipper),
-            'ТранспортнаяКомпания' => $this->counterparty($carrier ?: $shipper),
+            'ТранспортнаяКомпания' => $this->addressedCounterparty($carrier ?: $shipper),
             'Вложение' => [
                 ['Файл' => [
                     'ДвоичныеДанные' => $file['ДвоичныеДанные'],
@@ -461,6 +463,17 @@ class SabyWaybillService
         }
 
         return '';
+    }
+
+    protected function addressedCounterparty(Company $company): array
+    {
+        $party = $this->counterparty($company);
+        $prefix = trim((string) $this->client->config()->param('edo_operator_prefix', self::EDO_OPERATOR_PREFIX));
+        if ($prefix !== '') {
+            $party['Идентификатор'] = $prefix;
+        }
+
+        return $party;
     }
 
     protected function counterparty(Company $company): array
