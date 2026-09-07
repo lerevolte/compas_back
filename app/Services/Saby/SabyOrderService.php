@@ -80,7 +80,7 @@ class SabyOrderService extends SabyWaybillService
             $payload['Контрагент'] = $this->addressedCounterparty($carrier);
         }
 
-        $written = $this->client->call('СБИС.ЗаписатьДокумент', ['Документ' => $payload]);
+        $written = $this->writeDocument($payload, ['Контрагент']);
 
         $attachment = $written['Вложение'][0] ?? [];
         $state = $written['Состояние'] ?? [];

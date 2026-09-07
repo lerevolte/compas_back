@@ -98,7 +98,7 @@ class SabyWaybillService
             $payload['Грузополучатель'] = $receiverParty;
         }
 
-        $written = $this->client->call('СБИС.ЗаписатьДокумент', ['Документ' => $payload]);
+        $written = $this->writeDocument($payload, ['ТранспортнаяКомпания']);
 
         $attachment = $written['Вложение'][0] ?? [];
 
@@ -463,6 +463,27 @@ class SabyWaybillService
         }
 
         return '';
+    }
+
+    protected function writeDocument(array $payload, array $addressedKeys): array
+    {
+        try {
+            return $this->client->call('СБИС.ЗаписатьДокумент', ['Документ' => $payload]);
+        } catch (SabyException $e) {
+            $retry = false;
+            foreach ($addressedKeys as $key) {
+                if (isset($payload[$key]['Идентификатор'])) {
+                    unset($payload[$key]['Идентификатор']);
+                    $retry = true;
+                }
+            }
+            if (!$retry) {
+                throw $e;
+            }
+            $this->log('warning', 'write document with operator prefix failed, retry via roaming', ['error' => $e->getMessage()]);
+
+            return $this->client->call('СБИС.ЗаписатьДокумент', ['Документ' => $payload]);
+        }
     }
 
     protected function addressedCounterparty(Company $company): array
