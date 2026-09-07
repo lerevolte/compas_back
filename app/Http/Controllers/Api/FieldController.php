@@ -426,12 +426,11 @@ class FieldController extends Controller
             if ($request->has('can_create')) {
                 $details['can_create'] = $request->can_create ? true : false;
             }
-            $data['details'] = json_encode($details);
+            $data['details'] = json_encode($details, JSON_UNESCAPED_UNICODE);
         } elseif ($request->has('can_create')) {
-            // For status fields — save can_create in details
             $existingDetails = json_decode($field->details, true) ?? [];
             $existingDetails['can_create'] = $request->can_create ? true : false;
-            $data['details'] = json_encode($existingDetails);
+            $data['details'] = json_encode($existingDetails, JSON_UNESCAPED_UNICODE);
         }
 
         if ($request->has('subfields')) {
@@ -446,7 +445,7 @@ class FieldController extends Controller
             $existingDetails = json_decode($field->details, true) ?? [];
             $existingDetails['can_create'] = $request->can_create ? true : false;
             info($existingDetails);
-            $data['details'] = json_encode($existingDetails);
+            $data['details'] = json_encode($existingDetails, JSON_UNESCAPED_UNICODE);
         }
         info($data);
 

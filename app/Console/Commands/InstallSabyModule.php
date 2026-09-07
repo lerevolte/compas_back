@@ -485,7 +485,7 @@ class InstallSabyModule extends Command
 
         $this->addField($db, 'logistic_tasks', 'company_id', [
             'type' => 'relation',
-            'title' => 'Компания',
+            'title' => 'Компания-получатель',
             'relation_table' => 'companies',
             'details' => json_encode(['table' => 'companies'], JSON_UNESCAPED_UNICODE),
         ], 'text');
@@ -951,6 +951,8 @@ class InstallSabyModule extends Command
                     `task_id` bigint unsigned DEFAULT NULL,
                     `route_id` bigint unsigned DEFAULT NULL,
                     `loading_task_id` bigint unsigned DEFAULT NULL,
+                    `unloading_task_id` bigint unsigned DEFAULT NULL,
+                    `current_is_loading` tinyint(1) NOT NULL DEFAULT 0,
                     `mass_method` varchar(8) DEFAULT NULL,
                     `doc_id` varchar(64) DEFAULT NULL,
                     `attachment_id` varchar(64) DEFAULT NULL,
@@ -1011,6 +1013,14 @@ class InstallSabyModule extends Command
 
         if (!$sb->hasColumn('saby_waybills', 'mass_method')) {
             $db->statement("ALTER TABLE `saby_waybills` ADD COLUMN `mass_method` VARCHAR(4) NULL");
+        }
+
+        if (!$sb->hasColumn('saby_orders', 'unloading_task_id')) {
+            $db->statement("ALTER TABLE `saby_orders` ADD COLUMN `unloading_task_id` BIGINT UNSIGNED NULL");
+        }
+
+        if (!$sb->hasColumn('saby_orders', 'current_is_loading')) {
+            $db->statement("ALTER TABLE `saby_orders` ADD COLUMN `current_is_loading` TINYINT(1) NOT NULL DEFAULT 0");
         }
     }
 

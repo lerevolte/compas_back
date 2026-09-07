@@ -332,11 +332,11 @@ class FieldService
             if (isset($dto->can_create)) {
                 $details['can_create'] = $dto->can_create ? true : false;
             }
-            $data['details'] = json_encode($details, true);
+            $data['details'] = json_encode($details, JSON_UNESCAPED_UNICODE);
         } elseif (isset($dto->can_create)) {
             $existingDetails = json_decode($field->details, true) ?? [];
             $existingDetails['can_create'] = $dto->can_create ? true : false;
-            $data['details'] = json_encode($existingDetails, true);
+            $data['details'] = json_encode($existingDetails, JSON_UNESCAPED_UNICODE);
         };
 
         $data['set_color'] = isset($dto->set_color) ? $dto->set_color : $field->set_color;

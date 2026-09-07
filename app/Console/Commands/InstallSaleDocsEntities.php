@@ -31,6 +31,12 @@ class InstallSaleDocsEntities extends Command
             'model' => 'App\\Models\\ExpenseInvoice',
             'slug_singular' => 'expense_invoice',
             'color' => '#8E5AA8',
+            'columns' => [
+                'contact_id' => 'TEXT NULL',
+            ],
+            'fields' => [
+                'contact_id' => ['type' => 'relation', 'title' => 'Контакт', 'details' => '{"table":"contacts"}', 'is_link' => 1, 'is_plural' => 1, 'relation_table' => 'contacts', 'after' => 'company_id'],
+            ],
         ],
         'product_returns' => [
             'title_singular' => 'Оприходование',

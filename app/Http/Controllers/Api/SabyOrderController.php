@@ -43,14 +43,20 @@ class SabyOrderController extends Controller
             return response()->json(['message' => 'Задача не найдена'], 404);
         }
 
-        $loadingTask = null;
-        if ($request->loading_task_id) {
-            $loadingTask = Task::find($request->loading_task_id);
-            if (!$loadingTask) {
-                return response()->json(['message' => 'Точка погрузки не найдена'], 422);
+        $currentIsLoading = filter_var($request->current_is_loading, FILTER_VALIDATE_BOOLEAN);
+        $pointLabel = $currentIsLoading ? 'Точка выгрузки' : 'Точка погрузки';
+        $pointId = $currentIsLoading ? $request->unloading_task_id : $request->loading_task_id;
+        $pointTask = null;
+        if ($pointId) {
+            $pointTask = Task::find($pointId);
+            if (!$pointTask) {
+                return response()->json(['message' => $pointLabel . ' не найдена'], 422);
             }
-            if ($task->route_id && (int) $loadingTask->route_id !== (int) $task->route_id) {
-                return response()->json(['message' => 'Точка погрузки должна быть из маршрута задачи'], 422);
+            if ((int) $pointTask->id === (int) $task->id) {
+                return response()->json(['message' => $pointLabel . ' не может совпадать с текущей задачей'], 422);
+            }
+            if ($task->route_id && (int) $pointTask->route_id !== (int) $task->route_id) {
+                return response()->json(['message' => $pointLabel . ' должна быть из маршрута задачи'], 422);
             }
         }
 
@@ -60,7 +66,7 @@ class SabyOrderController extends Controller
         }
 
         try {
-            $order = $service->createOrder($task, $loadingTask, $massMethod);
+            $order = $service->createOrder($task, $pointTask, $massMethod, $currentIsLoading);
         } catch (SabyValidationException $e) {
             return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 422);
         } catch (SabyException $e) {
@@ -155,6 +161,8 @@ class SabyOrderController extends Controller
             'created_at' => optional($order->created_at)->format('d.m.Y H:i'),
             'synced_at' => optional($order->synced_at ? \Carbon\Carbon::parse($order->synced_at) : null)?->format('d.m.Y H:i'),
             'loading_task' => app(SabyWaybillController::class)->presentLoadingTaskPublic($order->loading_task_id),
+            'unloading_task' => app(SabyWaybillController::class)->presentLoadingTaskPublic($order->unloading_task_id),
+            'current_is_loading' => (bool) $order->current_is_loading,
             'mass_method' => $order->mass_method,
             'mass_method_label' => SabyWaybillService::MASS_METHODS[(string) ($order->mass_method ?? '')] ?? null,
             'waybill' => $waybill,

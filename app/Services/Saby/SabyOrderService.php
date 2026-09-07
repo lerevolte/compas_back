@@ -40,9 +40,9 @@ class SabyOrderService extends SabyWaybillService
         }
     }
 
-    public function createOrder(Task $task, ?Task $loadingTask = null, ?string $massMethod = null): SabyOrder
+    public function createOrder(Task $task, ?Task $pointTask = null, ?string $massMethod = null, bool $currentIsLoading = false): SabyOrder
     {
-        $substitutions = $this->buildOrder($task, $loadingTask, $massMethod);
+        $substitutions = $this->buildOrder($task, $pointTask, $massMethod, $currentIsLoading);
         $config = $this->client->config();
         $route = $task->route_id ? Route::find($task->route_id) : null;
         $carrier = $route ? $this->companyOf($route, 'company_id') : null;
@@ -88,7 +88,9 @@ class SabyOrderService extends SabyWaybillService
         $order = SabyOrder::create([
             'task_id' => $task->id,
             'route_id' => $task->route_id,
-            'loading_task_id' => $loadingTask?->id,
+            'loading_task_id' => $currentIsLoading ? null : $pointTask?->id,
+            'unloading_task_id' => $currentIsLoading ? $pointTask?->id : null,
+            'current_is_loading' => $currentIsLoading ? 1 : 0,
             'mass_method' => $massMethod,
             'doc_id' => $written['Идентификатор'] ?? null,
             'attachment_id' => $attachment['Идентификатор'] ?? null,
@@ -189,10 +191,12 @@ class SabyOrderService extends SabyWaybillService
         return [];
     }
 
-    public function buildOrder(Task $task, ?Task $loadingTask = null, ?string $massMethod = null): array
+    public function buildOrder(Task $task, ?Task $pointTask = null, ?string $massMethod = null, bool $currentIsLoading = false): array
     {
         $errors = [];
         $route = $task->route_id ? Route::find($task->route_id) : null;
+        $loadingTask = $currentIsLoading ? $task : $pointTask;
+        $unloadingTask = $currentIsLoading ? $pointTask : $task;
 
         $shipper = $this->companyOf($task, 'shipment_company_id');
         if (!$shipper) {
@@ -210,17 +214,19 @@ class SabyOrderService extends SabyWaybillService
             $errors[] = 'У перевозчика «' . $carrier->name . '» не заполнен ИНН';
         }
 
-        $receiver = $this->companyOf($task, 'company_id');
-        $receiverContact = $this->contactOf($task);
+        $receiver = $unloadingTask ? $this->companyOf($unloadingTask, 'company_id') : null;
+        $receiverContact = $unloadingTask ? $this->contactOf($unloadingTask) : null;
 
         $positions = $this->orderCargo($task, $massMethod);
         if (!count($positions)) {
             $errors[] = 'В задаче не заполнено поле «Состав»';
         }
 
-        $deliveryAddress = $this->taskAddress($task, $receiver);
-        if ($deliveryAddress === '') {
-            $errors[] = 'В задаче не заполнен адрес доставки';
+        $deliveryAddress = $unloadingTask ? $this->taskAddress($unloadingTask, $receiver) : '';
+        if ($currentIsLoading && !$unloadingTask) {
+            $errors[] = 'Выберите точку выгрузки';
+        } elseif ($deliveryAddress === '') {
+            $errors[] = $currentIsLoading ? 'В точке выгрузки не заполнен адрес' : 'В задаче не заполнен адрес доставки';
         }
 
         $loadingAddress = '';
@@ -234,7 +240,9 @@ class SabyOrderService extends SabyWaybillService
             $loadingAddress = $this->companyAddress($shipper, $this->requisite($shipper));
         }
         if ($loadingAddress === '') {
-            $errors[] = 'Не удалось определить адрес погрузки: выберите точку погрузки или заполните адрес компании отгрузки';
+            $errors[] = $currentIsLoading
+                ? 'В задаче не заполнен адрес погрузки и нет адреса у компании отгрузки'
+                : 'Не удалось определить адрес погрузки: выберите точку погрузки или заполните адрес компании отгрузки';
         }
 
         if (count($errors)) {
@@ -242,8 +250,8 @@ class SabyOrderService extends SabyWaybillService
         }
 
         $date = $this->formatDate($task->delivery_date) ?: ($route ? $this->formatDate($route->date) : '') ?: now()->format('d.m.Y');
-        $loadingAt = $loadingTask ? $this->loadingDateTime($loadingTask, $route) : $this->loadingDateTime($task, $route);
-        $deliveryAt = $this->loadingDateTime($task, $route);
+        $loadingAt = $this->loadingDateTime($loadingTask ?: $task, $route);
+        $deliveryAt = $this->loadingDateTime($unloadingTask ?: $task, $route);
 
         $loadingPoint = [
             'КодСтраны' => '643',

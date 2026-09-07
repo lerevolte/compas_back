@@ -485,8 +485,16 @@ class SaleDocumentService
             $doc->sum = rtrim(rtrim(number_format($total, 2, '.', ''), '0'), '.');
         }
         $currentName = $this->plain($doc->name);
-        if ($currentName === '' || $currentName === $dealName || preg_match('/^' . preg_quote($meta['title'], '/') . ' № .+ от \d{2}\.\d{2}\.\d{4}$/u', $currentName)) {
-            $doc->name = $meta['title'] . ' № ' . $number . ' от ' . $date;
+        $entityTitle = (string) (\DB::table('data_types')->where('slug', $slug)->value('title_singular') ?: $meta['title']);
+        $autoNames = array_unique([$meta['title'], $entityTitle]);
+        $isAutoName = $currentName === '' || $currentName === $dealName;
+        foreach ($autoNames as $autoName) {
+            if (preg_match('/^' . preg_quote($autoName, '/') . ' № .+ от \d{2}\.\d{2}\.\d{4}$/u', $currentName)) {
+                $isAutoName = true;
+            }
+        }
+        if ($isAutoName) {
+            $doc->name = $entityTitle . ' № ' . $number . ' от ' . $date;
         }
         if (count($products) && !$this->decodeProducts($doc->products)) {
             $doc->products = json_encode($products, JSON_UNESCAPED_UNICODE);
