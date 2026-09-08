@@ -74,7 +74,7 @@ class UpdService
                 continue;
             }
             foreach (SaleDocumentService::documentFiles($row->photo ?? null) as $file) {
-                $url = (string) $file['url'];
+                $url = strtok((string) $file['url'], '?');
                 $pos = strpos($url, '/app/public/');
                 if ($pos === false || !str_ends_with(strtolower($url), '.pdf')) {
                     continue;
