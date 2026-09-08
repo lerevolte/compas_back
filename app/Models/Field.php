@@ -352,9 +352,12 @@ class Field extends Model
         if($permissions['create_p'] == 'Y' && $field->field == 'user_id' && !\Auth::user()->is_admin) {
             $fields_data[$field->field]['can_edit'] = 0;
         }
-        if($permissions['update_p'] == 'Y' && $current->user_id != \Auth::user()->id && !\Auth::user()->is_admin && $slug != 'users' || 
-            $permissions['update_p'] == 'N' && !\Auth::user()->is_admin || $field->field == 'payment') {
+        if($permissions['update_p'] == 'Y' && $current->user_id != \Auth::user()->id && !\Auth::user()->is_admin && $slug != 'users' ||
+            $permissions['update_p'] == 'N' && !\Auth::user()->is_admin && !($slug == 'users' && \Auth::user()->id == $current->id) || $field->field == 'payment') {
                 $fields_data[$field->field]['can_edit'] = 0;
+        }
+        if($slug == 'users' && !\Auth::user()->is_admin && in_array($field->field, ['role_id', 'is_admin'], true)) {
+            $fields_data[$field->field]['can_edit'] = 0;
         }
 
         //$fields_data[$field->field]['can_edit'] = $field->only_read ? 0 : 1;//!$settings[$slug]['perms'][$field->field]['write'] ? 1 : 0;

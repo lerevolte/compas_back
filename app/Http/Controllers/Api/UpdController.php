@@ -15,12 +15,13 @@ class UpdController extends Controller
             $ids = explode(',', $ids);
         }
 
-        $pdf = UpdService::pdf((string) $model, (array) $ids);
-        if (!$pdf) {
+        $withDocs = filter_var($request->input('docs'), FILTER_VALIDATE_BOOLEAN);
+        $output = UpdService::output((string) $model, (array) $ids, $withDocs);
+        if ($output === null) {
             return response()->json(['message' => 'Не удалось сформировать УПД'], 422);
         }
 
-        return response($pdf->output(), 200, [
+        return response($output, 200, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'inline; filename="upd.pdf"',
         ]);

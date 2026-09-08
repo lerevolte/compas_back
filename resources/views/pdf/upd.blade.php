@@ -9,13 +9,15 @@
         .doc { page-break-after: always; }
         .doc:last-child { page-break-after: auto; }
         .small { font-size: 5.4pt; color: #333; }
-        .badge { border: 1px solid #000; padding: 3px 4px; font-weight: bold; text-align: center; }
-        .status { border: 1px solid #000; width: 18px; height: 14px; display: inline-block; text-align: center; font-weight: bold; }
+        .badge { border: 1px solid #000; padding: 2px 3px; font-weight: bold; text-align: center; font-size: 5.6pt; margin-top: 3px; }
+        .status { border: 1px solid #000; width: 14px; height: 11px; display: inline-block; text-align: center; font-weight: bold; font-size: 5.4pt; }
+        .legend { font-size: 4.8pt; color: #333; line-height: 1.15; }
+        .qr { display: block; width: 100%; height: auto; }
         .header-note { text-align: right; font-size: 5.4pt; }
         .head td { vertical-align: top; padding: 1px 3px; }
         .head .k { white-space: nowrap; }
-        .head .v { border-bottom: 1px solid #000; width: 42%; }
-        .goods th, .goods td { border: 1px solid #000; padding: 2px 3px; vertical-align: middle; }
+        .head .v { border-bottom: 1px solid #000; width: 33%; }
+        .goods th, .goods td { border: 1px solid #000; padding: 1px 3px; vertical-align: middle; }
         .goods th { font-weight: normal; text-align: center; font-size: 5.8pt; }
         .goods td { font-size: 6.4pt; }
         .goods .num { text-align: center; font-size: 5.4pt; }
@@ -24,10 +26,10 @@
         .nb { white-space: nowrap; }
         .b { font-weight: bold; }
         .sign td { vertical-align: bottom; padding: 4px 4px 0; }
-        .line { border-bottom: 1px solid #000; min-height: 12px; }
+        .line { border-bottom: 1px solid #000; min-height: 10px; }
         .cap { font-size: 5.2pt; color: #333; text-align: center; }
         .half { width: 50%; vertical-align: top; }
-        .footer-table td { padding: 2px 4px; vertical-align: bottom; }
+        .footer-table td { padding: 1px 4px; vertical-align: bottom; }
         .section-line { border-bottom: 1px solid #000; }
     </style>
 </head>
@@ -37,9 +39,12 @@
         <table>
             <tr>
                 <td style="width: 13%; vertical-align: top;">
-                    <div class="badge">Универсальный<br>передаточный<br>документ</div>
-                    <div style="margin-top: 4px;">Статус: <span class="status">1</span></div>
-                    <div class="small" style="margin-top: 3px;">
+                    @if(!empty($doc['qr']))
+                        <img src="{{ $doc['qr'] }}" class="qr" alt="">
+                    @endif
+                    <div class="badge">Универсальный передаточный документ</div>
+                    <div class="legend" style="margin-top: 2px;">Статус: <span class="status">1</span></div>
+                    <div class="legend" style="margin-top: 2px;">
                         1 – счет-фактура и передаточный документ (акт)<br>
                         2 – передаточный документ (акт)
                     </div>
@@ -107,6 +112,14 @@
                             <td class="small nb">(8)</td>
                         </tr>
                         <tr>
+                            <td class="k">К платежно-расчетному документу</td>
+                            <td class="v">№ -- от --</td>
+                            <td class="small nb">(5)</td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                        <tr>
                             <td class="k">Документ об отгрузке</td>
                             <td class="v">№ {{ $doc['number'] }} от {{ $doc['date'] }}</td>
                             <td class="small nb">(5а)</td>
@@ -123,7 +136,7 @@
             <tr>
                 <th rowspan="2" style="width: 7%;">Код товара/<br>работ, услуг</th>
                 <th rowspan="2" style="width: 3%;">№<br>п/п</th>
-                <th rowspan="2">Наименование товара (описание выполненных работ, оказанных услуг), имущественного права</th>
+                <th rowspan="2" style="width: 16%;">Наименование товара (описание выполненных работ, оказанных услуг), имущественного права</th>
                 <th rowspan="2" style="width: 4%;">Код вида товара</th>
                 <th colspan="2" style="width: 8%;">Единица измерения</th>
                 <th rowspan="2" style="width: 6%;">Количество (объем)</th>

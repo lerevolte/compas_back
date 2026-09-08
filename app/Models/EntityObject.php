@@ -382,6 +382,9 @@ class EntityObject
                 $fields_data[$field->field]['can_read'] = $settings[$slug]['perms'][$field->field]['read'] || $isAdmin ? 1 : 0;
                 $fields_data[$field->field]['can_edit'] = isset($data['deleted_at']) || $field->only_read ||
                     !($settings[$slug]['perms'][$field->field]['write'] ?? 1) && !$isAdmin ? 0 : 1;
+                if ($slug == 'users' && !$isAdmin && in_array($field->field, ['role_id', 'is_admin'], true)) {
+                    $fields_data[$field->field]['can_edit'] = 0;
+                }
                 if ($slug == 'logistic_tasks' && $field->field == 'delivery_date' && $current->route_id && !$request->is_copy
                     && \App\Models\Route::whereKey($current->route_id)->exists()) {
                     $fields_data[$field->field]['can_edit'] = 0;
@@ -603,7 +606,7 @@ class EntityObject
                             $subfield_data['can_edit'] = 0;
                         }
                         if($id && $permissions['update_p'] == 'Y' && \Auth::user() && $current->user_id != \Auth::user()->id && !$isAdmin && $slug != 'users' && \Auth::user() && \Auth::user()->id != $id ||
-                            $id && $permissions['update_p'] == 'N' && !$isAdmin ||
+                            $id && $permissions['update_p'] == 'N' && !$isAdmin && !($slug == 'users' && \Auth::user() && \Auth::user()->id == $id) ||
                             $id && $permissions['update_p'] == 'E' && !$isAdmin && \Auth::user() && !self::currentEmployeeMatch($current)) {
                                 $subfield_data['can_edit'] = 0;
                         }
@@ -894,7 +897,7 @@ class EntityObject
                     $fields_data[$field->field]['can_edit'] = 0;
                 }
                 if($id && $permissions['update_p'] == 'Y' && $current->user_id != \Auth::user()->id && !\Auth::user()->is_admin && $slug != 'users' && \Auth::user()->id != $id ||
-                    $id && $permissions['update_p'] == 'N' && !\Auth::user()->is_admin ||
+                    $id && $permissions['update_p'] == 'N' && !\Auth::user()->is_admin && !($slug == 'users' && \Auth::user()->id == $id) ||
                     $id && $permissions['update_p'] == 'E' && !\Auth::user()->is_admin && !self::currentEmployeeMatch($current)) {
                         $fields_data[$field->field]['can_edit'] = 0;
                 }
@@ -1084,7 +1087,7 @@ class EntityObject
                             $subfield_data['can_edit'] = 0;
                         }
                         if($id && $permissions['update_p'] == 'Y' && $current->user_id != \Auth::user()->id && !\Auth::user()->is_admin && $slug != 'users' && \Auth::user()->id != $id ||
-                            $id && $permissions['update_p'] == 'N' && !\Auth::user()->is_admin ||
+                            $id && $permissions['update_p'] == 'N' && !\Auth::user()->is_admin && !($slug == 'users' && \Auth::user()->id == $id) ||
                             $id && $permissions['update_p'] == 'E' && !\Auth::user()->is_admin && !self::currentEmployeeMatch($current)) {
                                 $subfield_data['can_edit'] = 0;
                         }

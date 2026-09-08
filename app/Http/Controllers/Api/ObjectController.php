@@ -584,11 +584,23 @@ class ObjectController extends Controller
     public function batch($slug, Request $request): JsonResponse
     {
         $user = Auth::user();
+        $rows = $request->rows ?? [];
+        if ($user && !$user->is_admin && $slug === 'users') {
+            foreach ($rows as $k => $row) {
+                if (!empty($row['id']) && empty($row['copy']) && (int) $row['id'] === (int) $user->id) {
+                    unset($rows[$k]['role_id'], $rows[$k]['is_admin']);
+                    $rows[$k]['is_self'] = true;
+                }
+            }
+        }
         if ($user && !$user->is_admin) {
             $perms = $this->getPermissions($user, $slug);
             $hasCreate = false;
             $hasUpdate = false;
-            foreach (($request->rows ?? []) as $row) {
+            foreach ($rows as $row) {
+                if (!empty($row['is_self'])) {
+                    continue;
+                }
                 if (empty($row['id']) || !empty($row['copy'])) {
                     $hasCreate = true;
                 } else {
@@ -603,8 +615,8 @@ class ObjectController extends Controller
             }
             if ($hasUpdate && isset($perms['update_p']) && $perms['update_p'] === 'Y'
                 && \Schema::hasColumn($slug, 'user_id')) {
-                foreach (($request->rows ?? []) as $row) {
-                    if (empty($row['id']) || !empty($row['copy'])) {
+                foreach ($rows as $row) {
+                    if (empty($row['id']) || !empty($row['copy']) || !empty($row['is_self'])) {
                         continue;
                     }
                     $owner = DB::table($slug)->where('id', $row['id'])->value('user_id');
@@ -615,8 +627,8 @@ class ObjectController extends Controller
             }
             if ($hasUpdate && isset($perms['update_p']) && $perms['update_p'] === 'E'
                 && $this->hasEmployeeBinding($slug)) {
-                foreach (($request->rows ?? []) as $row) {
-                    if (empty($row['id']) || !empty($row['copy'])) {
+                foreach ($rows as $row) {
+                    if (empty($row['id']) || !empty($row['copy']) || !empty($row['is_self'])) {
                         continue;
                     }
                     if (!$this->isUserEmployeeObject($slug, $row['id'], $user)) {
@@ -626,7 +638,11 @@ class ObjectController extends Controller
             }
         }
 
-        $result = $this->crudService->batch($slug, $request->rows);
+        foreach ($rows as $k => $row) {
+            unset($rows[$k]['is_self']);
+        }
+
+        $result = $this->crudService->batch($slug, array_values($rows));
         return response()->json($result, $result['status']);
     }
 

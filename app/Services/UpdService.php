@@ -15,6 +15,107 @@ class UpdService
         7 => 'июля', 8 => 'августа', 9 => 'сентября', 10 => 'октября', 11 => 'ноября', 12 => 'декабря',
     ];
 
+    public static function output(string $slug, array $ids, bool $withDocs = false): ?string
+    {
+        $pdf = self::pdf($slug, $ids);
+        if (!$pdf) {
+            return null;
+        }
+        $bytes = $pdf->output();
+        if (!$withDocs) {
+            return $bytes;
+        }
+        $files = self::linkedDocumentFiles($slug, $ids);
+        if (!count($files)) {
+            return $bytes;
+        }
+
+        return self::merge($bytes, $files) ?? $bytes;
+    }
+
+    public static function linkedDocumentFiles(string $slug, array $ids): array
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (!count($ids) || !\App\Models\ObjectRelation::ready()) {
+            return [];
+        }
+        $targets = array_keys(SaleDocumentService::TARGETS);
+        $docs = [];
+        foreach ($ids as $id) {
+            $own = \App\Models\ObjectRelation::where('source_slug', $slug)
+                ->where('source_id', $id)
+                ->whereIn('target_slug', $targets)
+                ->orderBy('id')
+                ->get(['target_slug', 'target_id']);
+            foreach ($own as $relation) {
+                $docs[$relation->target_slug . '#' . $relation->target_id] = [(string) $relation->target_slug, (int) $relation->target_id];
+            }
+            $parent = ShipmentService::parentOf($slug, $id);
+            if ($parent && $parent[0] === 'deals') {
+                $dealDocs = \App\Models\ObjectRelation::where('source_slug', 'deals')
+                    ->where('source_id', $parent[1])
+                    ->whereIn('target_slug', $targets)
+                    ->orderBy('id')
+                    ->get(['target_slug', 'target_id']);
+                foreach ($dealDocs as $relation) {
+                    $docs[$relation->target_slug . '#' . $relation->target_id] = [(string) $relation->target_slug, (int) $relation->target_id];
+                }
+            }
+        }
+
+        $disk = \Storage::disk('public');
+        $files = [];
+        foreach ($docs as [$docSlug, $docId]) {
+            if (!Schema::hasTable($docSlug)) {
+                continue;
+            }
+            $row = DB::table($docSlug)->where('id', $docId)->first();
+            if (!$row || (property_exists($row, 'deleted_at') && $row->deleted_at)) {
+                continue;
+            }
+            foreach (SaleDocumentService::documentFiles($row->photo ?? null) as $file) {
+                $url = (string) $file['url'];
+                $pos = strpos($url, '/app/public/');
+                if ($pos === false || !str_ends_with(strtolower($url), '.pdf')) {
+                    continue;
+                }
+                $path = $disk->path(substr($url, $pos + strlen('/app/public/')));
+                if (is_file($path) && !in_array($path, $files, true)) {
+                    $files[] = $path;
+                }
+            }
+        }
+
+        return $files;
+    }
+
+    private static function merge(string $bytes, array $files): ?string
+    {
+        $gs = trim((string) @shell_exec('command -v gs 2>/dev/null'));
+        if ($gs === '') {
+            return null;
+        }
+        $dir = storage_path('app/tmp');
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
+        $main = tempnam($dir, 'upd_');
+        $out = tempnam($dir, 'print_');
+        file_put_contents($main, $bytes);
+        $inputs = array_merge([$main], $files);
+        $cmd = escapeshellarg($gs) . ' -q -dNOPAUSE -dBATCH -dSAFER -sDEVICE=pdfwrite -sOutputFile=' . escapeshellarg($out)
+            . ' ' . implode(' ', array_map('escapeshellarg', $inputs)) . ' 2>&1';
+        @exec($cmd, $log, $code);
+        $result = $code === 0 && is_file($out) && filesize($out) > 0 ? file_get_contents($out) : null;
+        @unlink($main);
+        @unlink($out);
+        if ($result === null) {
+            \Log::warning('upd merge failed', ['code' => $code, 'log' => array_slice((array) $log, 0, 5)]);
+        }
+
+        return $result;
+    }
+
     public static function pdf(string $slug, array $ids)
     {
         if (!in_array($slug, self::SLUGS, true) || !Schema::hasTable($slug)) {
@@ -154,7 +255,24 @@ class UpdService
             'total_with' => number_format($totalWith, 2, ',', ' '),
             'weight' => (float) ($object->weight ?? 0),
             'volume' => (float) ($object->volume ?? 0),
+            'qr' => self::qrDataUri($slug, $id),
         ];
+    }
+
+    private static function qrDataUri(string $slug, int $id): ?string
+    {
+        if (!class_exists(\TCPDF2DBarcode::class)) {
+            return null;
+        }
+        $tenant = tenant('id');
+        $url = ($tenant ? 'https://' . $tenant . '.compas.pro' : 'https://compas.pro') . '/objects/' . $slug . '/' . $id;
+        try {
+            $png = (new \TCPDF2DBarcode($url, 'QRCODE,M'))->getBarcodePngData(6, 6, [0, 0, 0]);
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        return is_string($png) && $png !== '' ? 'data:image/png;base64,' . base64_encode($png) : null;
     }
 
     private static function dealShipmentCompanyId(string $slug, int $id): ?int

@@ -45,9 +45,11 @@ class InstallSaleDocsEntities extends Command
             'slug_singular' => 'product_return',
             'color' => '#C0392B',
             'columns' => [
+                'contact_id' => 'TEXT NULL',
                 'reason' => 'TEXT NULL',
             ],
             'fields' => [
+                'contact_id' => ['type' => 'relation', 'title' => 'Контакт', 'details' => '{"table":"contacts"}', 'is_link' => 1, 'is_plural' => 1, 'relation_table' => 'contacts', 'after' => 'company_id'],
                 'reason' => ['type' => 'text', 'title' => 'Причина возврата', 'is_plural' => 1],
             ],
         ],
