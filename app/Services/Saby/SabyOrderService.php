@@ -216,6 +216,15 @@ class SabyOrderService extends SabyWaybillService
 
         $receiver = $unloadingTask ? $this->companyOf($unloadingTask, 'company_id') : null;
         $receiverContact = $unloadingTask ? $this->contactOf($unloadingTask) : null;
+        if (!$receiver && !$receiverContact && $unloadingTask && $unloadingTask->id !== $task->id) {
+            $receiver = $this->companyOf($task, 'company_id');
+            $receiverContact = $this->contactOf($task);
+        }
+        if ($receiver && $this->inn($receiver) === '') {
+            $errors[] = 'У компании-получателя «' . $receiver->name . '» не заполнен ИНН';
+        } elseif (!$receiver && $receiverContact && strlen($this->contactInn($receiverContact)) !== 12) {
+            $errors[] = 'У контакта-получателя «' . $this->contactName($receiverContact) . '» не заполнен ИНН (12 цифр)';
+        }
 
         $positions = $this->orderCargo($task, $massMethod);
         if (!count($positions)) {

@@ -56,7 +56,7 @@ class Field extends Model
                     $data[$field->field]['options'] = array_values($field_values);
                 };
                 if($field->type == 'relation') {
-                    $data[$field->field]['related_table'] = json_decode($field->details, true)['table'];
+                    $data[$field->field]['related_table'] = self::relatedTable($field);
                 }
             }
         }
@@ -311,6 +311,16 @@ class Field extends Model
         return $data;
     }
 
+    public static function relatedTable($field): ?string
+    {
+        $details = is_string($field->details) ? json_decode($field->details, true) : (is_array($field->details) ? $field->details : null);
+        if (is_array($details) && !empty($details['table'])) {
+            return $details['table'];
+        }
+
+        return !empty($field->relation_table) ? $field->relation_table : null;
+    }
+
     public static function getDataByObject($field, $slug, $current)
     {
         $settings = app('settings');
@@ -507,9 +517,8 @@ class Field extends Model
             // if($field->type == 'status')
             //     $fields_data[$field->field]['editableFields']['statuses'] = $settings['list_values'][$field->id];
         };
-        if($field->type == 'relation' && $t = json_decode($field->details, true)) {
-            if(isset($t['table']))
-                $fields_data[$field->field]['related_table'] = $t['table'];
+        if($field->type == 'relation' && $related = self::relatedTable($field)) {
+            $fields_data[$field->field]['related_table'] = $related;
         }
         if($field->type == 'text_group') {
             $subfields = \App\Models\Field::getByGroup($field->id);
@@ -541,6 +550,7 @@ class Field extends Model
                     //'can_edit' => $field->only_read ? 0 : 1,//!$settings[$slug]['perms'][$field->field]['write'] ? 1 : 0,
                     'color' => $field->label_color ? $field->label_color : null,
                     'group_id' => $subfield->group_id,
+                    'related_table' => $subfield->type == 'relation' ? self::relatedTable($subfield) : null,
                     'value' => $current->{$subfield->field},
                     'sort' => $subfield->sort
                 );
@@ -582,8 +592,8 @@ class Field extends Model
             'show_file_name' => $this->show_file_name,
             'button_name' => $this->button_name,
             'is_program' => $this->is_program,
-            'dependency_fields' => isset($this->dependency_fields) ? json_decode($this->dependency_fields, true) : null
-
+            'dependency_fields' => isset($this->dependency_fields) ? json_decode($this->dependency_fields, true) : null,
+            'related_table' => $this->type == 'relation' ? self::relatedTable($this) : null,
         );
 
         if ($this->details) {

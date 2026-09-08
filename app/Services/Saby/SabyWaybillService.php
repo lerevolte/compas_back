@@ -927,12 +927,23 @@ class SabyWaybillService
 
     protected function inn(Company $company): string
     {
-        return preg_replace('/\D/', '', (string) $this->attr($company, 'inn'));
+        return $this->companyDigits($company, 'inn');
     }
 
     protected function kpp(Company $company): string
     {
-        return preg_replace('/\D/', '', (string) $this->attr($company, 'kpp'));
+        return $this->companyDigits($company, 'kpp');
+    }
+
+    protected function companyDigits(Company $company, string $field): string
+    {
+        $value = preg_replace('/\D/', '', (string) $this->attr($company, $field));
+        if ($value !== '') {
+            return $value;
+        }
+        $requisite = $this->requisite($company);
+
+        return $requisite ? preg_replace('/\D/', '', (string) $requisite->{$field}) : '';
     }
 
     protected function phone(Company $company): string

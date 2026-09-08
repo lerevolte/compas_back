@@ -184,7 +184,7 @@ trait ModelActions
                         $data[$field->field]['options'] = $settings['list_values'][$field->id];
                     };
                     if($field->type == 'relation') {
-                        $data[$field->field]['related_table'] = json_decode($field->details, true)['table'];
+                        $data[$field->field]['related_table'] = \App\Models\Field::relatedTable($field);
                     }
                 }
             }
@@ -392,7 +392,7 @@ trait ModelActions
 
                 };
                 if($field->type == 'relation') {
-                    $fields_data[$field->field]['related_table'] = json_decode($field->details, true)['table'];
+                    $fields_data[$field->field]['related_table'] = \App\Models\Field::relatedTable($field);
                 }
 
             }
@@ -523,9 +523,8 @@ trait ModelActions
                         if($field->type == 'status')
                             $fields_data['editableFields']['statuses'] = $settings['list_values'][$field->id];
                     };
-                    if($field->type == 'relation' && $t = json_decode($field->details, true)) {
-                        if(isset($t['table']))
-                            $fields_data['related_table'] = $t['table'];
+                    if($field->type == 'relation' && $related = \App\Models\Field::relatedTable($field)) {
+                        $fields_data['related_table'] = $related;
                     }
                     if($field->type == 'text_group') {
                         $subfields = \App\Models\Field::getByGroup($field->id);
@@ -557,6 +556,7 @@ trait ModelActions
                                 'can_edit' => $field->only_read ? 0 : 1,//!$settings[$slug]['perms'][$field->field]['write'] ? 1 : 0,
                                 'color' => $field_colors[$field->field],
                                 'group_id' => $subfield->group_id,
+                                'related_table' => $subfield->type == 'relation' ? \App\Models\Field::relatedTable($subfield) : null,
                                 'value' => $this->{$subfield->field},
                                 'sort' => $subfield->sort,
                                 'mask' => $field->mask,

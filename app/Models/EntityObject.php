@@ -544,9 +544,8 @@ class EntityObject
                         }
                     }
                 };
-                if($field->type == 'relation' && $t = json_decode($field->details, true)) {
-                    if(isset($t['table']))
-                        $fields_data[$field->field]['related_table'] = $t['table'];
+                if($field->type == 'relation' && $related = \App\Models\Field::relatedTable($field)) {
+                    $fields_data[$field->field]['related_table'] = $related;
                 }
                 if($field->type == 'text_group') {
                     $subfields = \App\Models\Field::getByGroup($field->id);
@@ -1038,9 +1037,8 @@ class EntityObject
                         }
                     }
                 };
-                if($field->type == 'relation' && $t = json_decode($field->details, true)) {
-                    if(isset($t['table']))
-                        $fields_data[$field->field]['related_table'] = $t['table'];
+                if($field->type == 'relation' && $related = \App\Models\Field::relatedTable($field)) {
+                    $fields_data[$field->field]['related_table'] = $related;
                 }
                 if($field->type == 'text_group') {
                     $subfields = \App\Models\Field::getByGroup($field->id);
