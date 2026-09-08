@@ -212,6 +212,26 @@ class SabyOrderService extends SabyWaybillService
             $errors[] = 'У маршрута задачи не заполнено поле «Компания» (перевозчик)';
         } elseif ($this->inn($carrier) === '') {
             $errors[] = 'У перевозчика «' . $carrier->name . '» не заполнен ИНН';
+        } elseif ($this->phone($carrier) === '') {
+            $errors[] = 'У перевозчика «' . $carrier->name . '» не заполнен телефон';
+        }
+
+        if ($route) {
+            $car = $route->car_id ? \App\Models\Car::find($route->car_id) : null;
+            if (!$car) {
+                $errors[] = 'У маршрута не выбрано транспортное средство';
+            } else {
+                $carName = trim((string) ($car->name ?? '')) ?: ('#' . $car->id);
+                if ($this->fieldOptionLabel('cars', 'vehicle_type', $this->attr($car, 'vehicle_type')) === '') {
+                    $errors[] = 'У ТС «' . $carName . '» не заполнен «Тип ТС»';
+                }
+                if ($this->number($car->volume_max) <= 0) {
+                    $errors[] = 'У ТС «' . $carName . '» не заполнен объём («Объем, до»)';
+                }
+                if ($this->number($car->weight_max) <= 0) {
+                    $errors[] = 'У ТС «' . $carName . '» не заполнена грузоподъёмность («Грузоподъемность, до»)';
+                }
+            }
         }
 
         $receiver = $unloadingTask ? $this->companyOf($unloadingTask, 'company_id') : null;
