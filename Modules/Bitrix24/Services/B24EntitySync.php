@@ -716,6 +716,8 @@ class B24EntitySync
             }
             if ($carReqs) {
                 $model->car_requirements = json_encode($carReqs);
+            } elseif (array_key_exists('UF_CRM_1762411084', $deal) && ($rawUnloading === null || $rawUnloading === '' || $rawUnloading === [])) {
+                $model->car_requirements = null;
             }
 
             if (Schema::hasColumn('deals', 'car_type')) {
@@ -724,6 +726,8 @@ class B24EntitySync
                 $localCt = $ctLabel === null ? null : $this->localOptionValueByLabel('deals', 'car_type', $ctLabel);
                 if ($localCt !== null) {
                     $model->car_type = (int) $localCt;
+                } elseif (array_key_exists('UF_CRM_1625083610453', $deal) && ($rawCarType === null || $rawCarType === '')) {
+                    $model->car_type = null;
                 }
             }
 
@@ -2126,6 +2130,28 @@ class B24EntitySync
         return $this->enumLabelFromItems($this->b24DealFields[$ufCode]['items'] ?? null, $enumId);
     }
 
+    private function b24DealEnumIdByLabel(string $ufCode, ?string $label): ?string
+    {
+        if ($label === null || trim($label) === '') {
+            return null;
+        }
+        if ($this->b24DealFields === null) {
+            $resp = $this->b24('crm.deal.fields', []);
+            $this->b24DealFields = $resp['result'] ?? [];
+        }
+        $items = $this->b24DealFields[$ufCode]['items'] ?? null;
+        if (!is_array($items)) {
+            return null;
+        }
+        $needle = mb_strtolower(trim($label));
+        foreach ($items as $item) {
+            if (mb_strtolower(trim((string) ($item['VALUE'] ?? ''))) === $needle) {
+                return (string) ($item['ID'] ?? '') ?: null;
+            }
+        }
+        return null;
+    }
+
     private function contactFieldsMeta(): array
     {
         if ($this->b24ContactFields === null) {
@@ -2286,6 +2312,23 @@ class B24EntitySync
                     break;
                 case 'contact':
                     $fields['UF_CRM_1642670804'] = (string) $deal->contact;
+                    break;
+                case 'car_requirements':
+                    $ids = [];
+                    $values = json_decode((string) $deal->car_requirements, true);
+                    foreach (is_array($values) ? $values : [] as $value) {
+                        $enumId = $this->b24DealEnumIdByLabel('UF_CRM_1762411084', $this->localOptionLabelByValue('deals', 'car_requirements', $value));
+                        if ($enumId !== null) {
+                            $ids[] = $enumId;
+                        }
+                    }
+                    $fields['UF_CRM_1762411084'] = $ids;
+                    break;
+                case 'car_type':
+                    $enumId = $deal->car_type === null || $deal->car_type === ''
+                        ? null
+                        : $this->b24DealEnumIdByLabel('UF_CRM_1625083610453', $this->localOptionLabelByValue('deals', 'car_type', $deal->car_type));
+                    $fields['UF_CRM_1625083610453'] = $enumId ?? '';
                     break;
             }
         }

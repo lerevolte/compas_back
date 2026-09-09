@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Schema;
 class DocumentNumber
 {
     public const COUNTER = 'shipment_task';
+    public const PREFIX = 'cmps-';
 
     public static function ready(): bool
     {
@@ -28,7 +29,7 @@ class DocumentNumber
             DB::statement('UPDATE document_counters SET value = LAST_INSERT_ID(value + 1) WHERE name = ?', [$name]);
             $value = (int) DB::getPdo()->lastInsertId();
 
-            return $value > 0 ? (string) $value : null;
+            return $value > 0 ? self::PREFIX . $value : null;
         } catch (\Throwable $e) {
             return null;
         }

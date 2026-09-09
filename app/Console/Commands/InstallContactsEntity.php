@@ -63,7 +63,7 @@ class InstallContactsEntity extends Command
         return self::SUCCESS;
     }
 
-    private function installInto($db, string $label): void
+    public static function ensureTables($db): void
     {
         $sb = $db->getSchemaBuilder();
 
@@ -116,6 +116,13 @@ SQL);
                 $db->statement('ALTER TABLE `companies` ADD INDEX `companies_b24_id_index` (`b24_id`)');
             }
         }
+    }
+
+    private function installInto($db, string $label): void
+    {
+        $sb = $db->getSchemaBuilder();
+
+        self::ensureTables($db);
 
         $oldTypeIds = $db->table('data_types')
             ->where('name', 'contacts')->orWhere('slug', 'contacts')

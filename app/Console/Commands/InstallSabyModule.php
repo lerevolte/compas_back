@@ -471,7 +471,7 @@ class InstallSabyModule extends Command
             return;
         }
 
-        $this->ensureTables($db);
+        self::ensureTables($db);
 
         $this->removeObsoleteFields($db);
 
@@ -896,7 +896,7 @@ class InstallSabyModule extends Command
         return [(string) $value];
     }
 
-    private function ensureTables(ConnectionInterface $db): void
+    public static function ensureTables(ConnectionInterface $db): void
     {
         $sb = $db->getSchemaBuilder();
 

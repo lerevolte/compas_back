@@ -8,12 +8,12 @@ use App\Models\Tenant;
 class InstallTaskNumbers extends Command
 {
     protected $signature = 'logistic:install-task-numbers
-        {target=avixo : seeds | all-tenants | <tenant_id>}';
+        {target=all-tenants : seeds | all-tenants | <tenant_id>}';
 
-    protected $description = 'Единая сквозная нумерация задач логистики и самовывозов: таблица document_counters, поле «Номер» (number) у обеих сущностей, бэкфилл по дате создания';
+    protected $description = 'Единая сквозная нумерация задач логистики и самовывозов: таблица document_counters, поле «Номер расходной накладной 1С» (number) у обеих сущностей, префикс cmps-, бэкфилл по дате создания';
 
     public const FIELD = 'number';
-    public const TITLE = 'Номер';
+    public const TITLE = 'Номер расходной накладной 1С';
     public const ENTITIES = ['logistic_tasks', 'pickups'];
 
     public function handle(): int
@@ -53,10 +53,8 @@ class InstallTaskNumbers extends Command
         return self::SUCCESS;
     }
 
-    private function install($db, string $label, bool $inTenant): void
+    public static function ensureTable($db): void
     {
-        $sb = $db->getSchemaBuilder();
-
         $db->statement(<<<'SQL'
 CREATE TABLE IF NOT EXISTS `document_counters` (
   `name` varchar(64) NOT NULL,
@@ -64,6 +62,13 @@ CREATE TABLE IF NOT EXISTS `document_counters` (
   PRIMARY KEY (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL);
+    }
+
+    private function install($db, string $label, bool $inTenant): void
+    {
+        $sb = $db->getSchemaBuilder();
+
+        self::ensureTable($db);
 
         $rows = [];
         foreach (self::ENTITIES as $slug) {
@@ -109,6 +114,16 @@ SQL);
                 $this->line("    [{$label}] {$slug}: создано поле «" . self::TITLE . '»');
             }
 
+            $prefix = \App\Services\DocumentNumber::PREFIX;
+            $prefixed = $db->table($slug)
+                ->whereNotNull(self::FIELD)
+                ->where(self::FIELD, '!=', '')
+                ->where(self::FIELD, 'NOT LIKE', $prefix . '%')
+                ->update([self::FIELD => $db->raw("CONCAT('{$prefix}', `" . self::FIELD . '`)')]);
+            if ($prefixed) {
+                $this->line("    [{$label}] {$slug}: префикс {$prefix} добавлен к {$prefixed} номерам");
+            }
+
             foreach ($db->table($slug)->whereNull(self::FIELD)->orderBy('created_at')->orderBy('id')->get(['id', 'created_at']) as $row) {
                 $rows[] = ['slug' => $slug, 'id' => (int) $row->id, 'created_at' => (string) $row->created_at];
             }
@@ -127,7 +142,7 @@ SQL);
         $assigned = 0;
         foreach ($rows as $row) {
             $current++;
-            $db->table($row['slug'])->where('id', $row['id'])->update([self::FIELD => (string) $current]);
+            $db->table($row['slug'])->where('id', $row['id'])->update([self::FIELD => \App\Services\DocumentNumber::PREFIX . $current]);
             $assigned++;
         }
         $db->table('document_counters')->updateOrInsert(
