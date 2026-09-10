@@ -218,9 +218,7 @@ class SabyOrderService extends SabyWaybillService
 
         if ($route) {
             $car = $route->car_id ? \App\Models\Car::find($route->car_id) : null;
-            if (!$car) {
-                $errors[] = 'У маршрута не выбрано транспортное средство';
-            } else {
+            if ($car) {
                 $carName = trim((string) ($car->name ?? '')) ?: ('#' . $car->id);
                 if ($this->fieldOptionLabel('cars', 'vehicle_type', $this->attr($car, 'vehicle_type')) === '') {
                     $errors[] = 'У ТС «' . $carName . '» не заполнен «Тип ТС»';
@@ -242,8 +240,8 @@ class SabyOrderService extends SabyWaybillService
         }
         if ($receiver && $this->inn($receiver) === '') {
             $errors[] = 'У компании-получателя «' . $receiver->name . '» не заполнен ИНН';
-        } elseif (!$receiver && $receiverContact && strlen($this->contactInn($receiverContact)) !== 12) {
-            $errors[] = 'У контакта-получателя «' . $this->contactName($receiverContact) . '» не заполнен ИНН (12 цифр)';
+        } elseif (!$receiver && $receiverContact && !in_array(strlen($this->contactInn($receiverContact)), [0, 12], true)) {
+            $errors[] = 'У контакта-получателя «' . $this->contactName($receiverContact) . '» ИНН должен состоять из 12 цифр';
         }
 
         $positions = $this->orderCargo($task, $massMethod);

@@ -265,7 +265,9 @@ class UpdService
             return null;
         }
         $tenant = tenant('id');
-        $url = ($tenant ? 'https://' . $tenant . '.compas.pro' : 'https://compas.pro') . '/objects/' . $slug . '/' . $id;
+        $host = app()->runningInConsole() ? null : request()->getHost();
+        $origin = $host ? 'https://' . $host : ($tenant ? 'https://' . $tenant . '.compas.pro' : 'https://compas.pro');
+        $url = $origin . '/objects/' . $slug . '/' . $id;
         try {
             $png = (new \TCPDF2DBarcode($url, 'QRCODE,M'))->getBarcodePngData(6, 6, [0, 0, 0]);
         } catch (\Throwable $e) {

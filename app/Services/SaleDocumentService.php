@@ -496,10 +496,15 @@ class SaleDocumentService
         if ($isAutoName) {
             $doc->name = $entityTitle . ' № ' . $number . ' от ' . $date;
         }
+        $productsFilled = false;
         if (count($products) && !$this->decodeProducts($doc->products)) {
             $doc->products = json_encode($products, JSON_UNESCAPED_UNICODE);
+            $productsFilled = true;
         }
         $doc->saveQuietly();
+        if ($productsFilled && $slug === ShipmentService::DOCUMENT) {
+            ShipmentService::recalcForDocument((int) $doc->id);
+        }
 
         try {
             $settings = app('settings');

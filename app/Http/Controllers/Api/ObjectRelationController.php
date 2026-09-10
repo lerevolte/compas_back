@@ -57,6 +57,10 @@ class ObjectRelationController extends Controller
             $data['source_id']
         );
 
+        if ($data['target_slug'] === \App\Services\ShipmentService::DOCUMENT) {
+            \App\Services\ShipmentService::recalcForDocument((int) $data['target_id']);
+        }
+
         return response()->json(['ok' => true, 'products_copied' => $productsCopied, 'b24_copied' => $b24Copied, 'print_generated' => $printGenerated]);
     }
 

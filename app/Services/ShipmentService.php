@@ -97,6 +97,7 @@ class ShipmentService
             try {
                 self::updateShipmentStatus($slug, $object, $products, $shipped);
             } catch (\Throwable $e) {
+                \Log::warning('shipments: статус отгрузки не обновлён', ['source' => $slug . '#' . $id, 'error' => $e->getMessage(), 'at' => $e->getFile() . ':' . $e->getLine()]);
             }
             try {
                 $parent = self::parentOf($slug, $id);
@@ -108,6 +109,7 @@ class ShipmentService
 
             return $changed;
         } catch (\Throwable $e) {
+            \Log::warning('shipments: пересчёт не выполнен', ['source' => $slug . '#' . $id, 'error' => $e->getMessage(), 'at' => $e->getFile() . ':' . $e->getLine()]);
             return false;
         }
     }
