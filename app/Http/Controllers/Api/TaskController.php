@@ -61,6 +61,10 @@ class TaskController extends Controller
         }
         $products = array();
         foreach ($request->products as $product) {
+            $count = $product['product_count'] ?? null;
+            if ($count === null || $count === '' || (is_numeric($count) && (float) $count <= 0)) {
+                continue;
+            }
             $products[] = array(
                 'id' => $product['id'] ?? null,
                 'name' => $product['product_name'] ?? ($product['name'] ?? ''),
