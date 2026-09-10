@@ -51,7 +51,7 @@ class Contact extends Model
             try {
                 \Modules\Bitrix24\Services\B24EntitySync::make()?->pushContact($model, $changed);
             } catch (\Throwable $e) {
-                \Log::channel('bitrix24')->warning('contact push failed', ['contact_id' => $model->id, 'error' => $e->getMessage()]);
+                \Log::channel('bitrix24')->warning('contact push failed', ['contact_id' => $model->id, 'error' => $e->getMessage(), 'at' => $e->getFile() . ':' . $e->getLine(), 'changed' => $changed]);
             }
         });
     }

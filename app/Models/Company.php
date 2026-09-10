@@ -47,7 +47,7 @@ class Company extends Model
             try {
                 \Modules\Bitrix24\Services\B24EntitySync::make()?->pushCompany($model, ['name']);
             } catch (\Throwable $e) {
-                \Log::channel('bitrix24')->warning('company push failed', ['company_id' => $model->id, 'error' => $e->getMessage()]);
+                \Log::channel('bitrix24')->warning('company push failed', ['company_id' => $model->id, 'error' => $e->getMessage(), 'at' => $e->getFile() . ':' . $e->getLine()]);
             }
         });
     }

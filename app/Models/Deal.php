@@ -68,7 +68,7 @@ class Deal extends Model
             try {
                 \Modules\Bitrix24\Services\B24EntitySync::make()?->pushDeal($model, $changed);
             } catch (\Throwable $e) {
-                \Log::channel('bitrix24')->warning('deal push failed', ['deal_id' => $model->id, 'error' => $e->getMessage()]);
+                \Log::channel('bitrix24')->warning('deal push failed', ['deal_id' => $model->id, 'error' => $e->getMessage(), 'at' => $e->getFile() . ':' . $e->getLine(), 'changed' => $changed]);
             }
         });
     }

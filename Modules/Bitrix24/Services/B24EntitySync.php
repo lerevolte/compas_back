@@ -70,6 +70,14 @@ class B24EntitySync
         }
     }
 
+    private static function attrString($value): string
+    {
+        if (is_array($value)) {
+            return json_encode($value, JSON_UNESCAPED_UNICODE) ?: '';
+        }
+        return $value === null ? '' : (string) $value;
+    }
+
     private function b24(string $method, array $params = [])
     {
         return Http::timeout(20)->post($this->base . $method, $params)->collect();
@@ -1026,7 +1034,7 @@ class B24EntitySync
             }
         }
         if (!count($companyIds) && $deal) {
-            $dealCompanies = json_decode((string) $deal->company_id, true);
+            $dealCompanies = json_decode(self::attrString($deal->company_id), true);
             $companyIds = is_array($dealCompanies) ? array_values(array_map('intval', array_filter($dealCompanies, 'is_numeric'))) : [];
         }
         $model->company_id = count($companyIds) ? json_encode($companyIds) : null;
@@ -1239,7 +1247,7 @@ class B24EntitySync
         if (!$deal->b24_id || !$this->bankRequisitesReady()) {
             return;
         }
-        $ids = json_decode((string) $deal->bank_requisite_id, true);
+        $ids = json_decode(self::attrString($deal->bank_requisite_id), true);
         $bankId = null;
         foreach (is_array($ids) ? $ids : [] as $id) {
             if (is_numeric($id)) {
@@ -2030,7 +2038,7 @@ class B24EntitySync
             foreach ($companies->chunk(25) as $chunk) {
                 $map = [];
                 foreach ($chunk as $company) {
-                    $map[$company->id] = (string) $company->b24_id;
+                    $map[$company->id] = self::attrString($company->b24_id);
                 }
                 $data = $this->fetchCompanyRequisiteData($map);
                 foreach ($chunk as $company) {
@@ -2199,6 +2207,12 @@ class B24EntitySync
 
     private function localOptionLabelByValue(string $entitySlug, string $fieldKey, $value): ?string
     {
+        if (is_array($value)) {
+            $value = $value['value'] ?? (array_values($value)[0] ?? null);
+        }
+        if ($value === null || is_array($value)) {
+            return null;
+        }
         $row = DB::table('data_rows')
             ->join('data_types', 'data_rows.data_type_id', '=', 'data_types.id')
             ->where('data_types.slug', $entitySlug)
@@ -2283,39 +2297,39 @@ class B24EntitySync
         foreach ($changed as $field) {
             switch ($field) {
                 case 'address':
-                    $addr = json_decode((string) $deal->address, true);
-                    $fields['UF_CRM_1528885851543'] = is_array($addr) ? ($addr['text'] ?? '') : (string) $deal->address;
+                    $addr = json_decode(self::attrString($deal->address), true);
+                    $fields['UF_CRM_1528885851543'] = is_array($addr) ? ($addr['text'] ?? '') : self::attrString($deal->address);
                     if (is_array($addr) && !empty($addr['coords']) && count($addr['coords']) >= 2) {
                         $fields['UF_CRM_1741758491'] = $addr['coords'][0] . ',' . $addr['coords'][1];
                     }
                     break;
                 case 'time':
-                    $fields['UF_CRM_1632832553'] = (string) $deal->time;
+                    $fields['UF_CRM_1632832553'] = self::attrString($deal->time);
                     break;
                 case 'phone':
-                    $phones = json_decode((string) $deal->phone, true);
+                    $phones = json_decode(self::attrString($deal->phone), true);
                     $fields['UF_CRM_1623418181538'] = is_array($phones)
                         ? implode(', ', array_filter($phones, fn ($v) => $v !== null && $v !== ''))
-                        : (string) $deal->phone;
+                        : self::attrString($deal->phone);
                     break;
                 case 'delivery_price':
-                    $fields['UF_CRM_1633508830'] = (string) $deal->delivery_price;
+                    $fields['UF_CRM_1633508830'] = self::attrString($deal->delivery_price);
                     break;
                 case 'comment':
-                    $fields['UF_CRM_5EAFC3D4C5F76'] = (string) $deal->comment;
+                    $fields['UF_CRM_5EAFC3D4C5F76'] = self::attrString($deal->comment);
                     break;
                 case 'pallets_count':
-                    $fields['UF_CRM_1696596978695'] = (string) $deal->pallets_count;
+                    $fields['UF_CRM_1696596978695'] = self::attrString($deal->pallets_count);
                     break;
                 case 'delivery_date':
-                    $fields['UF_CRM_1738582841'] = $deal->delivery_date;
+                    $fields['UF_CRM_1738582841'] = is_array($deal->delivery_date) ? self::attrString($deal->delivery_date) : $deal->delivery_date;
                     break;
                 case 'contact':
-                    $fields['UF_CRM_1642670804'] = (string) $deal->contact;
+                    $fields['UF_CRM_1642670804'] = self::attrString($deal->contact);
                     break;
                 case 'car_requirements':
                     $ids = [];
-                    $values = json_decode((string) $deal->car_requirements, true);
+                    $values = json_decode(self::attrString($deal->car_requirements), true);
                     foreach (is_array($values) ? $values : [] as $value) {
                         $enumId = $this->b24DealEnumIdByLabel('UF_CRM_1762411084', $this->localOptionLabelByValue('deals', 'car_requirements', $value));
                         if ($enumId !== null) {
@@ -2325,9 +2339,10 @@ class B24EntitySync
                     $fields['UF_CRM_1762411084'] = $ids;
                     break;
                 case 'car_type':
-                    $enumId = $deal->car_type === null || $deal->car_type === ''
+                    $carType = is_array($deal->car_type) ? (array_values($deal->car_type)[0] ?? null) : $deal->car_type;
+                    $enumId = $carType === null || $carType === ''
                         ? null
-                        : $this->b24DealEnumIdByLabel('UF_CRM_1625083610453', $this->localOptionLabelByValue('deals', 'car_type', $deal->car_type));
+                        : $this->b24DealEnumIdByLabel('UF_CRM_1625083610453', $this->localOptionLabelByValue('deals', 'car_type', $carType));
                     $fields['UF_CRM_1625083610453'] = $enumId ?? '';
                     break;
             }
@@ -2344,7 +2359,7 @@ class B24EntitySync
 
     private function pushDealContacts(Deal $deal): void
     {
-        $localIds = json_decode((string) $deal->contact_id, true);
+        $localIds = json_decode(self::attrString($deal->contact_id), true);
         $localIds = is_array($localIds) ? array_filter($localIds, 'is_numeric') : [];
 
         $items = [];
@@ -2370,7 +2385,7 @@ class B24EntitySync
 
     private function pushDealCompany(Deal $deal): void
     {
-        $localIds = json_decode((string) $deal->company_id, true);
+        $localIds = json_decode(self::attrString($deal->company_id), true);
         $localIds = is_array($localIds) ? array_filter($localIds, 'is_numeric') : [];
 
         $b24CompanyId = 0;
@@ -2400,14 +2415,14 @@ class B24EntitySync
 
     private function createContactInB24(Contact $contact): void
     {
-        $parts = preg_split('/\s+/', trim((string) $contact->name)) ?: [];
+        $parts = preg_split('/\s+/', trim(self::attrString($contact->name))) ?: [];
         $fields = [
             'LAST_NAME'   => $parts[0] ?? '',
             'NAME'        => $parts[1] ?? '',
             'SECOND_NAME' => isset($parts[2]) ? implode(' ', array_slice($parts, 2)) : '',
         ];
         foreach (['emails' => 'EMAIL', 'phones' => 'PHONE'] as $local => $b24Key) {
-            $values = json_decode((string) $contact->{$local}, true);
+            $values = json_decode(self::attrString($contact->{$local}), true);
             if (is_array($values) && count($values)) {
                 $fields[$b24Key] = array_map(
                     fn ($v) => ['VALUE' => $v, 'VALUE_TYPE' => 'WORK'],
@@ -2432,7 +2447,7 @@ class B24EntitySync
             return;
         }
         $resp = $this->b24('crm.company.add', [
-            'fields' => ['TITLE' => (string) $company->name],
+            'fields' => ['TITLE' => self::attrString($company->name)],
         ]);
         $newId = $resp['result'] ?? null;
         if ($newId) {
@@ -2449,14 +2464,14 @@ class B24EntitySync
         $fields = [];
 
         if (in_array('name', $changed, true)) {
-            $parts = preg_split('/\s+/', trim((string) $contact->name)) ?: [];
+            $parts = preg_split('/\s+/', trim(self::attrString($contact->name))) ?: [];
             $fields['LAST_NAME'] = $parts[0] ?? '';
             $fields['NAME'] = $parts[1] ?? '';
             $fields['SECOND_NAME'] = isset($parts[2]) ? implode(' ', array_slice($parts, 2)) : '';
         }
 
         if (in_array('contact_type', $changed, true) && Schema::hasColumn('contacts', 'contact_type')) {
-            $values = json_decode((string) $contact->contact_type, true);
+            $values = json_decode(self::attrString($contact->contact_type), true);
             $enumIds = [];
             foreach ((is_array($values) ? $values : []) as $val) {
                 $label = $this->localOptionLabelByValue('contacts', 'contact_type', $val);
@@ -2476,7 +2491,7 @@ class B24EntitySync
                 if (!in_array($local, $needMulti, true)) {
                     continue;
                 }
-                $newValues = json_decode((string) $contact->{$local}, true);
+                $newValues = json_decode(self::attrString($contact->{$local}), true);
                 $newValues = is_array($newValues) ? array_values(array_filter($newValues, fn ($v) => $v !== null && $v !== '')) : [];
                 $fields[$b24Key] = $this->reconcileMultiField($current[$b24Key] ?? [], $newValues);
             }
@@ -2499,7 +2514,7 @@ class B24EntitySync
         }
         $resp = $this->b24('crm.company.update', [
             'id' => $company->b24_id,
-            'fields' => ['TITLE' => (string) $company->name],
+            'fields' => ['TITLE' => self::attrString($company->name)],
         ]);
         Log::channel('bitrix24')->info('entity-sync: company pushed', [
             'company_id' => $company->id, 'b24_id' => $company->b24_id,
