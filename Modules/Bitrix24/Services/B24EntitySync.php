@@ -711,6 +711,9 @@ class B24EntitySync
             $model->pallets_count = $deal['UF_CRM_1696596978695'] ?? $model->pallets_count;
 
             $rawUnloading = $deal['UF_CRM_1762411084'] ?? null;
+            if ($rawUnloading === false) {
+                $rawUnloading = [];
+            }
             $carReqs = [];
             foreach ((is_array($rawUnloading) ? $rawUnloading : [$rawUnloading]) as $val) {
                 if ($val === '' || $val === null) {
@@ -730,6 +733,9 @@ class B24EntitySync
 
             if (Schema::hasColumn('deals', 'car_type')) {
                 $rawCarType = $deal['UF_CRM_1625083610453'] ?? null;
+                if ($rawCarType === false) {
+                    $rawCarType = '';
+                }
                 $ctLabel = ($rawCarType === '' || $rawCarType === null) ? null : $this->b24EnumLabel('UF_CRM_1625083610453', $rawCarType);
                 $localCt = $ctLabel === null ? null : $this->localOptionValueByLabel('deals', 'car_type', $ctLabel);
                 if ($localCt !== null) {
