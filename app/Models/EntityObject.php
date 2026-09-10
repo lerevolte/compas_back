@@ -2411,7 +2411,7 @@ class EntityObject
         }
 
         foreach($fields as $field => $value) {
-            if($model_fields[$field]->type == 'relation' && $model_fields[$field]->is_plural && $model_fields[$field]->relation_table) {
+            if($model_fields[$field]->type == 'relation' && $model_fields[$field]->is_plural && $model_fields[$field]->relation_table && method_exists($object, $model_fields[$field]->relation_table)) {
                 $relation_table = $model_fields[$field]->relation_table;
                 $old_relations[$object->id] = array('field' => $field, 'entities' => array());
                 $new_relations[$object->id] = array('field' => $field, 'entities' => array());
@@ -2467,6 +2467,14 @@ class EntityObject
                 $value = array_pop($value);
             if($model_fields[$field]->type == 'relation' && $model_fields[$field]->is_plural && $model_fields[$field]->relation_table) {
                 $relation_table = $model_fields[$field]->relation_table;
+                if(!method_exists($object, $relation_table)) {
+                    $object->{$field} = is_array($value)
+                        ? json_encode(array_values(array_map('intval', array_filter($value, 'is_numeric'))))
+                        : $value;
+                    continue;
+                }
+                if(!is_array($value))
+                    $value = $value === null || $value === '' ? [] : [$value];
                 $new_values = array_filter($value, 'is_int');
 
                 foreach($new_values as $nv) {
