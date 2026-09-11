@@ -10,10 +10,6 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Log;
 use Modules\Bitrix24\Services\B24EntitySync;
 
-/**
- * Обработка одного события вебхука Bitrix24 (deal/contact/company) в очереди —
- * сам вебхук отвечает мгновенно, работа уходит в queue:work.
- */
 class ProcessEntityHook implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable;

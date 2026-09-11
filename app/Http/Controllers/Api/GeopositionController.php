@@ -123,7 +123,13 @@ class GeopositionController extends Controller
                     }
                     Log::channel('geo')->info('stored', ['tenant' => $tenantId, 'rows' => count($insert), 'users' => array_keys($latest)]);
                     if (count($latest) && Schema::hasColumn('users', 'geoposition')) {
+                        $stored = DB::table('users')->whereIn('id', array_keys($latest))->pluck('geoposition', 'id');
                         foreach ($latest as $userId => $value) {
+                            $current = json_decode((string) ($stored[$userId] ?? ''), true);
+                            $currentTime = is_array($current) && is_numeric($current['time'] ?? null) ? (float) $current['time'] : 0;
+                            if ($currentTime > (float) $value['time']) {
+                                continue;
+                            }
                             DB::table('users')->where('id', $userId)->update([
                                 'geoposition' => json_encode($value),
                             ]);

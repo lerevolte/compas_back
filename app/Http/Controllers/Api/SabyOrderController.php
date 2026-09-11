@@ -65,8 +65,10 @@ class SabyOrderController extends Controller
             return response()->json(['message' => 'Неизвестный метод определения массы'], 422);
         }
 
+        $vehicleType = $request->vehicle_type !== null && trim((string) $request->vehicle_type) !== '' ? (string) $request->vehicle_type : null;
+
         try {
-            $order = $service->createOrder($task, $pointTask, $massMethod, $currentIsLoading);
+            $order = $service->createOrder($task, $pointTask, $massMethod, $currentIsLoading, $vehicleType);
         } catch (SabyValidationException $e) {
             return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 422);
         } catch (SabyException $e) {

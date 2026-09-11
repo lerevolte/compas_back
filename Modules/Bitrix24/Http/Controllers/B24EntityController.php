@@ -10,12 +10,6 @@ use Modules\Bitrix24\Services\B24EntitySync;
 
 class B24EntityController extends Controller
 {
-    /**
-     * Вебхук Bitrix24 по событиям сделок/контактов/компаний/реквизитов (ONCRMDEAL*,
-     * ONCRMCONTACT*, ONCRMCOMPANY*, ONCRMREQUISITE*, ONCRMBANKDETAIL*). Без auth — тенант по домену.
-     * URL: /api/bitrix24/entity-hook
-     * Ручной вызов: /api/bitrix24/entity-hook?type=deal&id=123
-     */
     public function entityHook(Request $request)
     {
         Log::channel('bitrix24')->info('entity-hook: hit', [
@@ -64,18 +58,12 @@ class B24EntityController extends Controller
         return response()->json(['status' => 'queued', 'type' => $type, 'id' => $id]);
     }
 
-    /**
-     * Список стадий сделок (value/label/color) для шкалы в карточке.
-     */
     public function stages()
     {
         $svc = B24EntitySync::make();
         return response()->json($svc ? $svc->stageOptions() : []);
     }
 
-    /**
-     * Смена стадии сделки: улетает в Bitrix24, локально пишется история событий.
-     */
     public function changeStage($id, Request $request)
     {
         $request->validate(['stage' => 'required|string']);

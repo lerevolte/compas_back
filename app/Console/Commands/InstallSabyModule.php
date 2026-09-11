@@ -389,7 +389,7 @@ class InstallSabyModule extends Command
         'logistic_tasks' => ['saby_waybills', 'shipment_company_id', 'company_id', 'contact_id', 'employee_id', 'address', 'products', 'weight', 'delivery_date'],
         'routes' => ['company_id', 'car_id'],
         'companies' => ['name', 'inn', 'kpp', 'address'],
-        'cars' => ['name', 'brand', 'car_model', 'number', 'ownership_type', 'vehicle_type', 'trailer_number', 'osago_mark', 'osago_model', 'weight_max', 'volume_max'],
+        'cars' => ['name', 'brand', 'car_model', 'number', 'ownership_type', 'vehicle_type', 'body_type', 'trailer_number', 'osago_mark', 'osago_model', 'weight_max', 'volume_max'],
         'products' => ['name', 'product_type', 'packing_method', 'tare_type', 'weight', 'volume'],
         'contacts' => ['name', 'phones', 'inn'],
         'addresses' => ['company_id', 'contact_id', 'address', 'weight'],
@@ -416,6 +416,19 @@ class InstallSabyModule extends Command
         ['value' => '4', 'label' => 'Автопоезд'],
         ['value' => '5', 'label' => 'Специальный'],
         ['value' => '6', 'label' => 'Автобус'],
+    ];
+
+    public const BODY_TYPES = [
+        ['value' => '1', 'label' => 'Тентованный'],
+        ['value' => '2', 'label' => 'Рефрижератор'],
+        ['value' => '3', 'label' => 'Изотермический'],
+        ['value' => '4', 'label' => 'Цельнометаллический'],
+        ['value' => '5', 'label' => 'Бортовой'],
+        ['value' => '6', 'label' => 'Контейнеровоз'],
+        ['value' => '7', 'label' => 'Цистерна'],
+        ['value' => '8', 'label' => 'Самосвал'],
+        ['value' => '9', 'label' => 'Открытый'],
+        ['value' => '10', 'label' => 'Манипулятор'],
     ];
 
     public function handle(): int
@@ -550,6 +563,12 @@ class InstallSabyModule extends Command
             'type' => 'select_dropdown',
             'title' => 'Тип ТС',
             'details' => json_encode(['options' => self::VEHICLE_TYPES], JSON_UNESCAPED_UNICODE),
+        ], 'text');
+
+        $this->addField($db, 'cars', 'body_type', [
+            'type' => 'select_dropdown',
+            'title' => 'Кузов',
+            'details' => json_encode(['options' => self::BODY_TYPES], JSON_UNESCAPED_UNICODE),
         ], 'text');
 
         $this->addField($db, 'cars', 'trailer_number', [

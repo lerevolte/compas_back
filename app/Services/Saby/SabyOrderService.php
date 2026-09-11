@@ -40,9 +40,9 @@ class SabyOrderService extends SabyWaybillService
         }
     }
 
-    public function createOrder(Task $task, ?Task $pointTask = null, ?string $massMethod = null, bool $currentIsLoading = false): SabyOrder
+    public function createOrder(Task $task, ?Task $pointTask = null, ?string $massMethod = null, bool $currentIsLoading = false, ?string $vehicleType = null): SabyOrder
     {
-        $substitutions = $this->buildOrder($task, $pointTask, $massMethod, $currentIsLoading);
+        $substitutions = $this->buildOrder($task, $pointTask, $massMethod, $currentIsLoading, $vehicleType);
         $config = $this->client->config();
         $route = $task->route_id ? Route::find($task->route_id) : null;
         $carrier = $route ? $this->companyOf($route, 'company_id') : null;
@@ -191,7 +191,7 @@ class SabyOrderService extends SabyWaybillService
         return [];
     }
 
-    public function buildOrder(Task $task, ?Task $pointTask = null, ?string $massMethod = null, bool $currentIsLoading = false): array
+    public function buildOrder(Task $task, ?Task $pointTask = null, ?string $massMethod = null, bool $currentIsLoading = false, ?string $vehicleType = null): array
     {
         $errors = [];
         $route = $task->route_id ? Route::find($task->route_id) : null;
@@ -216,19 +216,16 @@ class SabyOrderService extends SabyWaybillService
             $errors[] = 'У перевозчика «' . $carrier->name . '» не заполнен телефон';
         }
 
+        $vehicle = $route ? $this->orderVehicle($route, $task, $vehicleType) : [];
         if ($route) {
-            $car = $route->car_id ? \App\Models\Car::find($route->car_id) : null;
-            if ($car) {
-                $carName = trim((string) ($car->name ?? '')) ?: ('#' . $car->id);
-                if ($this->fieldOptionLabel('cars', 'vehicle_type', $this->attr($car, 'vehicle_type')) === '') {
-                    $errors[] = 'У ТС «' . $carName . '» не заполнен «Тип ТС»';
-                }
-                if ($this->number($car->volume_max) <= 0) {
-                    $errors[] = 'У ТС «' . $carName . '» не заполнен объём («Объем, до»)';
-                }
-                if ($this->number($car->weight_max) <= 0) {
-                    $errors[] = 'У ТС «' . $carName . '» не заполнена грузоподъёмность («Грузоподъемность, до»)';
-                }
+            if (empty($vehicle['Тип'])) {
+                $errors[] = 'Укажите тип требуемого ТС: у ТС маршрута не заполнен «Тип ТС»';
+            }
+            if (empty($vehicle['Грузоподъемность'])) {
+                $errors[] = 'Не удалось определить грузоподъёмность: у ТС не заполнена «Грузоподъемность, до», а в задаче нет веса';
+            }
+            if (empty($vehicle['Вместимость'])) {
+                $errors[] = 'Не удалось определить объём: у ТС не заполнен «Объем, до», а в задаче нет объёма';
             }
         }
 
@@ -317,7 +314,6 @@ class SabyOrderService extends SabyWaybillService
             'Файл' => ['Составитель' => ['Наименование' => (string) $shipper->name]],
         ];
 
-        $vehicle = $route ? $this->orderVehicle($route) : [];
         if (count($vehicle)) {
             $substitutions['ПараметрыТС'] = $vehicle;
         }
@@ -360,30 +356,64 @@ class SabyOrderService extends SabyWaybillService
         return $party;
     }
 
-    protected function orderVehicle(Route $route): array
+    protected function orderVehicle(Route $route, Task $task, ?string $vehicleType = null): array
     {
-        if (!$route->car_id) {
-            return [];
-        }
-        $car = \App\Models\Car::find($route->car_id);
-        if (!$car) {
-            return [];
-        }
+        $car = $route->car_id ? \App\Models\Car::find($route->car_id) : null;
         $params = [];
-        $type = $this->fieldOptionLabel('cars', 'vehicle_type', $this->attr($car, 'vehicle_type'));
+
+        $type = $car ? $this->fieldOptionLabel('cars', 'vehicle_type', $this->attr($car, 'vehicle_type')) : '';
+        if ($type === '' && $vehicleType !== null && trim($vehicleType) !== '') {
+            $type = $this->fieldOptionLabel('cars', 'vehicle_type', $vehicleType) ?: trim($vehicleType);
+        }
         if ($type !== '') {
             $params['Тип'] = $type;
         }
-        $capacity = $this->number($car->weight_max);
+
+        $bodyType = $car ? $this->fieldOptionLabel('cars', 'body_type', $this->attr($car, 'body_type')) : '';
+        if ($bodyType !== '') {
+            $params['ТипКузова'] = $bodyType;
+        }
+
+        [$cargoWeight, $cargoVolume] = $this->cargoTotals($task);
+
+        $capacity = $car ? $this->number($car->weight_max) : 0.0;
+        if ($capacity <= 0) {
+            $capacity = $cargoWeight;
+        }
         if ($capacity > 0) {
             $params['Грузоподъемность'] = $this->format($capacity / 1000, 3);
         }
-        $volume = $this->number($car->volume_max);
+
+        $volume = $car ? $this->number($car->volume_max) : 0.0;
+        if ($volume <= 0) {
+            $volume = $cargoVolume;
+        }
         if ($volume > 0) {
             $params['Вместимость'] = $this->format($volume / 1000, 3);
         }
 
         return $params;
+    }
+
+    protected function cargoTotals(Task $task): array
+    {
+        $weight = $this->number($this->attr($task, 'weight'));
+        $volume = $this->number($this->attr($task, 'volume'));
+        if ($weight > 0 && $volume > 0) {
+            return [$weight, $volume];
+        }
+        $sumWeight = 0.0;
+        $sumVolume = 0.0;
+        foreach ($this->products($task) as $product) {
+            if (!is_array($product) || $this->isService($product['id'] ?? null)) {
+                continue;
+            }
+            $count = $this->number($product['count'] ?? 0) ?: 1;
+            $sumWeight += $this->number($product['weight'] ?? 0) * $count;
+            $sumVolume += $this->number($product['volume'] ?? 0) * $count;
+        }
+
+        return [$weight > 0 ? $weight : $sumWeight, $volume > 0 ? $volume : $sumVolume];
     }
 
     protected function orderCargo(Task $task, ?string $massMethod): array

@@ -13,20 +13,6 @@ use Illuminate\Support\Facades\Schema;
 use Modules\Bitrix24\Entities\Config;
 use Modules\Bitrix24\Http\Controllers\Bitrix24Controller;
 
-/**
- * Двусторонняя синхронизация сущностей deals/contacts/companies с Bitrix24.
- *
- * Портал-агностична (политика avixo): включается только там, где установлены
- * сущности (Schema::hasTable) и заполнен вебхук (bitrix24_config.webhook).
- *
- * Направления:
- *   - pull*: Bitrix24 -> портал (крон bitrix24:sync-entities + вебхук entity-hook);
- *   - push*: портал -> Bitrix24 (saved-хуки моделей Deal/Contact/Company);
- *   - changeStage: смена стадии из карточки сделки -> Bitrix24 + история событий.
- *
- * $muted гасит push-хуки моделей на время применения входящих изменений,
- * иначе pull зациклился бы на push.
- */
 class B24EntitySync
 {
     public static bool $muted = false;
@@ -152,7 +138,6 @@ class B24EntitySync
         return is_array($ex) ? $ex : [$ex];
     }
 
-    // ---------------------------------------------------------------- stages
 
     public function syncStages(): array
     {
@@ -290,7 +275,6 @@ class B24EntitySync
         return $new;
     }
 
-    // ------------------------------------------------------------------ pull
 
     public function fullSync(?string $since = null): array
     {
@@ -300,13 +284,6 @@ class B24EntitySync
         return ['stages' => count($stages), 'deals' => $deals['count'], 'contacts' => $contacts['count']];
     }
 
-    /**
-     * Инкрементальный прогон для крона/очереди: не больше $chunk записей на
-     * поток за раз. Курсоры — b24_deals_synced_at / b24_contacts_synced_at в
-     * settings (двигаются по DATE_MODIFY обработанных записей, при недоборе
-     * чанка — на время старта прогона). Первый прогон без курсоров — init:
-     * только стадии, метки ставятся на текущий момент.
-     */
     public function runIncremental(int $chunk = 200): array
     {
         $read = fn (string $type) => DB::table('settings')->where('type', $type)->value('value');
@@ -396,10 +373,6 @@ class B24EntitySync
         return ['count' => $count, 'last_modify' => $lastModify, 'more' => $more];
     }
 
-    /**
-     * Пакетная предзагрузка данных сделок (crm.batch): товары, контакты,
-     * счета — 3 команды на сделку вместо 3 отдельных HTTP-запросов.
-     */
     private function prefetchDealData(array $deals): array
     {
         $cmd = [];
@@ -693,11 +666,16 @@ class B24EntitySync
         return is_array($detail) && !empty($detail['ENTITY_ID']) ? $this->pullCompanyByRequisiteId($detail['ENTITY_ID']) : null;
     }
 
-    // --------------------------------------------------------------- upserts
 
     public function upsertDealFromB24(array $deal, ?array $pre = null): Deal
     {
         $dealId = $deal['ID'];
+        $lockName = 'b24deal_' . tenant('id') . '_' . $dealId;
+        $locked = false;
+        try {
+            $locked = (int) (DB::selectOne('SELECT GET_LOCK(?, 20) AS l', [$lockName])->l ?? 0) === 1;
+        } catch (\Throwable $e) {
+        }
 
         self::$muted = true;
         try {
@@ -836,10 +814,15 @@ class B24EntitySync
             return $model;
         } finally {
             self::$muted = false;
+            if ($locked) {
+                try {
+                    DB::select('SELECT RELEASE_LOCK(?)', [$lockName]);
+                } catch (\Throwable $e) {
+                }
+            }
         }
     }
 
-    // --------------------------------------------------------------- invoices
 
     public const DEAL_ENTITY_TYPE = 2;
     public const INVOICE_ENTITY_TYPE = 5;
@@ -2329,7 +2312,6 @@ class B24EntitySync
         return null;
     }
 
-    // ------------------------------------------------------------------ push
 
     public function pushDeal(Deal $deal, array $changed): void
     {
@@ -2732,10 +2714,6 @@ class B24EntitySync
         ]);
     }
 
-    /**
-     * Мультиполя Bitrix24 (EMAIL/PHONE): существующие значения не из нового
-     * списка помечаются к удалению (ID + пустой VALUE), недостающие — добавляются.
-     */
     private function reconcileMultiField($currentItems, array $newValues): array
     {
         $result = [];
