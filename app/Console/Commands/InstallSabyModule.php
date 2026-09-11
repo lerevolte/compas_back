@@ -568,6 +568,7 @@ class InstallSabyModule extends Command
         $this->addField($db, 'cars', 'body_type', [
             'type' => 'select_dropdown',
             'title' => 'Кузов',
+            'required' => 1,
             'details' => json_encode(['options' => self::BODY_TYPES], JSON_UNESCAPED_UNICODE),
         ], 'text');
 

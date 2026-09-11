@@ -62,7 +62,7 @@ class InstallCarBodyTypeField extends Command
             ->first();
 
         if ($existing) {
-            $this->line("    [{$label}] поле уже есть (id {$existing->id})" . ($dry ? '' : ', обновлены тип/варианты'));
+            $this->line("    [{$label}] поле уже есть (id {$existing->id})" . ($dry ? '' : ', обновлены тип/варианты/обязательность'));
             if (!$dry) {
                 if (!$sb->hasColumn('cars', 'body_type')) {
                     $db->statement('ALTER TABLE `cars` ADD COLUMN `body_type` TEXT NULL');
@@ -70,6 +70,7 @@ class InstallCarBodyTypeField extends Command
                 $db->table('data_rows')->where('id', $existing->id)->update([
                     'type' => 'select_dropdown',
                     'title' => 'Кузов',
+                    'required' => 1,
                     'details' => $details,
                     'is_remove' => 0,
                 ]);
@@ -100,7 +101,7 @@ class InstallCarBodyTypeField extends Command
 
         $id = $db->table('data_rows')->insertGetId([
             'data_type_id' => $dataType->id, 'field' => 'body_type', 'type' => 'select_dropdown', 'title' => 'Кузов',
-            'required' => 0, 'details' => $details, 'visible_always' => 1, 'label_color' => '',
+            'required' => 1, 'details' => $details, 'visible_always' => 1, 'label_color' => '',
             'section_id' => $sectionId, 'group_id' => null, 'sort' => $afterSort > 0 ? $afterSort + 1 : $maxSort + 1,
             'created_at' => null, 'updated_at' => null, 'button_name' => 'Загрузить',
             'show_file_image' => 0, 'hide' => 0, 'is_plural' => 0, 'roles_read' => '',
