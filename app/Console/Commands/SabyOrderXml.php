@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Http;
 
 class SabyOrderXml extends Command
 {
-    protected $signature = 'saby:order-xml {tenant} {order : id заказа, номер (cmps-2456) или id задачи} {--generate : дополнительно перегенерировать титул из сохранённого payload}';
+    protected $signature = 'saby:order-xml {tenant} {order : id заказа, номер (cmps-2456), id задачи или guid документа Saby} {--generate : дополнительно перегенерировать титул из сохранённого payload}';
 
     protected $description = 'Показать состояние и XML титула заказа на перевозку в Saby (диагностика)';
 
@@ -25,9 +25,14 @@ class SabyOrderXml extends Command
 
         return (int) $tenant->run(function () {
             $key = (string) $this->argument('order');
-            $order = SabyOrder::where('number', $key)->orderByDesc('id')->first()
-                ?: (is_numeric($key) ? (SabyOrder::find((int) $key) ?: SabyOrder::where('task_id', (int) $key)->orderByDesc('id')->first()) : null)
-                ?: SabyOrder::where('number', 'like', '%' . $key)->orderByDesc('id')->first();
+            $docId = preg_match('/^[0-9a-f]{8}-[0-9a-f-]{27}$/i', $key) ? $key : null;
+            if ($docId) {
+                $order = SabyOrder::where('doc_id', $docId)->first() ?: new SabyOrder(['doc_id' => $docId, 'payload' => []]);
+            } else {
+                $order = SabyOrder::where('number', $key)->orderByDesc('id')->first()
+                    ?: (is_numeric($key) ? (SabyOrder::find((int) $key) ?: SabyOrder::where('task_id', (int) $key)->orderByDesc('id')->first()) : null)
+                    ?: SabyOrder::where('number', 'like', '%' . $key)->orderByDesc('id')->first();
+            }
             if (!$order) {
                 $this->error('Заказ не найден');
                 return self::FAILURE;
@@ -40,7 +45,9 @@ class SabyOrderXml extends Command
             }
 
             $this->line("order id={$order->id} task={$order->task_id} number={$order->number} doc={$order->doc_id} state={$order->state_code}/{$order->state_name}");
-            $this->line('payload Маршрут.Пункт: ' . json_encode($order->payload['Маршрут']['Пункт'] ?? null, JSON_UNESCAPED_UNICODE));
+            if ($order->payload) {
+                $this->line('payload Маршрут.Пункт: ' . json_encode($order->payload['Маршрут']['Пункт'] ?? null, JSON_UNESCAPED_UNICODE));
+            }
 
             $document = $client->call('СБИС.ПрочитатьДокумент', [
                 'Документ' => ['Идентификатор' => $order->doc_id, 'ДопПоля' => 'Подстановки'],
@@ -67,7 +74,7 @@ class SabyOrderXml extends Command
                 $this->printXml($response->body());
             }
 
-            if ($this->option('generate')) {
+            if ($this->option('generate') && $order->payload) {
                 $config = $client->config();
                 $generated = $client->call('СБИС.СгенерироватьВложение', [
                     'Документ' => [
