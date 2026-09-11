@@ -47,7 +47,14 @@ class SabyOrderXml extends Command
             ]);
             $state = $document['Состояние'] ?? [];
             $this->line('Saby state: ' . json_encode($state, JSON_UNESCAPED_UNICODE));
-            $this->line('Saby Контрагент: ' . json_encode($document['Контрагент'] ?? null, JSON_UNESCAPED_UNICODE));
+            $card = $document;
+            unset($card['Вложение'], $card['Состояние']);
+            $this->line('Saby карточка (без вложений): ' . json_encode($card, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+            foreach ($document['Вложение'] ?? [] as $i => $attachment) {
+                if (isset($attachment['Подстановка']) || isset($attachment['Подстановки'])) {
+                    $this->line("Вложение[$i] Подстановки: " . json_encode($attachment['Подстановка'] ?? $attachment['Подстановки'], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+                }
+            }
 
             $sid = $client->sessionId();
             foreach ($document['Вложение'] ?? [] as $i => $attachment) {
