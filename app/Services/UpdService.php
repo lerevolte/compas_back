@@ -267,7 +267,7 @@ class UpdService
         $tenant = tenant('id');
         $host = app()->runningInConsole() ? null : request()->getHost();
         $origin = $host ? 'https://' . $host : ($tenant ? 'https://' . $tenant . '.compas.pro' : 'https://compas.pro');
-        $url = $origin . '/objects/' . $slug . '/' . $id;
+        $url = $origin . '/objects/' . $slug . '/' . $id . '?attach_employee=1';
         try {
             $png = (new \TCPDF2DBarcode($url, 'QRCODE,M'))->getBarcodePngData(6, 6, [0, 0, 0]);
         } catch (\Throwable $e) {
