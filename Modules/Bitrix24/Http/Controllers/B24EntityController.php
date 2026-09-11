@@ -32,7 +32,9 @@ class B24EntityController extends Controller
         $id = data_get($request->input('data'), 'FIELDS.ID') ?: $request->input('id');
         $type = $request->input('type');
         if (!$type) {
-            if (str_contains($event, 'PRODUCT')) {
+            if (str_contains($event, 'PRODUCTROW')) {
+                $type = 'deal_products';
+            } elseif (str_contains($event, 'PRODUCT')) {
                 $type = 'product';
             } elseif (str_contains($event, 'INVOICE')) {
                 $type = 'invoice';

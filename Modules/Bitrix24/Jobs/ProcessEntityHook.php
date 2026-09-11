@@ -71,6 +71,9 @@ class ProcessEntityHook implements ShouldQueue
                             $svc->pullDealById($this->entityId);
                         }
                         break;
+                    case 'deal_products':
+                        $svc->pullDealProductsById($this->entityId);
+                        break;
                     case 'contact':
                         if ($this->isDelete) {
                             \App\Models\Contact::where('b24_id', $this->entityId)->first()?->delete();

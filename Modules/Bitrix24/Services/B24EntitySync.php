@@ -614,6 +614,54 @@ class B24EntitySync
         return $this->upsertDealFromB24($deal);
     }
 
+    public function pullDealProductsById($dealId): ?Deal
+    {
+        $model = Deal::where('b24_id', (string) $dealId)->first();
+        if (!$model) {
+            return $this->pullDealById($dealId);
+        }
+        $batch = $this->b24Batch([
+            'deal' => 'crm.deal.get?id=' . $dealId,
+            'rows' => 'crm.deal.productrows.get?id=' . $dealId,
+        ]);
+        $rows = $batch['rows'] ?? null;
+        if (!is_array($rows)) {
+            return $model;
+        }
+        return $this->applyDealProducts($model, $rows, is_array($batch['deal'] ?? null) ? $batch['deal'] : []);
+    }
+
+    private function applyDealProducts(Deal $model, array $rows, array $deal): Deal
+    {
+        self::$muted = true;
+        try {
+            [$products, $deliveryPrice, $allWeight] = $this->fetchDealProducts($model->b24_id, $rows);
+            if ($products || !count($rows)) {
+                $products = \App\Services\ShipmentService::carryShipped($model->products, $products);
+                $model->products = json_encode($products, JSON_UNESCAPED_UNICODE);
+                $model->weight = $allWeight;
+            }
+            if ($deliveryPrice > 0) {
+                $model->delivery_price = $deliveryPrice;
+            } elseif (!empty($deal['UF_CRM_1633508830'])) {
+                $model->delivery_price = $deal['UF_CRM_1633508830'];
+            }
+            if (Schema::hasColumn('deals', 'sum') && isset($deal['OPPORTUNITY']) && (float) $deal['OPPORTUNITY'] > 0) {
+                $model->sum = rtrim(rtrim(number_format((float) $deal['OPPORTUNITY'], 2, '.', ''), '0'), '.');
+            }
+            if (count($model->getDirty())) {
+                $this->writeSyncFieldHistory('deals', $model->id, $model->getDirty());
+                $model->save();
+                Log::channel('bitrix24')->info('entity-sync: deal products pulled', [
+                    'deal_id' => $model->id, 'b24_id' => $model->b24_id, 'rows' => count($rows),
+                ]);
+            }
+            return $model;
+        } finally {
+            self::$muted = false;
+        }
+    }
+
     public function pullContactById($contactId): ?Contact
     {
         $resp = $this->b24('crm.contact.get', ['id' => $contactId]);
@@ -2291,6 +2339,13 @@ class B24EntitySync
         if (in_array('company_id', $changed, true)) {
             $this->pushDealCompany($deal);
         }
+        if (in_array('products', $changed, true)) {
+            try {
+                $this->pushDealProducts($deal);
+            } catch (\Throwable $e) {
+                Log::channel('bitrix24')->warning('entity-sync: deal products push failed', ['deal_id' => $deal->id, 'error' => $e->getMessage()]);
+            }
+        }
         if (in_array('bank_requisite_id', $changed, true)) {
             try {
                 $this->pushDealRequisiteLink($deal);
@@ -2361,6 +2416,155 @@ class B24EntitySync
             'deal_id' => $deal->id, 'b24_id' => $deal->b24_id,
             'fields' => array_keys($fields), 'result' => $resp['result'] ?? null,
         ]);
+    }
+
+    private static function productsSignature($products): string
+    {
+        $decoded = is_array($products) ? $products : json_decode(self::attrString($products), true);
+        $lines = [];
+        foreach (is_array($decoded) ? $decoded : [] as $product) {
+            if (!is_array($product)) {
+                continue;
+            }
+            $lines[] = implode('|', [
+                (int) ($product['id'] ?? 0),
+                B24ProductSync::nameText($product['name'] ?? ''),
+                self::num($product['count'] ?? 0),
+                self::num($product['price'] ?? 0),
+                (string) ($product['nds'] ?? ''),
+                (string) ($product['nds_included'] ?? ''),
+            ]);
+        }
+        return implode(';', $lines);
+    }
+
+    public function pushDealProducts(Deal $deal): void
+    {
+        if (!$deal->b24_id) {
+            return;
+        }
+        $products = json_decode(self::attrString($deal->products), true);
+        $products = is_array($products) ? array_values(array_filter($products, 'is_array')) : [];
+        if (self::productsSignature($products) === self::productsSignature($deal->getOriginal('products'))) {
+            return;
+        }
+
+        $resp = $this->b24('crm.deal.productrows.get', ['id' => $deal->b24_id]);
+        $currentRows = is_array($resp['result'] ?? null) ? $resp['result'] : [];
+
+        $localIds = array_values(array_unique(array_filter(array_map(fn ($p) => (int) ($p['id'] ?? 0), $products))));
+        $localProducts = count($localIds)
+            ? \Modules\Products\Entities\Product::whereIn('id', $localIds)->get()->keyBy('id')
+            : collect();
+        $productSvc = B24ProductSync::make();
+
+        $mapped = [];
+        foreach ($localProducts as $product) {
+            if (!$product->id_b24 && $productSvc) {
+                try {
+                    $productSvc->pushProduct($product);
+                } catch (\Throwable $e) {
+                    Log::channel('bitrix24')->warning('entity-sync: product create for deal rows failed', ['product_id' => $product->id, 'error' => $e->getMessage()]);
+                }
+            }
+            if ($product->id_b24) {
+                $mapped[(string) $product->id_b24] = $product->id;
+            }
+        }
+
+        $rows = [];
+        $existingByProduct = [];
+        $existingByName = [];
+        foreach ($currentRows as $row) {
+            $pid = (string) ($row['PRODUCT_ID'] ?? '');
+            $name = B24ProductSync::nameText($row['PRODUCT_NAME'] ?? '');
+            $isForeign = $pid === '' || $pid === '0'
+                ? !$this->localProductByName($name)
+                : (in_array((int) $pid, Bitrix24Controller::SKIP_PRODUCT_IDS) || !\Modules\Products\Entities\Product::where('id_b24', $pid)->exists());
+            if ($isForeign) {
+                $rows[] = $this->keepRowFields($row);
+                continue;
+            }
+            if ($pid !== '' && $pid !== '0') {
+                $existingByProduct[$pid][] = $row;
+            } elseif ($name !== '') {
+                $existingByName[$name][] = $row;
+            }
+        }
+
+        foreach ($products as $product) {
+            $localId = (int) ($product['id'] ?? 0);
+            $name = B24ProductSync::nameText($product['name'] ?? '');
+            $local = $localId ? ($localProducts[$localId] ?? null) : null;
+            $b24Id = $local && $local->id_b24 ? (string) $local->id_b24 : '';
+            if ($local && $name === '') {
+                $name = B24ProductSync::nameText($local->name);
+            }
+            if ($b24Id === '' && $name === '') {
+                continue;
+            }
+            $existing = null;
+            if ($b24Id !== '' && !empty($existingByProduct[$b24Id])) {
+                $existing = array_shift($existingByProduct[$b24Id]);
+            } elseif ($b24Id === '' && !empty($existingByName[$name])) {
+                $existing = array_shift($existingByName[$name]);
+            }
+            $line = [
+                'PRODUCT_ID'   => $b24Id !== '' ? (int) $b24Id : 0,
+                'PRODUCT_NAME' => $name,
+                'PRICE'        => (float) self::num($product['price'] ?? 0),
+                'QUANTITY'     => (float) self::num($product['count'] ?? 0),
+            ];
+            if ($existing) {
+                $line['ID'] = $existing['ID'];
+                foreach (['MEASURE_CODE', 'MEASURE_NAME', 'DISCOUNT_TYPE_ID', 'DISCOUNT_RATE', 'DISCOUNT_SUM', 'CUSTOMIZED', 'SORT'] as $key) {
+                    if (array_key_exists($key, $existing)) {
+                        $line[$key] = $existing[$key];
+                    }
+                }
+            }
+            if (array_key_exists('nds', $product)) {
+                $nds = (string) $product['nds'];
+                $line['TAX_RATE'] = ($nds === '' || $nds === 'none') ? null : (float) $nds;
+                $line['TAX_INCLUDED'] = (($product['nds_included'] ?? '1') === '0' || ($product['nds_included'] ?? '1') === 0) ? 'N' : 'Y';
+            } elseif ($existing) {
+                foreach (['TAX_RATE', 'TAX_INCLUDED'] as $key) {
+                    if (array_key_exists($key, $existing)) {
+                        $line[$key] = $existing[$key];
+                    }
+                }
+            }
+            $rows[] = $line;
+        }
+
+        $resp = $this->b24('crm.deal.productrows.set', ['id' => $deal->b24_id, 'rows' => $rows]);
+        Log::channel('bitrix24')->info('entity-sync: deal products pushed', [
+            'deal_id' => $deal->id, 'b24_id' => $deal->b24_id,
+            'rows' => count($rows), 'result' => $resp['result'] ?? null, 'error' => $resp['error_description'] ?? null,
+        ]);
+    }
+
+    private function localProductByName(string $name): bool
+    {
+        if ($name === '') {
+            return false;
+        }
+        return \Modules\Products\Entities\Product::where(function ($q) use ($name) {
+            $q->where('name', $name)
+              ->orWhereRaw('(JSON_VALID(name) AND JSON_UNQUOTE(JSON_EXTRACT(name, "$.value")) = ?)', [$name]);
+        })->exists();
+    }
+
+    private function keepRowFields(array $row): array
+    {
+        $keep = [];
+        foreach (['ID', 'PRODUCT_ID', 'PRODUCT_NAME', 'PRICE', 'QUANTITY', 'MEASURE_CODE', 'MEASURE_NAME',
+                  'DISCOUNT_TYPE_ID', 'DISCOUNT_RATE', 'DISCOUNT_SUM', 'TAX_RATE', 'TAX_INCLUDED', 'CUSTOMIZED', 'SORT'] as $key) {
+            if (array_key_exists($key, $row)) {
+                $keep[$key] = $row[$key];
+            }
+        }
+        return $keep;
     }
 
     private function pushDealContacts(Deal $deal): void
