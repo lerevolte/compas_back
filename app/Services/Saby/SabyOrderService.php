@@ -79,8 +79,17 @@ class SabyOrderService extends SabyWaybillService
         if ($carrier) {
             $payload['Контрагент'] = $this->addressedCounterparty($carrier);
         }
+        $shipper = $this->companyOf($task, 'shipment_company_id');
+        if ($shipper) {
+            $payload['Грузоотправитель'] = $this->counterparty($shipper);
+        }
+        [$receiver, $receiverContact] = $this->resolveReceiver($task, $pointTask, $currentIsLoading);
+        $receiverParty = $receiver ? $this->counterparty($receiver) : $this->contactCounterparty($receiverContact);
+        if (count($receiverParty)) {
+            $payload['Грузополучатель'] = $receiverParty;
+        }
 
-        $written = $this->writeDocument($payload, ['Контрагент']);
+        $written = $this->writeOrderDocument($payload);
 
         $attachment = $written['Вложение'][0] ?? [];
         $state = $written['Состояние'] ?? [];
@@ -229,12 +238,7 @@ class SabyOrderService extends SabyWaybillService
             }
         }
 
-        $receiver = $unloadingTask ? $this->companyOf($unloadingTask, 'company_id') : null;
-        $receiverContact = $unloadingTask ? $this->contactOf($unloadingTask) : null;
-        if (!$receiver && !$receiverContact && $unloadingTask && $unloadingTask->id !== $task->id) {
-            $receiver = $this->companyOf($task, 'company_id');
-            $receiverContact = $this->contactOf($task);
-        }
+        [$receiver, $receiverContact] = $this->resolveReceiver($task, $pointTask, $currentIsLoading);
         if ($receiver && $this->inn($receiver) === '') {
             $errors[] = 'У компании-получателя «' . $receiver->name . '» не заполнен ИНН';
         } elseif ($receiver && strlen($this->inn($receiver)) <= 10 && $this->kpp($receiver) === '') {
@@ -321,6 +325,34 @@ class SabyOrderService extends SabyWaybillService
         }
 
         return $substitutions;
+    }
+
+    protected function resolveReceiver(Task $task, ?Task $pointTask, bool $currentIsLoading): array
+    {
+        $unloadingTask = $currentIsLoading ? $pointTask : $task;
+        $receiver = $unloadingTask ? $this->companyOf($unloadingTask, 'company_id') : null;
+        $receiverContact = $unloadingTask ? $this->contactOf($unloadingTask) : null;
+        if (!$receiver && !$receiverContact && $unloadingTask && $unloadingTask->id !== $task->id) {
+            $receiver = $this->companyOf($task, 'company_id');
+            $receiverContact = $this->contactOf($task);
+        }
+
+        return [$receiver, $receiverContact];
+    }
+
+    protected function writeOrderDocument(array $payload): array
+    {
+        try {
+            return $this->writeDocument($payload, ['Контрагент']);
+        } catch (SabyException $e) {
+            if (!isset($payload['Грузоотправитель']) && !isset($payload['Грузополучатель'])) {
+                throw $e;
+            }
+            $this->log('warning', 'order write with parties failed, retry without them', ['error' => $e->getMessage()]);
+            unset($payload['Грузоотправитель'], $payload['Грузополучатель']);
+
+            return $this->writeDocument($payload, ['Контрагент']);
+        }
     }
 
     protected function pointOrganization(Company $company): array
