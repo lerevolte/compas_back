@@ -237,6 +237,8 @@ class SabyOrderService extends SabyWaybillService
         }
         if ($receiver && $this->inn($receiver) === '') {
             $errors[] = 'У компании-получателя «' . $receiver->name . '» не заполнен ИНН';
+        } elseif ($receiver && strlen($this->inn($receiver)) <= 10 && $this->kpp($receiver) === '') {
+            $errors[] = 'У компании-получателя «' . $receiver->name . '» не заполнен КПП';
         } elseif (!$receiver && $receiverContact && !in_array(strlen($this->contactInn($receiverContact)), [0, 12], true)) {
             $errors[] = 'У контакта-получателя «' . $this->contactName($receiverContact) . '» ИНН должен состоять из 12 цифр';
         }
@@ -281,7 +283,7 @@ class SabyOrderService extends SabyWaybillService
             'КодСтраны' => '643',
             'АдресТекст' => $loadingAddress,
             'Операция' => ['Тип' => 'Погрузка', 'ДатаВремя' => $loadingAt],
-            'Организация' => array_filter(['Название' => (string) $shipper->name, 'ИНН' => $this->inn($shipper)]),
+            'Организация' => $this->pointOrganization($shipper),
         ];
         $unloadingPoint = [
             'КодСтраны' => '643',
@@ -289,7 +291,7 @@ class SabyOrderService extends SabyWaybillService
             'Операция' => ['Тип' => 'Выгрузка', 'ДатаВремя' => $deliveryAt],
         ];
         if ($receiver) {
-            $unloadingPoint['Организация'] = array_filter(['Название' => (string) $receiver->name, 'ИНН' => $this->inn($receiver)]);
+            $unloadingPoint['Организация'] = $this->pointOrganization($receiver);
         } elseif ($receiverContact) {
             $unloadingPoint['Организация'] = array_filter(['Название' => $this->contactName($receiverContact), 'ИНН' => $this->contactInn($receiverContact)]);
         }
@@ -319,6 +321,17 @@ class SabyOrderService extends SabyWaybillService
         }
 
         return $substitutions;
+    }
+
+    protected function pointOrganization(Company $company): array
+    {
+        $inn = $this->inn($company);
+        $organization = ['Название' => (string) $company->name, 'ИНН' => $inn];
+        if (strlen($inn) <= 10) {
+            $organization['КПП'] = $this->kpp($company);
+        }
+
+        return array_filter($organization);
     }
 
     protected function orderParty(Company $company): array
