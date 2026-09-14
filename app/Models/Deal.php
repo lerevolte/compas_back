@@ -43,6 +43,12 @@ class Deal extends Model
 
         static::saved(function ($model) {
             $changedKeys = array_keys($model->getChanges());
+            if (in_array('products', $changedKeys, true)) {
+                try {
+                    $model->recalcServicesPrice();
+                } catch (\Throwable $e) {
+                }
+            }
             if (count(array_intersect($changedKeys, ['products', 'sum']))) {
                 try {
                     \App\Services\SaleDocumentService::syncFromDeal($model);
@@ -71,6 +77,36 @@ class Deal extends Model
                 \Log::channel('bitrix24')->warning('deal push failed', ['deal_id' => $model->id, 'error' => $e->getMessage(), 'at' => $e->getFile() . ':' . $e->getLine(), 'changed' => $changed]);
             }
         });
+    }
+
+    public function recalcServicesPrice(): void
+    {
+        if (!\Schema::hasColumn('products', 'product_type') || !\Schema::hasColumn($this->getTable(), 'delivery_price')) {
+            return;
+        }
+        $products = json_decode((string) $this->products, true);
+        if (!is_array($products)) {
+            return;
+        }
+        $products = array_values(array_filter($products, 'is_array'));
+        $services = \App\Services\ShipmentService::serviceIds(array_map(fn ($p) => $p['id'] ?? 0, $products));
+        $total = 0.0;
+        foreach ($products as $product) {
+            if (!in_array((int) ($product['id'] ?? 0), $services, true)) {
+                continue;
+            }
+            $count = isset($product['count']) ? (float) $product['count'] : 0;
+            $price = isset($product['price']) ? (float) $product['price'] : 0;
+            $total += $count * $price;
+        }
+        $formatted = $total > 0 ? rtrim(rtrim(number_format($total, 2, '.', ''), '0'), '.') : (count($products) ? '0' : null);
+        if ($formatted === null || (string) $this->delivery_price === $formatted) {
+            return;
+        }
+        $this->delivery_price = $formatted;
+        $this->timestamps = false;
+        $this->saveQuietly();
+        $this->timestamps = true;
     }
 
     public function setProducts(array $products)

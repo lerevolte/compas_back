@@ -10,10 +10,11 @@ class RenameDeliveryPriceField extends Command
     protected $signature = 'logistic:rename-delivery-price
         {target=all-tenants : seeds | all-tenants | <tenant_id>}';
 
-    protected $description = 'Переименовать поле «Цена доставки» (logistic_tasks.delivery_price) в «Цена услуг»';
+    protected $description = 'Переименовать поле «Цена доставки» (delivery_price) в «Цена услуг» у задач логистики и заказов покупателей';
 
     public const OLD_TITLE = 'Цена доставки';
     public const NEW_TITLE = 'Цена услуг';
+    public const SLUGS = ['logistic_tasks', 'deals'];
 
     public function handle(): int
     {
@@ -56,33 +57,38 @@ class RenameDeliveryPriceField extends Command
 
     private function rename($db, string $label, bool $inTenant): void
     {
-        $typeId = $db->table('data_types')->where('slug', 'logistic_tasks')->value('id');
-        if (!$typeId) {
-            $this->warn("    [{$label}] сущность logistic_tasks не найдена, пропуск");
-            return;
-        }
-
-        $updated = $db->table('data_rows')
-            ->where('data_type_id', $typeId)
-            ->where('field', 'delivery_price')
-            ->where('title', self::OLD_TITLE)
-            ->update(['title' => self::NEW_TITLE]);
-
-        if ($updated) {
-            try {
-                if ($db->getSchemaBuilder()->hasTable('local_cache')) {
-                    $db->table('local_cache')->where('url', 'fields/logistic_tasks')->update(['updated_at' => now()]);
-                }
-            } catch (\Throwable $e) {
+        $total = 0;
+        foreach (self::SLUGS as $slug) {
+            $typeId = $db->table('data_types')->where('slug', $slug)->value('id');
+            if (!$typeId) {
+                $this->warn("    [{$label}] сущность {$slug} не найдена, пропуск");
+                continue;
             }
-            if ($inTenant) {
+
+            $updated = $db->table('data_rows')
+                ->where('data_type_id', $typeId)
+                ->where('field', 'delivery_price')
+                ->where('title', self::OLD_TITLE)
+                ->update(['title' => self::NEW_TITLE]);
+            $total += $updated;
+
+            if ($updated) {
                 try {
-                    \App\Models\Settings::clear_cache();
+                    if ($db->getSchemaBuilder()->hasTable('local_cache')) {
+                        $db->table('local_cache')->where('url', 'fields/' . $slug)->update(['updated_at' => now()]);
+                    }
                 } catch (\Throwable $e) {
                 }
             }
         }
 
-        $this->line("    [{$label}] переименовано строк: {$updated}");
+        if ($total && $inTenant) {
+            try {
+                \App\Models\Settings::clear_cache();
+            } catch (\Throwable $e) {
+            }
+        }
+
+        $this->line("    [{$label}] переименовано строк: {$total}");
     }
 }
