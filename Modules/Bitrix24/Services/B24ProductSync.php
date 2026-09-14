@@ -394,7 +394,10 @@ class B24ProductSync
                 $model->weight = (float) $this->propertyValue($row[self::WEIGHT_PROPERTY]);
             }
             if (Schema::hasColumn('products', 'product_type') && array_key_exists(self::TYPE_PROPERTY, $row)) {
-                $model->product_type = $this->propertyValue($row[self::TYPE_PROPERTY]) === self::TYPE_SERVICE_ENUM ? '1' : '0';
+                $typeValue = $this->propertyValue($row[self::TYPE_PROPERTY]);
+                if ($typeValue !== null) {
+                    $model->product_type = $typeValue === self::TYPE_SERVICE_ENUM ? '1' : '0';
+                }
             }
             if (Schema::hasColumn('products', 'nds') && array_key_exists('VAT_ID', $row)) {
                 $model->nds = $this->ndsFromVatId($row['VAT_ID']);

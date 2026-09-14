@@ -614,10 +614,12 @@ class B24EntitySync
                 $model->products = json_encode($products, JSON_UNESCAPED_UNICODE);
                 $model->weight = $allWeight;
             }
-            if ($deliveryPrice > 0) {
-                $model->delivery_price = $deliveryPrice;
-            } elseif (!empty($deal['UF_CRM_1633508830'])) {
-                $model->delivery_price = $deal['UF_CRM_1633508830'];
+            if (!Schema::hasColumn('products', 'product_type')) {
+                if ($deliveryPrice > 0) {
+                    $model->delivery_price = $deliveryPrice;
+                } elseif (!empty($deal['UF_CRM_1633508830'])) {
+                    $model->delivery_price = $deal['UF_CRM_1633508830'];
+                }
             }
             if (Schema::hasColumn('deals', 'sum') && isset($deal['OPPORTUNITY']) && (float) $deal['OPPORTUNITY'] > 0) {
                 $model->sum = rtrim(rtrim(number_format((float) $deal['OPPORTUNITY'], 2, '.', ''), '0'), '.');
@@ -727,10 +729,12 @@ class B24EntitySync
                 $model->phone = Bitrix24Controller::phoneStoreValue('deals', $deal['UF_CRM_1623418181538']);
             }
 
-            if ($deliveryPrice > 0) {
-                $model->delivery_price = $deliveryPrice;
-            } elseif (!empty($deal['UF_CRM_1633508830'])) {
-                $model->delivery_price = $deal['UF_CRM_1633508830'];
+            if (!Schema::hasColumn('products', 'product_type')) {
+                if ($deliveryPrice > 0) {
+                    $model->delivery_price = $deliveryPrice;
+                } elseif (!empty($deal['UF_CRM_1633508830'])) {
+                    $model->delivery_price = $deal['UF_CRM_1633508830'];
+                }
             }
 
             $model->comment = $deal['UF_CRM_5EAFC3D4C5F76'] ?? $model->comment;

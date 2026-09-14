@@ -627,10 +627,17 @@ class ShipmentService
             return [];
         }
         $result = [];
-        foreach (DB::table('products')->whereIn('id', $ids)->get(['id', 'product_type']) as $row) {
+        $deliveryB24 = class_exists(\Modules\Bitrix24\Http\Controllers\Bitrix24Controller::class)
+            ? array_map('strval', \Modules\Bitrix24\Http\Controllers\Bitrix24Controller::SKIP_PRODUCT_IDS)
+            : [];
+        $columns = Schema::hasColumn('products', 'id_b24') ? ['id', 'product_type', 'id_b24'] : ['id', 'product_type'];
+        foreach (DB::table('products')->whereIn('id', $ids)->get($columns) as $row) {
             $raw = $row->product_type;
             if (is_string($raw) && is_array($decoded = json_decode($raw, true))) {
                 $raw = $decoded[0] ?? null;
+            }
+            if (count($deliveryB24) && isset($row->id_b24) && in_array((string) $row->id_b24, $deliveryB24, true)) {
+                $raw = '1';
             }
             if (trim((string) $raw) === '1') {
                 $result[] = (int) $row->id;
