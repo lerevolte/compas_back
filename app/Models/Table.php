@@ -629,6 +629,36 @@ class Table
         return $column;
     }
 
+    public static function relationLabelValue(array $settings, $field, $item): array
+    {
+        if($field->is_plural && method_exists($item, $field->relation_table))
+            $values = $item->{$field->relation_table} ? $item->{$field->relation_table}->pluck('id')->toArray() : array();
+        else
+            $values = $item->{$field->field} ? array($item->{$field->field}) : array();
+        if(count($values) == 1 && is_string($values[0]) && is_array($decoded = json_decode($values[0], true)))
+            $values = $decoded;
+        $values = array_values(array_map('intval', array_filter($values, 'is_numeric')));
+        $listValues = $settings['list_values'][$field->id] ?? array();
+        $localOptions = array_values(array_filter(
+            is_array($listValues) ? $listValues : array(),
+            fn ($opt) => is_array($opt) && in_array((int) ($opt['value'] ?? 0), $values, true)
+        ));
+        if(count($localOptions) < count($values) && $field->relation_table) {
+            $found = array_map(fn ($opt) => (int) $opt['value'], $localOptions);
+            foreach(array_diff($values, $found) as $missing) {
+                $row = \DB::table($field->relation_table)->where('id', $missing)->first();
+                if($row) {
+                    $text = $row->name ?? ($row->title ?? (string) $missing);
+                    if(ValueHelper::isJson($text) && isset(json_decode($text, true)['value']))
+                        $text = json_decode($text, true)['value'];
+                    $localOptions[] = array('value' => $missing, 'label' => array('id' => $missing, 'text' => (string) $text, 'color' => '', 'file' => '', 'is_hidden' => 0, 'field_id' => $field->id, 'sort' => 0));
+                }
+            }
+        }
+
+        return array('value' => $values, 'localOptions' => $localOptions);
+    }
+
     private static function shippedColumn(int $index): array
     {
         return array(
@@ -687,17 +717,7 @@ class Table
                 if($field->field == 'name')
                     continue;
                 if($field->type == 'relation' && $field->relation_table) {
-                    if($field->is_plural && method_exists($item, $field->relation_table))
-                        $values = $item->{$field->relation_table} ? $item->{$field->relation_table}->pluck('id')->toArray() : array();
-                    else
-                        $values = $item->{$field->field} ? array($item->{$field->field}) : array();
-                    $values = array_map('intval', array_filter($values, 'is_numeric'));
-                    $option['label'][$field->field]['value'] = $values;
-                    $listValues = $settings['list_values'][$field->id] ?? array();
-                    $option['label'][$field->field]['localOptions'] = array_values(array_filter(
-                        is_array($listValues) ? $listValues : array(),
-                        fn ($opt) => is_array($opt) && in_array((int) ($opt['value'] ?? 0), $values, true)
-                    ));
+                    $option['label'][$field->field] = self::relationLabelValue($settings, $field, $item);
                 } elseif($field->type == 'date') {
                     $option['label'][$field->field] = \Carbon\Carbon::parse($item->{$field->field})->format('Y-m-d H:i:s');
                 } else {

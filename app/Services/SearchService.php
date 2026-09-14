@@ -239,11 +239,7 @@ class SearchService
                     foreach($model_fields as $field) {
                         if($field->type != 'text_group' && $field->field != 'name' && $field->field != 'id' && (!isset($settings['products']['perms'][$field->field]['read']) || $settings['products']['perms'][$field->field]['read'])) {
                             if($field->type == 'relation' && $field->relation_table) {
-                                if($field->is_plural)
-                                     $data_product['label'][$field->field]['value'] = $item->{$field->relation_table} ? $item->{$field->relation_table}->pluck('id')->toArray() : array();
-                                else
-                                     $data_product['label'][$field->field]['value'] = $item->{$field->field} ? array($item->{$field->field}) : array();
-                                 $data_product['label'][$field->field]['localOptions'] =array_values($settings['list_values'][$field->id]);
+                                $data_product['label'][$field->field] = \App\Models\Table::relationLabelValue($settings, $field, $item);
                             } elseif($field->type == 'date') {
                                  $data_product['label'][$field->field] = \Carbon\Carbon::parse($item->{$field->field})->format('Y-m-d H:i:s');
                             } else {
