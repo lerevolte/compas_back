@@ -18,6 +18,62 @@ class Company extends Model
 
     protected $guarded = ['id'];
     
+    public const TYPE_FIELD_TITLE = 'Тип компании';
+
+    public static function addType($companyIds, string $label): int
+    {
+        $ids = is_array($companyIds) ? $companyIds : [$companyIds];
+        if (is_string($companyIds) && is_array($decoded = json_decode($companyIds, true))) {
+            $ids = $decoded;
+        }
+        $ids = array_values(array_unique(array_map('intval', array_filter($ids, 'is_numeric'))));
+        if (!count($ids)) {
+            return 0;
+        }
+        try {
+            $typeId = \DB::table('data_types')->where('slug', 'companies')->value('id');
+            $row = $typeId ? \DB::table('data_rows')
+                ->where('data_type_id', $typeId)
+                ->where('type', 'select_dropdown')
+                ->where('title', self::TYPE_FIELD_TITLE)
+                ->where('is_remove', 0)
+                ->first() : null;
+            if (!$row || !\Schema::hasColumn('companies', $row->field)) {
+                return 0;
+            }
+            $details = json_decode((string) $row->details, true);
+            $optionValue = null;
+            foreach ((is_array($details) ? ($details['options'] ?? []) : []) as $option) {
+                $text = is_array($option) ? ($option['label'] ?? '') : '';
+                $text = is_array($text) ? ($text['text'] ?? '') : $text;
+                if (mb_strtolower(trim((string) $text)) === mb_strtolower(trim($label))) {
+                    $optionValue = $option['value'];
+                    break;
+                }
+            }
+            if ($optionValue === null) {
+                return 0;
+            }
+            $updated = 0;
+            foreach (\DB::table('companies')->whereIn('id', $ids)->get(['id', $row->field]) as $company) {
+                $raw = $company->{$row->field};
+                $current = is_string($raw) && is_array($decoded = json_decode($raw, true)) ? $decoded : ($raw === null || $raw === '' ? [] : [$raw]);
+                $current = array_values(array_filter($current, fn ($v) => $v !== null && $v !== ''));
+                if (in_array((string) $optionValue, array_map('strval', $current), true)) {
+                    continue;
+                }
+                $current[] = $optionValue;
+                $stored = $row->is_plural ? json_encode(array_values($current)) : (string) $optionValue;
+                \DB::table('companies')->where('id', $company->id)->update([$row->field => $stored]);
+                $updated++;
+            }
+            return $updated;
+        } catch (\Throwable $e) {
+            \Log::warning('company type auto-tag failed', ['label' => $label, 'error' => $e->getMessage()]);
+            return 0;
+        }
+    }
+
     public static function boot()
     {
         parent::boot();

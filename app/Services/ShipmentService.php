@@ -33,6 +33,95 @@ class ShipmentService
         return self::isSource($slug) || $slug === 'deals';
     }
 
+    public const ACTION_FIELD = 'action_type';
+    public const ACTION_LOADING = 'Загрузка';
+    public const ACTION_UNLOADING = 'Выгрузка';
+
+    private static array $loadingCache = [];
+
+    public static function isLoading(string $slug, int $id): bool
+    {
+        if ($slug !== 'logistic_tasks' || !$id) {
+            return false;
+        }
+        $key = $slug . ':' . $id;
+        if (array_key_exists($key, self::$loadingCache)) {
+            return self::$loadingCache[$key];
+        }
+        $result = false;
+        try {
+            if (Schema::hasColumn($slug, self::ACTION_FIELD)) {
+                $raw = DB::table($slug)->where('id', $id)->value(self::ACTION_FIELD);
+                $decoded = is_string($raw) ? json_decode($raw, true) : $raw;
+                if (is_array($decoded)) {
+                    $raw = $decoded[0] ?? null;
+                }
+                if ($raw !== null && $raw !== '' && is_numeric($raw)) {
+                    $label = DB::table('field_values')->where('id', (int) $raw)->value('value');
+                    $result = mb_strtolower(trim((string) $label)) === mb_strtolower(self::ACTION_LOADING);
+                }
+            }
+        } catch (\Throwable $e) {
+            $result = false;
+        }
+        self::$loadingCache[$key] = $result;
+
+        return $result;
+    }
+
+    public static function forgetLoading(string $slug, int $id): void
+    {
+        unset(self::$loadingCache[$slug . ':' . $id]);
+    }
+
+    public static function normalizeDealId($value): ?int
+    {
+        if (is_string($value) && is_array($decoded = json_decode($value, true))) {
+            $value = $decoded;
+        }
+        if (is_array($value)) {
+            $value = array_values(array_filter($value, 'is_numeric'))[0] ?? null;
+        }
+        return $value !== null && $value !== '' && is_numeric($value) ? (int) $value : null;
+    }
+
+    public static function syncDealLink(string $slug, int $id, $newDealId, $oldDealId = null): void
+    {
+        if (!self::isSource($slug) || !ObjectRelation::ready() || !Schema::hasTable('deals')) {
+            return;
+        }
+        $new = self::normalizeDealId($newDealId);
+        $old = self::normalizeDealId($oldDealId);
+        if ($old && $old !== $new) {
+            ObjectRelation::where('source_slug', 'deals')->where('source_id', $old)
+                ->where('target_slug', $slug)->where('target_id', $id)->delete();
+            try {
+                self::recalcDealShipped($old);
+            } catch (\Throwable $e) {
+            }
+        }
+        if ($new && $new !== $old) {
+            $exists = ObjectRelation::where('source_slug', 'deals')->where('source_id', $new)
+                ->where('target_slug', $slug)->where('target_id', $id)->exists();
+            if (!$exists) {
+                ObjectRelation::link('deals', $new, $slug, $id);
+            }
+            try {
+                self::recalcForSource($slug, $id);
+                self::recalcDealShipped($new);
+            } catch (\Throwable $e) {
+            }
+        }
+    }
+
+    public static function setDealColumn(string $slug, int $id, int $dealId): void
+    {
+        if (!self::isSource($slug) || !Schema::hasColumn($slug, 'deal_id')) {
+            return;
+        }
+        DB::table($slug)->where('id', $id)->update(['deal_id' => $dealId]);
+    }
+
     public static function sourceFor(int $documentId): ?array
     {
         if (!self::ready()) {
@@ -253,6 +342,9 @@ class ShipmentService
 
     public static function shippedBySource(string $slug, int $id): array
     {
+        if (self::isLoading($slug, $id)) {
+            return self::returnsUsage($slug, $id);
+        }
         $shipped = self::invoicesUsage($slug, $id);
         $returned = self::returnsUsage($slug, $id);
 
@@ -379,13 +471,13 @@ class ShipmentService
         return $relation ? [(string) $relation->source_slug, (int) $relation->source_id] : null;
     }
 
-    public static function childSlugsOf(string $slug): array
+    public static function childSlugsOf(string $slug, ?int $id = null): array
     {
         if ($slug === 'deals') {
             return self::SOURCES;
         }
         if (self::isSource($slug)) {
-            return [self::DOCUMENT];
+            return $id && self::isLoading($slug, $id) ? [self::RETURN_DOC] : [self::DOCUMENT];
         }
 
         return [];
@@ -421,7 +513,7 @@ class ShipmentService
 
     public static function residualProducts(string $sourceSlug, int $sourceId, array $products, ?array $exceptTarget = null): array
     {
-        $childSlugs = self::childSlugsOf($sourceSlug);
+        $childSlugs = self::childSlugsOf($sourceSlug, $sourceId);
         if (!count($childSlugs) || !count($products)) {
             return $products;
         }
@@ -475,10 +567,10 @@ class ShipmentService
             if (!count($products)) {
                 return [];
             }
-            if ($childSlug === self::RETURN_DOC && self::isSource($parentSlug)) {
+            if ($childSlug === self::RETURN_DOC && self::isSource($parentSlug) && !self::isLoading($parentSlug, $parentId)) {
                 return self::validateReturn($parentSlug, $parentId, $exceptChildId, $products);
             }
-            if (!in_array($childSlug, self::childSlugsOf($parentSlug), true)) {
+            if (!in_array($childSlug, self::childSlugsOf($parentSlug, $parentId), true)) {
                 return [];
             }
             if (!Schema::hasTable($parentSlug) || !Schema::hasColumn($parentSlug, 'products')) {
@@ -493,7 +585,7 @@ class ShipmentService
             $usedOthers = self::usageByChildren(
                 $parentSlug,
                 $parentId,
-                self::childSlugsOf($parentSlug),
+                self::childSlugsOf($parentSlug, $parentId),
                 $exceptChildId ? [$childSlug, $exceptChildId] : null
             );
 
@@ -598,6 +690,9 @@ class ShipmentService
         $products = array_values(array_filter(self::decode($row->products ?? null), 'is_array'));
         if (!count($products)) {
             return [];
+        }
+        if (self::isLoading($parentSlug, $parentId)) {
+            return self::residualProducts($parentSlug, $parentId, $products, $exceptChildId ? [self::RETURN_DOC, $exceptChildId] : null);
         }
         $available = self::subtractUsage(
             self::invoicesUsage($parentSlug, $parentId),

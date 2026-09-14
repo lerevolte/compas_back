@@ -43,6 +43,9 @@ class Deal extends Model
 
         static::saved(function ($model) {
             $changedKeys = array_keys($model->getChanges());
+            if (in_array('company_id', $changedKeys, true) && $model->company_id) {
+                \App\Models\Company::addType($model->company_id, 'Клиент');
+            }
             if (in_array('products', $changedKeys, true) || ($model->wasRecentlyCreated && $model->products)) {
                 try {
                     $model->recalcServicesPrice();

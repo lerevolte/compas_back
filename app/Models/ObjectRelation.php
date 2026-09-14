@@ -85,7 +85,7 @@ class ObjectRelation extends Model
 
                 return true;
             }
-            if (in_array($targetSlug, \App\Services\ShipmentService::childSlugsOf($sourceSlug), true)) {
+            if (in_array($targetSlug, \App\Services\ShipmentService::childSlugsOf($sourceSlug, (int) $sourceId), true)) {
                 $residual = \App\Services\ShipmentService::residualProducts($sourceSlug, (int) $sourceId, $products, [$targetSlug, (int) $targetId]);
                 $isResidual = $residual !== $products;
                 $products = $residual;

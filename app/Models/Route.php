@@ -151,6 +151,9 @@ class Route extends Model
 
         static::saved(function($model)
         {
+            if ($model->isDirty('company_id') && $model->company_id) {
+                \App\Models\Company::addType($model->company_id, 'Перевозчик');
+            }
             if ($model->isDirty('employee_id')) {
                 $old = static::parseIdList($model->getOriginal('employee_id'));
                 $new = $model->employeeIds();

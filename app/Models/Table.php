@@ -658,12 +658,13 @@ class Table
 
         return array('value' => $values, 'localOptions' => $localOptions);
     }
+    public const SHIPPED_TITLE = 'Фактическое кол-во';
 
     private static function shippedColumn(int $index): array
     {
         return array(
             'id' => null,
-            'title' => 'Отгружено',
+            'title' => self::SHIPPED_TITLE,
             'key' => 'product_shipped',
             'width' => '200px',
             'enabled' => 1,
@@ -886,6 +887,8 @@ class Table
                 );
             if(\App\Services\ShipmentService::hasShippedColumn((string) $parentSlug) && !isset($table_columns['product_shipped']))
                 $table_columns['product_shipped'] = self::shippedColumn(count($table_columns));
+            if(isset($table_columns['product_shipped']) && empty($table_columns['product_shipped']['is_another_title']))
+                $table_columns['product_shipped']['title'] = self::SHIPPED_TITLE;
             if(!\App\Services\ShipmentService::hasShippedColumn((string) $parentSlug))
                 unset($table_columns['product_shipped']);
             if(!isset($table_columns['product_nds']))

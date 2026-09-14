@@ -25,6 +25,13 @@ class ObjectRelationController extends Controller
         }
 
         ObjectRelation::link($data['source_slug'], $data['source_id'], $data['target_slug'], $data['target_id']);
+        if ($data['source_slug'] === 'deals' && \App\Services\ShipmentService::isSource($data['target_slug'])) {
+            \App\Services\ShipmentService::setDealColumn($data['target_slug'], (int) $data['target_id'], (int) $data['source_id']);
+            try {
+                \App\Services\ShipmentService::recalcDealShipped((int) $data['source_id']);
+            } catch (\Throwable $e) {
+            }
+        }
 
         $b24Copied = ObjectRelation::copyB24Id(
             $data['source_slug'],
@@ -107,10 +114,11 @@ class ObjectRelationController extends Controller
         }
 
         $usage = [];
-        $childSlugs = \App\Services\ShipmentService::childSlugsOf($slug);
+        $loading = \App\Services\ShipmentService::isLoading($slug, $id);
+        $childSlugs = \App\Services\ShipmentService::childSlugsOf($slug, $id);
         if (count($childSlugs)) {
             $used = \App\Services\ShipmentService::usageByChildren($slug, $id, $childSlugs);
-            $returned = \App\Services\ShipmentService::isSource($slug)
+            $returned = \App\Services\ShipmentService::isSource($slug) && !$loading
                 ? \App\Services\ShipmentService::returnsUsage($slug, (int) $id)
                 : null;
             $row = Schema::hasTable($slug) ? DB::table($slug)->where('id', $id)->first() : null;
@@ -143,7 +151,7 @@ class ObjectRelationController extends Controller
             }
             $row = DB::table($parentSlug)->where('id', $parentId)->first();
             $products = \App\Services\ShipmentService::decode($row->products ?? null);
-            if ($slug === \App\Services\ShipmentService::RETURN_DOC) {
+            if ($slug === \App\Services\ShipmentService::RETURN_DOC && !\App\Services\ShipmentService::isLoading($parentSlug, (int) $parentId)) {
                 $shipped = \App\Services\ShipmentService::invoicesUsage($parentSlug, (int) $parentId);
                 $otherReturns = \App\Services\ShipmentService::returnsUsage($parentSlug, (int) $parentId, (int) $id);
                 foreach ($products as $product) {
@@ -161,7 +169,7 @@ class ObjectRelationController extends Controller
                     ];
                 }
             } else {
-                $siblingSlugs = \App\Services\ShipmentService::childSlugsOf($parentSlug);
+                $siblingSlugs = \App\Services\ShipmentService::childSlugsOf($parentSlug, (int) $parentId);
                 $usedOthers = \App\Services\ShipmentService::usageByChildren($parentSlug, $parentId, $siblingSlugs, [$slug, $id]);
                 $services = \App\Services\ShipmentService::serviceIds(array_map(fn ($p) => $p['id'] ?? 0, array_filter($products, 'is_array')));
                 foreach ($products as $product) {
@@ -181,7 +189,7 @@ class ObjectRelationController extends Controller
             }
         }
 
-        return response()->json(['parent' => $parentInfo, 'limits' => $limits, 'usage' => $usage]);
+        return response()->json(['parent' => $parentInfo, 'limits' => $limits, 'usage' => $usage, 'loading' => $loading]);
     }
 
     public function printDocuments($slug, $id)

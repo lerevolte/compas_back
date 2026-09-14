@@ -32,7 +32,21 @@ class Task extends Model
 
        static::saved(function($model)
        {
-            if (array_key_exists('products', $model->getChanges()) || ($model->wasRecentlyCreated && $model->products)) {
+            $changes = $model->getChanges();
+            if (array_key_exists('deal_id', $changes) || ($model->wasRecentlyCreated && $model->deal_id)) {
+                try {
+                    \App\Services\ShipmentService::syncDealLink($model->getTable(), (int) $model->id, $model->deal_id, $model->wasRecentlyCreated ? null : $model->getOriginal('deal_id'));
+                } catch (\Throwable $e) {
+                }
+            }
+            if (array_key_exists(\App\Services\ShipmentService::ACTION_FIELD, $changes) && !$model->wasRecentlyCreated) {
+                \App\Services\ShipmentService::forgetLoading($model->getTable(), (int) $model->id);
+                try {
+                    \App\Services\ShipmentService::recalcForSource($model->getTable(), (int) $model->id);
+                } catch (\Throwable $e) {
+                }
+            }
+            if (array_key_exists('products', $changes) || ($model->wasRecentlyCreated && $model->products)) {
                 try {
                     \App\Services\ShipmentService::recalcForSource('logistic_tasks', (int) $model->id);
                 } catch (\Throwable $e) {
@@ -46,6 +60,9 @@ class Task extends Model
 
        static::saving(function($model)
        {
+            if (\Schema::hasColumn($model->getTable(), 'deal_id')) {
+                $model->deal_id = \App\Services\ShipmentService::normalizeDealId($model->deal_id);
+            }
             if (is_array($model->employee_id)) {
                 $ids = array_values(array_map('intval', array_filter($model->employee_id, 'is_numeric')));
                 $model->employee_id = json_encode($ids);
