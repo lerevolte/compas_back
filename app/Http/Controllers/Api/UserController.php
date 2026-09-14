@@ -55,10 +55,11 @@ class UserController extends Controller
         return response()->json($roles);
     }
 
-    public function geoposition(User $user)
+    public function geoposition($user)
     {
+        $userId = (int) ($user instanceof User ? $user->id : $user);
         $me = Auth::user();
-        if (!$me->is_admin && $me->id != $user->id) {
+        if (!$me->is_admin && $me->id != $userId) {
             $entityId = \DB::table('data_types')->where('slug', 'users')->value('id');
             $readP = $me->role_id && $entityId
                 ? \DB::table('permissions')->where('role_id', $me->role_id)->where('entity_id', $entityId)->value('read_p')
@@ -70,8 +71,11 @@ class UserController extends Controller
         if (!\Schema::hasColumn('users', 'geoposition')) {
             return response()->json(['geoposition' => null]);
         }
-        $raw = \DB::table('users')->where('id', $user->id)->value('geoposition');
+        $raw = \DB::table('users')->where('id', $userId)->value('geoposition');
         $decoded = $raw ? json_decode($raw, true) : null;
+        if (is_string($decoded)) {
+            $decoded = json_decode($decoded, true);
+        }
 
         return response()->json(['geoposition' => is_array($decoded) ? $decoded : null]);
     }
