@@ -43,7 +43,7 @@ class Deal extends Model
 
         static::saved(function ($model) {
             $changedKeys = array_keys($model->getChanges());
-            if (in_array('products', $changedKeys, true)) {
+            if (in_array('products', $changedKeys, true) || ($model->wasRecentlyCreated && $model->products)) {
                 try {
                     $model->recalcServicesPrice();
                 } catch (\Throwable $e) {

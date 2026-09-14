@@ -32,7 +32,7 @@ class Task extends Model
 
        static::saved(function($model)
        {
-            if (array_key_exists('products', $model->getChanges())) {
+            if (array_key_exists('products', $model->getChanges()) || ($model->wasRecentlyCreated && $model->products)) {
                 try {
                     \App\Services\ShipmentService::recalcForSource('logistic_tasks', (int) $model->id);
                 } catch (\Throwable $e) {
