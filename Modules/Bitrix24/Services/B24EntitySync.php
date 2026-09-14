@@ -2436,7 +2436,7 @@ class B24EntitySync
 
         $localIds = array_values(array_unique(array_filter(array_map(fn ($p) => (int) ($p['id'] ?? 0), $products))));
         $localProducts = count($localIds)
-            ? \Modules\Products\Entities\Product::whereIn('id', $localIds)->get()->keyBy('id')
+            ? \Modules\Products\Entities\Product::withTrashed()->whereIn('id', $localIds)->get()->keyBy('id')
             : collect();
         $productSvc = B24ProductSync::make();
 
@@ -2463,7 +2463,8 @@ class B24EntitySync
             $name = B24ProductSync::nameText($row['PRODUCT_NAME'] ?? '');
             $isForeign = $pid === '' || $pid === '0'
                 ? !$this->localProductByName($name)
-                : !\Modules\Products\Entities\Product::where('id_b24', $pid)->exists();
+                : (!in_array((int) $pid, Bitrix24Controller::SKIP_PRODUCT_IDS, true)
+                    && !\Modules\Products\Entities\Product::withTrashed()->where('id_b24', $pid)->exists());
             if ($isForeign) {
                 $foreignRows[] = $this->keepRowFields($row);
                 continue;
@@ -2536,7 +2537,7 @@ class B24EntitySync
         if ($name === '') {
             return false;
         }
-        return \Modules\Products\Entities\Product::where(function ($q) use ($name) {
+        return \Modules\Products\Entities\Product::withTrashed()->where(function ($q) use ($name) {
             $q->where('name', $name)
               ->orWhereRaw('(JSON_VALID(name) AND JSON_UNQUOTE(JSON_EXTRACT(name, "$.value")) = ?)', [$name]);
         })->exists();

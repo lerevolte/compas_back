@@ -61,7 +61,7 @@ class Deal extends Model
                 }
             }
 
-            $changed = array_intersect(array_keys($model->getChanges()), self::B24_PUSH_FIELDS);
+            $changed = array_intersect($changedKeys, self::B24_PUSH_FIELDS);
             if (!count($changed) || !$model->b24_id) {
                 return;
             }
