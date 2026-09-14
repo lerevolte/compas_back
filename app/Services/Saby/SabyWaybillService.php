@@ -10,6 +10,7 @@ use App\Models\Requisite;
 use App\Models\Route;
 use App\Models\Task;
 use App\Models\SabyWaybill;
+use App\Models\SabyOrder;
 use App\Services\Dadata;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -127,7 +128,46 @@ class SabyWaybillService
             'flc_errors' => $attachment['КоличествоОшибок'] ?? null,
         ]);
 
+        $this->linkOrder($task, $waybill, $written);
+
         return $waybill;
+    }
+
+    public function orderFor(Task $task): ?SabyOrder
+    {
+        if (!Schema::hasTable('saby_orders')) {
+            return null;
+        }
+        return SabyOrder::where(function ($q) use ($task) {
+                $q->where('task_id', $task->id)->orWhere('unloading_task_id', $task->id);
+            })
+            ->whereNotNull('doc_id')
+            ->where('doc_id', '!=', '')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    protected function linkOrder(Task $task, SabyWaybill $waybill, array $written): void
+    {
+        $order = $this->orderFor($task);
+        if (!$order || !$waybill->doc_id) {
+            return;
+        }
+        $attachment = $written['Вложение'][0] ?? [];
+        $order->waybill_doc_id = $waybill->doc_id;
+        $order->waybill_number = $waybill->number;
+        $order->waybill_date = $waybill->date;
+        $order->waybill_state = $written['Состояние']['Название'] ?? $waybill->status;
+        $order->waybill_pdf_url = $waybill->pdf_url;
+        $order->waybill_cabinet_url = $waybill->cabinet_url;
+        $order->waybill_archive_url = $waybill->archive_url;
+        $qr = trim((string) ($written['QRLink'] ?? ''));
+        if ($qr !== '') {
+            $order->waybill_qr_url = $qr;
+        }
+        $order->waybill_checked_at = now();
+        $order->save();
+        $this->log('info', 'waybill linked to order', ['order_id' => $order->id, 'waybill_doc_id' => $waybill->doc_id]);
     }
 
     public function delete(SabyWaybill $waybill): void
@@ -146,6 +186,13 @@ class SabyWaybillService
         }
 
         $this->log('info', 'waybill deleted', ['task_id' => $waybill->task_id, 'doc_id' => $waybill->doc_id]);
+        if ($waybill->doc_id && Schema::hasTable('saby_orders')) {
+            SabyOrder::where('waybill_doc_id', $waybill->doc_id)->update([
+                'waybill_doc_id' => null, 'waybill_number' => null, 'waybill_date' => null, 'waybill_state' => null,
+                'waybill_stage' => null, 'waybill_pdf_url' => null, 'waybill_cabinet_url' => null,
+                'waybill_archive_url' => null, 'waybill_qr_url' => null, 'waybill_checked_at' => null,
+            ]);
+        }
         $waybill->delete();
     }
 
@@ -240,8 +287,9 @@ class SabyWaybillService
             ],
         ];
 
-        $document['СодИнфГО']['НомЗак'] = (string) $task->id;
-        $document['СодИнфГО']['ДатаЗак'] = $document['СодИнфГО']['ДатаТрН'];
+        $order = $this->orderFor($task);
+        $document['СодИнфГО']['НомЗак'] = $order && $order->number !== null && $order->number !== '' ? (string) $order->number : (string) $task->id;
+        $document['СодИнфГО']['ДатаЗак'] = $order && $order->date ? (string) $order->date : $document['СодИнфГО']['ДатаТрН'];
 
         $document['СодИнфГО']['СвПер'] = $this->party($carrier);
 

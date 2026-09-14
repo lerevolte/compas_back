@@ -289,9 +289,16 @@ class SabyOrderService extends SabyWaybillService
             'Операция' => ['Тип' => 'Погрузка', 'ДатаВремя' => $loadingAt],
             'Организация' => $this->pointOrganization($shipper),
         ];
+        $receiverLabel = '';
+        if ($receiver) {
+            $receiverLabel = trim((string) $receiver->name) . ($this->inn($receiver) !== '' ? ', ИНН ' . $this->inn($receiver) : '');
+        } elseif ($receiverContact) {
+            $receiverLabel = $this->contactName($receiverContact) . ($this->contactInn($receiverContact) !== '' ? ', ИНН ' . $this->contactInn($receiverContact) : '');
+        }
+        $unloadingText = $receiverLabel !== '' ? $deliveryAddress . '. Грузополучатель: ' . $receiverLabel : $deliveryAddress;
         $unloadingPoint = [
             'КодСтраны' => '643',
-            'АдресТекст' => $deliveryAddress,
+            'АдресТекст' => $unloadingText,
             'Операция' => ['Тип' => 'Выгрузка', 'ДатаВремя' => $deliveryAt],
         ];
         if ($receiver) {
@@ -314,7 +321,7 @@ class SabyOrderService extends SabyWaybillService
                     'ПодачаТС' => ['ДатаВремя' => $loadingAt],
                 ],
                 'Пункт' => [$loadingPoint, $unloadingPoint],
-                'КонечныйПункт' => ['Название' => $deliveryAddress],
+                'КонечныйПункт' => ['Название' => $receiverLabel !== '' ? $receiverLabel . ', ' . $deliveryAddress : $deliveryAddress],
             ],
             'Груз' => ['Позиция' => $positions],
             'Файл' => ['Составитель' => ['Наименование' => (string) $shipper->name]],
