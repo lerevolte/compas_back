@@ -20,7 +20,7 @@ class B24ProductSync
     private array $params;
     private ?bool $catalogScope = null;
 
-    public const PUSH_PRODUCT_FIELDS = ['name', 'price', 'weight', 'category_id'];
+    public const PUSH_PRODUCT_FIELDS = ['name', 'price', 'weight', 'category_id', 'product_type'];
     public const PUSH_CATEGORY_FIELDS = ['name', 'parent_id'];
 
     private const LINK_PROPERTY = 'PROPERTY_132';
@@ -110,6 +110,54 @@ class B24ProductSync
             );
         }
         return $catalogId;
+    }
+
+    private function typeEnumIds(): array
+    {
+        $stored = DB::table('settings')->where('type', 'b24_type_enum')->value('value');
+        $decoded = $stored ? json_decode($stored, true) : null;
+        if (is_array($decoded) && !empty($decoded['service']) && !empty($decoded['product'])) {
+            return $decoded;
+        }
+        $ids = ['service' => self::TYPE_SERVICE_ENUM, 'product' => null];
+        try {
+            $resp = $this->b24('crm.product.property.get', ['id' => (int) substr(self::TYPE_PROPERTY, 9)]);
+            foreach (($resp['result']['VALUES'] ?? []) as $item) {
+                $label = mb_strtolower(trim((string) ($item['VALUE'] ?? '')));
+                $id = (string) ($item['ID'] ?? '');
+                if ($id === '') {
+                    continue;
+                }
+                if (str_contains($label, 'услуг')) {
+                    $ids['service'] = $id;
+                } elseif (str_contains($label, 'товар')) {
+                    $ids['product'] = $id;
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+        if (!empty($ids['product'])) {
+            DB::table('settings')->updateOrInsert(
+                ['type' => 'b24_type_enum', 'entity' => null, 'user_id' => null],
+                ['key' => 'b24_type_enum', 'value' => json_encode($ids)]
+            );
+        }
+        return $ids;
+    }
+
+    private function typeEnumFor(Product $product): ?string
+    {
+        if (!Schema::hasColumn('products', 'product_type')) {
+            return null;
+        }
+        $raw = $product->product_type;
+        if (is_string($raw) && is_array($decoded = json_decode($raw, true))) {
+            $raw = $decoded[0] ?? null;
+        }
+        $ids = $this->typeEnumIds();
+        $isService = trim((string) $raw) === '1';
+        $value = $isService ? ($ids['service'] ?? null) : ($ids['product'] ?? null);
+        return $value !== null && $value !== '' ? (string) $value : null;
     }
 
     public function runIncremental(int $chunk = 200): array
@@ -576,13 +624,17 @@ class B24ProductSync
             }
             $fields['SECTION_ID'] = $sectionId;
         }
-        $propsChanged = $all || in_array('weight', $changed, true);
+        $propsChanged = $all || in_array('weight', $changed, true) || in_array('product_type', $changed, true);
         if (!count($fields) && !$propsChanged) {
             return;
         }
 
         $fields[self::WEIGHT_PROPERTY] = $product->weight !== null ? (string) $product->weight : '';
         $fields[self::LINK_PROPERTY] = (string) (self::linkFromName($product->name) ?? '');
+        $typeEnum = $this->typeEnumFor($product);
+        if ($typeEnum !== null) {
+            $fields[self::TYPE_PROPERTY] = $typeEnum;
+        }
 
         if ($product->id_b24) {
             $resp = $this->b24('crm.product.update', ['id' => $product->id_b24, 'fields' => $fields]);
