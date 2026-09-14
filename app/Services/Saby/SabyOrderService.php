@@ -40,9 +40,9 @@ class SabyOrderService extends SabyWaybillService
         }
     }
 
-    public function createOrder(Task $task, ?Task $pointTask = null, ?string $massMethod = null, bool $currentIsLoading = false, ?string $vehicleType = null): SabyOrder
+    public function createOrder(Task $task, ?Task $pointTask = null, ?string $massMethod = null, bool $currentIsLoading = false, ?string $vehicleType = null, ?string $bodyType = null): SabyOrder
     {
-        $substitutions = $this->buildOrder($task, $pointTask, $massMethod, $currentIsLoading, $vehicleType);
+        $substitutions = $this->buildOrder($task, $pointTask, $massMethod, $currentIsLoading, $vehicleType, $bodyType);
         $config = $this->client->config();
         $route = $task->route_id ? Route::find($task->route_id) : null;
         $carrier = $route ? $this->companyOf($route, 'company_id') : null;
@@ -200,7 +200,7 @@ class SabyOrderService extends SabyWaybillService
         return [];
     }
 
-    public function buildOrder(Task $task, ?Task $pointTask = null, ?string $massMethod = null, bool $currentIsLoading = false, ?string $vehicleType = null): array
+    public function buildOrder(Task $task, ?Task $pointTask = null, ?string $massMethod = null, bool $currentIsLoading = false, ?string $vehicleType = null, ?string $bodyType = null): array
     {
         $errors = [];
         $route = $task->route_id ? Route::find($task->route_id) : null;
@@ -225,7 +225,7 @@ class SabyOrderService extends SabyWaybillService
             $errors[] = 'У перевозчика «' . $carrier->name . '» не заполнен телефон';
         }
 
-        $vehicle = $route ? $this->orderVehicle($route, $task, $vehicleType) : [];
+        $vehicle = $route ? $this->orderVehicle($route, $task, $vehicleType, $bodyType) : [];
         if ($route) {
             if (empty($vehicle['Тип'])) {
                 $errors[] = 'Укажите тип требуемого ТС: у ТС маршрута не заполнен «Тип ТС»';
@@ -401,7 +401,7 @@ class SabyOrderService extends SabyWaybillService
         return $party;
     }
 
-    protected function orderVehicle(Route $route, Task $task, ?string $vehicleType = null): array
+    protected function orderVehicle(Route $route, Task $task, ?string $vehicleType = null, ?string $bodyType = null): array
     {
         $car = $route->car_id ? \App\Models\Car::find($route->car_id) : null;
         $params = [];
@@ -414,9 +414,12 @@ class SabyOrderService extends SabyWaybillService
             $params['Тип'] = $type;
         }
 
-        $bodyType = $car ? $this->fieldOptionLabel('cars', 'body_type', $this->attr($car, 'body_type')) : '';
-        if ($bodyType !== '') {
-            $params['ТипКузова'] = $bodyType;
+        $body = $car ? $this->fieldOptionLabel('cars', 'body_type', $this->attr($car, 'body_type')) : '';
+        if ($body === '' && $bodyType !== null && trim($bodyType) !== '') {
+            $body = $this->fieldOptionLabel('cars', 'body_type', $bodyType) ?: trim($bodyType);
+        }
+        if ($body !== '') {
+            $params['ТипКузова'] = $body;
         }
 
         [$cargoWeight, $cargoVolume] = $this->cargoTotals($task);

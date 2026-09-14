@@ -96,22 +96,15 @@ class SabyWaybillController extends Controller
             return response()->json(['message' => 'Задача не найдена'], 404);
         }
         if (!$task->route_id) {
-            return response()->json(['data' => [], 'route_id' => null, 'mass_methods' => $this->massMethods(), 'vehicle_types' => $this->vehicleTypes(), 'vehicle_type' => null, 'car_name' => null]);
+            return response()->json(['data' => [], 'route_id' => null, 'mass_methods' => $this->massMethods(), 'vehicle_types' => $this->fieldOptions('vehicle_type'), 'vehicle_type' => null, 'body_types' => $this->fieldOptions('body_type'), 'body_type' => null, 'car_name' => null]);
         }
         $car = null;
         $route = \App\Models\Route::find($task->route_id);
         if ($route && $route->car_id) {
             $car = \App\Models\Car::find($route->car_id);
         }
-        $carType = null;
-        if ($car) {
-            $raw = $car->getAttribute('vehicle_type');
-            $raw = is_array($raw) ? ($raw[0] ?? null) : $raw;
-            if (is_string($raw) && is_array($decoded = json_decode($raw, true))) {
-                $raw = $decoded[0] ?? null;
-            }
-            $carType = $raw !== null && trim((string) $raw) !== '' ? (string) $raw : null;
-        }
+        $carType = $car ? $this->carOption($car, 'vehicle_type') : null;
+        $carBodyType = $car ? $this->carOption($car, 'body_type') : null;
 
         $tasks = Task::where('route_id', $task->route_id)
             ->orderBy('sort')
@@ -144,18 +137,30 @@ class SabyWaybillController extends Controller
             'data' => $tasks,
             'route_id' => $task->route_id,
             'mass_methods' => $this->massMethods(),
-            'vehicle_types' => $this->vehicleTypes(),
+            'vehicle_types' => $this->fieldOptions('vehicle_type'),
             'vehicle_type' => $carType,
+            'body_types' => $this->fieldOptions('body_type'),
+            'body_type' => $carBodyType,
             'car_name' => $car ? (trim((string) ($car->name ?? '')) ?: ('#' . $car->id)) : null,
         ]);
     }
 
-    private function vehicleTypes(): array
+    private function carOption(\App\Models\Car $car, string $field): ?string
+    {
+        $raw = $car->getAttribute($field);
+        $raw = is_array($raw) ? ($raw[0] ?? null) : $raw;
+        if (is_string($raw) && is_array($decoded = json_decode($raw, true))) {
+            $raw = $decoded[0] ?? null;
+        }
+        return $raw !== null && trim((string) $raw) !== '' ? (string) $raw : null;
+    }
+
+    private function fieldOptions(string $field): array
     {
         $details = \DB::table('data_rows')
             ->join('data_types', 'data_rows.data_type_id', '=', 'data_types.id')
             ->where('data_types.slug', 'cars')
-            ->where('data_rows.field', 'vehicle_type')
+            ->where('data_rows.field', $field)
             ->value('data_rows.details');
         $decoded = $details ? json_decode($details, true) : null;
         $out = [];

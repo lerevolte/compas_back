@@ -324,6 +324,7 @@ Route::middleware([
         Route::get('users/{user}/roles', [App\Http\Controllers\Api\UserController::class, 'list'])->name('user.roles');
         Route::get('permissions', [App\Http\Controllers\Api\UserController::class, 'permissions'])->name('users.permissions');
         Route::post('users/{user}/update_b24', [App\Http\Controllers\Api\UserController::class, 'update_b24'])->name('users.update_b24');
+        Route::get('users/{user}/geoposition', [App\Http\Controllers\Api\UserController::class, 'geoposition'])->name('users.geoposition');
 
         Route::get(
             'filters/{model}', 

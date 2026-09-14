@@ -2455,6 +2455,7 @@ class B24EntitySync
         }
 
         $rows = [];
+        $foreignRows = [];
         $existingByProduct = [];
         $existingByName = [];
         foreach ($currentRows as $row) {
@@ -2462,9 +2463,9 @@ class B24EntitySync
             $name = B24ProductSync::nameText($row['PRODUCT_NAME'] ?? '');
             $isForeign = $pid === '' || $pid === '0'
                 ? !$this->localProductByName($name)
-                : (in_array((int) $pid, Bitrix24Controller::SKIP_PRODUCT_IDS) || !\Modules\Products\Entities\Product::where('id_b24', $pid)->exists());
+                : !\Modules\Products\Entities\Product::where('id_b24', $pid)->exists();
             if ($isForeign) {
-                $rows[] = $this->keepRowFields($row);
+                $foreignRows[] = $this->keepRowFields($row);
                 continue;
             }
             if ($pid !== '' && $pid !== '0') {
@@ -2499,7 +2500,7 @@ class B24EntitySync
             ];
             if ($existing) {
                 $line['ID'] = $existing['ID'];
-                foreach (['MEASURE_CODE', 'MEASURE_NAME', 'DISCOUNT_TYPE_ID', 'DISCOUNT_RATE', 'DISCOUNT_SUM', 'CUSTOMIZED', 'SORT'] as $key) {
+                foreach (['MEASURE_CODE', 'MEASURE_NAME', 'DISCOUNT_TYPE_ID', 'DISCOUNT_RATE', 'DISCOUNT_SUM', 'CUSTOMIZED'] as $key) {
                     if (array_key_exists($key, $existing)) {
                         $line[$key] = $existing[$key];
                     }
@@ -2517,6 +2518,10 @@ class B24EntitySync
                 }
             }
             $rows[] = $line;
+        }
+        $rows = array_merge($rows, $foreignRows);
+        foreach ($rows as $i => $row) {
+            $rows[$i]['SORT'] = ($i + 1) * 10;
         }
 
         $resp = $this->b24('crm.deal.productrows.set', ['id' => $deal->b24_id, 'rows' => $rows]);

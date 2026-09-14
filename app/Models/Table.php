@@ -687,11 +687,17 @@ class Table
                 if($field->field == 'name')
                     continue;
                 if($field->type == 'relation' && $field->relation_table) {
-                    if($field->is_plural)
-                        $option['label'][$field->field]['value'] = $item->{$field->relation_table} ? $item->{$field->relation_table}->pluck('id')->toArray() : array();
+                    if($field->is_plural && method_exists($item, $field->relation_table))
+                        $values = $item->{$field->relation_table} ? $item->{$field->relation_table}->pluck('id')->toArray() : array();
                     else
-                        $option['label'][$field->field]['value'] = $item->{$field->field} ? array($item->{$field->field}) : array();
-                    $option['label'][$field->field]['localOptions'] =array_values($settings['list_values'][$field->id]);
+                        $values = $item->{$field->field} ? array($item->{$field->field}) : array();
+                    $values = array_map('intval', array_filter($values, 'is_numeric'));
+                    $option['label'][$field->field]['value'] = $values;
+                    $listValues = $settings['list_values'][$field->id] ?? array();
+                    $option['label'][$field->field]['localOptions'] = array_values(array_filter(
+                        is_array($listValues) ? $listValues : array(),
+                        fn ($opt) => is_array($opt) && in_array((int) ($opt['value'] ?? 0), $values, true)
+                    ));
                 } elseif($field->type == 'date') {
                     $option['label'][$field->field] = \Carbon\Carbon::parse($item->{$field->field})->format('Y-m-d H:i:s');
                 } else {

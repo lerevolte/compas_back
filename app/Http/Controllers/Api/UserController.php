@@ -19,7 +19,6 @@ class UserController extends Controller
         $users = User::get();
 
         foreach ($users as $user) {
-            //$user->getPermissions();
             $roles = $user->roles_all();
             foreach($roles as $k => $role) {
                 if(!$role)
@@ -30,7 +29,6 @@ class UserController extends Controller
                 'name' => implode(' ', array($user->name, $user->last_name)),
                 'isAdmin' => $user->isAdmin(),
                 'roles' => $roles,
-                 //             'permissions' => $user->getPermissions()
             );
         }
 
@@ -55,5 +53,26 @@ class UserController extends Controller
         
 
         return response()->json($roles);
+    }
+
+    public function geoposition(User $user)
+    {
+        $me = Auth::user();
+        if (!$me->is_admin && $me->id != $user->id) {
+            $entityId = \DB::table('data_types')->where('slug', 'users')->value('id');
+            $readP = $me->role_id && $entityId
+                ? \DB::table('permissions')->where('role_id', $me->role_id)->where('entity_id', $entityId)->value('read_p')
+                : null;
+            if ($readP == 'N') {
+                return response()->json(['message' => 'Forbidden'], 403);
+            }
+        }
+        if (!\Schema::hasColumn('users', 'geoposition')) {
+            return response()->json(['geoposition' => null]);
+        }
+        $raw = \DB::table('users')->where('id', $user->id)->value('geoposition');
+        $decoded = $raw ? json_decode($raw, true) : null;
+
+        return response()->json(['geoposition' => is_array($decoded) ? $decoded : null]);
     }
 };

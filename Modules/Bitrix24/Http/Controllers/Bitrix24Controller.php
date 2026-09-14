@@ -801,6 +801,10 @@ class Bitrix24Controller extends Controller
                     if ($pulled) {
                         return \Modules\Products\Entities\Product::find($pulled->id);
                     }
+                    $trashed = \Modules\Products\Entities\Product::onlyTrashed()->where('id_b24', $pid)->first();
+                    if ($trashed) {
+                        return $trashed;
+                    }
                 }
                 $plist = Http::post($base . 'crm.product.list', [
                     'order'  => ['ID' => 'ASC'],
@@ -814,6 +818,9 @@ class Bitrix24Controller extends Controller
                     $prod->weight = $plist['result'][0]['PROPERTY_134']['value'];
                 }
                 $prod->save();
+                if (isset($plist['result'][0]) && \Modules\Bitrix24\Services\B24ProductSync::isInactive($plist['result'][0])) {
+                    $prod->delete();
+                }
                 return $prod;
             }
 

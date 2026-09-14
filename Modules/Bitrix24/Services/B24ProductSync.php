@@ -207,7 +207,7 @@ class B24ProductSync
         $rows = $this->b24All('crm.product.list', [
             'filter' => $filter,
             'select' => [
-                'ID', 'NAME', 'PRICE', 'SECTION_ID', 'CATALOG_ID', 'TIMESTAMP_X',
+                'ID', 'NAME', 'PRICE', 'SECTION_ID', 'CATALOG_ID', 'TIMESTAMP_X', 'ACTIVE',
                 'PREVIEW_PICTURE', 'DETAIL_PICTURE', 'VAT_ID', 'VAT_INCLUDED',
                 self::LINK_PROPERTY, self::WEIGHT_PROPERTY, self::TYPE_PROPERTY,
             ],
@@ -222,7 +222,11 @@ class B24ProductSync
         $lastModify = null;
         foreach ($rows as $row) {
             try {
-                $this->upsertProductFromB24($row);
+                if (self::isInactive($row)) {
+                    $this->deleteByB24Id($row['ID'] ?? null);
+                } else {
+                    $this->upsertProductFromB24($row);
+                }
                 $count++;
                 $lastModify = $row['TIMESTAMP_X'] ?? $lastModify;
             } catch (\Throwable $e) {
@@ -239,17 +243,62 @@ class B24ProductSync
     {
         $resp = $this->b24('crm.product.get', ['id' => $productId]);
         $row = $resp['result'] ?? null;
-        return $row ? $this->upsertProductFromB24($row) : null;
+        if (!$row) {
+            return null;
+        }
+        if (self::isInactive($row)) {
+            $this->deleteByB24Id($productId);
+            return null;
+        }
+        return $this->upsertProductFromB24($row);
+    }
+
+    public static function isInactive(array $row): bool
+    {
+        return array_key_exists('ACTIVE', $row) && (string) $row['ACTIVE'] === 'N';
     }
 
     public function deleteByB24Id($productId): void
     {
+        if ($productId === null || $productId === '') {
+            return;
+        }
         self::$muted = true;
         try {
             Product::where('id_b24', (string) $productId)->first()?->delete();
         } finally {
             self::$muted = false;
         }
+    }
+
+    public function inactiveB24Ids(): array
+    {
+        $catalogId = $this->catalogId();
+        $filter = ['ACTIVE' => 'N'];
+        if ($catalogId) {
+            $filter['CATALOG_ID'] = $catalogId;
+        }
+        $rows = $this->b24All('crm.product.list', [
+            'filter' => $filter,
+            'select' => ['ID'],
+            'order'  => ['ID' => 'ASC'],
+        ]);
+        return array_values(array_filter(array_map(fn ($row) => (string) ($row['ID'] ?? ''), $rows)));
+    }
+
+    public function pruneInactive(bool $dryRun = false): array
+    {
+        $ids = $this->inactiveB24Ids();
+        $local = [];
+        foreach (array_chunk($ids, 500) as $chunk) {
+            $local = array_merge($local, Product::whereIn('id_b24', $chunk)->pluck('id_b24')->map(fn ($v) => (string) $v)->all());
+        }
+        if (!$dryRun) {
+            foreach ($local as $b24Id) {
+                $this->deleteByB24Id($b24Id);
+            }
+        }
+        return ['inactive' => count($ids), 'deleted' => count($local)];
     }
 
     public static function nameText($name): string

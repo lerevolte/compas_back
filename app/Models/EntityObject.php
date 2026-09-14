@@ -2110,9 +2110,11 @@ class EntityObject
             }
 
             if(is_array($products)) {
+                $items_by_id = collect($paginator->items())->keyBy('id');
                 foreach($products as $num => $product) {
                     if(isset($product['id']) && isset($objects[$product['id']])) {
                         $data = $objects[$product['id']];
+                        $item = $items_by_id[$product['id']] ?? $item;
                         $photo = $item->photo;
                         if($photo) {
                             $photo = json_decode($photo, true);
@@ -2138,8 +2140,8 @@ class EntityObject
                             if($field->type != 'text_group' && $field->field != 'name' && $field->field != 'id' && (!isset($settings[$slug]['perms'][$field->field]['read']) || $settings[$slug]['perms'][$field->field]['read'])) {
                                 if($field->type == 'date')
                                     $data['product_id']['localOptions'][0]['label'][$field->field] = \Carbon\Carbon::parse($item->{$field->field})->format('d.m.Y');
-                                elseif($field->field == 'category_id')
-                                    $data['product_id']['localOptions'][0]['label'][$field->field] = $item->categories->pluck('id')->toArray();
+                                elseif($field->type == 'relation' && isset($data[$field->field]))
+                                    $data['product_id']['localOptions'][0]['label'][$field->field] = $data[$field->field];
                                 else
                                     $data['product_id']['localOptions'][0]['label'][$field->field] = $item->{$field->field};
                             }

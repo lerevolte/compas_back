@@ -66,9 +66,10 @@ class SabyOrderController extends Controller
         }
 
         $vehicleType = $request->vehicle_type !== null && trim((string) $request->vehicle_type) !== '' ? (string) $request->vehicle_type : null;
+        $bodyType = $request->body_type !== null && trim((string) $request->body_type) !== '' ? (string) $request->body_type : null;
 
         try {
-            $order = $service->createOrder($task, $pointTask, $massMethod, $currentIsLoading, $vehicleType);
+            $order = $service->createOrder($task, $pointTask, $massMethod, $currentIsLoading, $vehicleType, $bodyType);
         } catch (SabyValidationException $e) {
             return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 422);
         } catch (SabyException $e) {
