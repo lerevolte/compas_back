@@ -151,7 +151,7 @@ class ObjectRelationController extends Controller
             }
             $row = DB::table($parentSlug)->where('id', $parentId)->first();
             $products = \App\Services\ShipmentService::decode($row->products ?? null);
-            if ($slug === \App\Services\ShipmentService::RETURN_DOC && !\App\Services\ShipmentService::isLoading($parentSlug, (int) $parentId)) {
+            if ($slug === \App\Services\ShipmentService::RETURN_DOC && \App\Services\ShipmentService::isSource($parentSlug) && !\App\Services\ShipmentService::isLoading($parentSlug, (int) $parentId)) {
                 $shipped = \App\Services\ShipmentService::invoicesUsage($parentSlug, (int) $parentId);
                 $otherReturns = \App\Services\ShipmentService::returnsUsage($parentSlug, (int) $parentId, (int) $id);
                 foreach ($products as $product) {
@@ -212,8 +212,17 @@ class ObjectRelationController extends Controller
         };
         $walk($tree);
 
+        foreach ($this->ancestorDocuments($slug, (int) $id) as $node) {
+            $flat[] = $node;
+        }
+
         $docs = [];
+        $seen = [];
         foreach ($flat as $node) {
+            if (isset($seen[$node['slug'] . '#' . $node['id']])) {
+                continue;
+            }
+            $seen[$node['slug'] . '#' . $node['id']] = true;
             if (!isset(\App\Services\SaleDocumentService::TARGETS[$node['slug']])) {
                 continue;
             }
@@ -245,6 +254,42 @@ class ObjectRelationController extends Controller
         $tree = $this->buildNode($root['slug'], $root['id'], (int) $id, $slug, []);
 
         return response()->json(['data' => $tree]);
+    }
+
+    private function ancestorDocuments(string $slug, int $id): array
+    {
+        $targets = array_keys(\App\Services\SaleDocumentService::TARGETS);
+        $result = [];
+        $guard = 0;
+        $visited = [$slug . ':' . $id];
+        while ($guard++ < 20) {
+            $parent = ObjectRelation::where('target_slug', $slug)
+                ->where('target_id', $id)
+                ->orderBy('id')
+                ->first(['source_slug', 'source_id']);
+            if (!$parent) {
+                break;
+            }
+            $slug = (string) $parent->source_slug;
+            $id = (int) $parent->source_id;
+            if (in_array($slug . ':' . $id, $visited, true)) {
+                break;
+            }
+            $visited[] = $slug . ':' . $id;
+            $children = ObjectRelation::where('source_slug', $slug)
+                ->where('source_id', $id)
+                ->whereIn('target_slug', $targets)
+                ->orderBy('id')
+                ->get(['target_slug', 'target_id']);
+            foreach ($children as $relation) {
+                $info = $this->objectInfo((string) $relation->target_slug, (int) $relation->target_id);
+                if ($info) {
+                    $result[] = $info;
+                }
+            }
+        }
+
+        return $result;
     }
 
     private function rootOf(string $slug, int $id): array
@@ -321,7 +366,7 @@ class ObjectRelationController extends Controller
                     ? date('d.m.Y', strtotime($row->created_at))
                     : date('d.m.Y H:i:s', strtotime($row->created_at)))
                 : null,
-            'products' => in_array($slug, array_merge([\App\Services\ShipmentService::DOCUMENT], \App\Services\ShipmentService::SOURCES), true) ? $this->productsOf($row) : [],
+            'products' => in_array($slug, array_merge([\App\Services\ShipmentService::DOCUMENT, \App\Services\ShipmentService::RETURN_DOC, \App\Services\ShipmentService::SUPPLIER], \App\Services\ShipmentService::SOURCES), true) ? $this->productsOf($row) : [],
         ];
     }
 

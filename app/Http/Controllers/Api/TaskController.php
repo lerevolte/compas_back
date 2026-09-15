@@ -49,6 +49,11 @@ class TaskController extends Controller
         return $this->saveProductsFor('addresses', \App\Models\Address::class, $id, $request);
     }
 
+    public function set_supplier_order_products($id, Request $request)
+    {
+        return $this->saveProductsFor('supplier_orders', \App\Models\SupplierOrder::class, $id, $request);
+    }
+
     private function saveProductsFor($slug, $class, $id, Request $request)
     {
         $user = Auth::user();

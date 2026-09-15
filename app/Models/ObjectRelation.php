@@ -46,6 +46,41 @@ class ObjectRelation extends Model
 
         self::ensureTab($sourceSlug);
         self::ensureTab($targetSlug);
+
+        \App\Services\RelationFieldsService::refresh($sourceSlug, (int) $sourceId);
+        \App\Services\RelationFieldsService::refresh($targetSlug, (int) $targetId);
+    }
+
+    public static function afterLink(string $sourceSlug, int $sourceId, string $targetSlug, int $targetId): void
+    {
+        try {
+            if ($sourceSlug === 'deals' && \App\Services\ShipmentService::isSource($targetSlug)) {
+                \App\Services\ShipmentService::setDealColumn($targetSlug, $targetId, $sourceId);
+                \App\Services\ShipmentService::recalcForSource($targetSlug, $targetId);
+                \App\Services\ShipmentService::recalcDealShipped($sourceId);
+            }
+            if ($targetSlug === \App\Services\ShipmentService::DOCUMENT) {
+                \App\Services\ShipmentService::recalcForDocument($targetId);
+            }
+            if ($targetSlug === \App\Services\ShipmentService::RETURN_DOC) {
+                ProductReturn::recalcParentShipments($targetId);
+            }
+        } catch (\Throwable $e) {
+        }
+    }
+
+    public static function afterUnlink(string $slugA, int $idA, string $slugB, int $idB): void
+    {
+        try {
+            foreach ([[$slugA, $idA], [$slugB, $idB]] as [$slug, $id]) {
+                if (\App\Services\ShipmentService::isSource($slug)) {
+                    \App\Services\ShipmentService::recalcForSource($slug, $id);
+                } elseif ($slug === 'deals') {
+                    \App\Services\ShipmentService::recalcDealShipped($id);
+                }
+            }
+        } catch (\Throwable $e) {
+        }
     }
 
     public static function copyProducts(string $sourceSlug, $sourceId, string $targetSlug, $targetId, bool $dryRun = false): bool

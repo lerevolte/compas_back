@@ -3,13 +3,13 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\FieldValue, App\Traits\ModelActions, App\Traits\ColorGenerator;
+use App\Traits\FieldValue, App\Traits\ModelActions, App\Traits\ColorGenerator, App\Traits\HasRelationFields;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Auth;
 
 class ExpenseInvoice extends Model
 {
-    use FieldValue, ModelActions, ColorGenerator, SoftDeletes;
+    use FieldValue, ModelActions, ColorGenerator, SoftDeletes, HasRelationFields;
 
     protected $table = 'expense_invoices';
 

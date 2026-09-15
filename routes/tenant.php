@@ -382,6 +382,9 @@ Route::middleware([
         
 
         Route::post('field/change-sort', [App\Http\Controllers\Api\FieldController::class, 'changeSort']);
+        Route::post('field/module-attach', [App\Http\Controllers\Api\FieldController::class, 'moduleAttach']);
+        Route::post('field/module-detach', [App\Http\Controllers\Api\FieldController::class, 'moduleDetach']);
+        Route::get('field/module-candidates/{slug}/{module}', [App\Http\Controllers\Api\FieldController::class, 'moduleCandidates']);
         Route::post('field/hide/{id}', [App\Http\Controllers\Api\FieldController::class, 'hide']);
         Route::post('field/hide_batch', [App\Http\Controllers\Api\FieldController::class, 'hide_batch']);
         Route::delete('field/{id}', [App\Http\Controllers\Api\FieldController::class, 'delete']);
@@ -496,6 +499,11 @@ Route::middleware([
         Route::put(
             'addresses/{id}/set_products',
             [App\Http\Controllers\Api\TaskController::class, 'set_address_products']
+        );
+
+        Route::put(
+            'supplier_orders/{id}/set_products',
+            [App\Http\Controllers\Api\TaskController::class, 'set_supplier_order_products']
         );
 
         Route::get('{model}/upd', [App\Http\Controllers\Api\UpdController::class, 'print'])

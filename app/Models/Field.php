@@ -343,7 +343,11 @@ class Field extends Model
         if($field->type == 'relation' && $field->is_plural && $field->relation_table) {
             $relation_table = $field->relation_table;
 
-            $field_value = $current->{$relation_table}->pluck('id')->toArray();
+            if(method_exists($current, $relation_table)) {
+                $field_value = $current->{$relation_table}->pluck('id')->toArray();
+            } elseif(!is_array($field_value)) {
+                $field_value = $field_value === null || $field_value === '' ? [] : [$field_value];
+            }
         }
 
         $fields_data[$field->field] = $settings[$slug]['field_data'][$field->field];//Field::getData($field);

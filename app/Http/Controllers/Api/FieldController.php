@@ -187,6 +187,10 @@ class FieldController extends Controller
         $field = DB::table('data_rows')->where('id', $request->id)->first();
         $entity = DB::table('data_types')->where('id', $field->data_type_id)->first();
 
+        if ($request->module) {
+            return $this->moduleChangeSort($field, $entity, $request);
+        }
+
         DB::transaction(function () use ($request) {
             // Параллельно сбрасываем group_id. changeSort вызывается при
             // переносе поля в обычную секцию (НЕ внутрь группы — для этого
@@ -217,6 +221,119 @@ class FieldController extends Controller
             'id' => $request->id, 
             'section_id' => $request->section_id
         ]);
+    }
+
+    private function moduleChangeSort($field, $entity, Request $request)
+    {
+        if (!\App\Services\ModuleLayoutService::isSeeds()) {
+            return response()->json(['error' => 'Разделы модулей редактируются только в портале seeds'], 403);
+        }
+        $module = (string) $request->module;
+        $section = DB::table('field_sections')->where('id', (int) $request->section_id)->first();
+        if (!$section || (string) $section->module !== $module || (string) $section->page !== (string) $entity->slug) {
+            return response()->json(['error' => 'Раздел модуля не найден'], 404);
+        }
+        $db = DB::connection();
+        \App\Services\ModuleLayoutService::attachField($db, $field, $module, (int) $section->id, true);
+        DB::table('section_fields_sort')->where('field_id', $field->id)->where('section_id', '!=', $section->id)->delete();
+        $ordered = [];
+        foreach ((array) $request->fields as $item) {
+            if (isset($item['id'])) {
+                $ordered[] = (int) $item['id'];
+            }
+        }
+        if (!in_array((int) $field->id, $ordered, true)) {
+            $ordered[] = (int) $field->id;
+        }
+        \App\Services\ModuleLayoutService::setSectionOrder($db, (int) $section->id, $ordered);
+
+        Settings::clear_cache();
+        \App\Services\ModuleLayoutService::queueSyncFromSeeds($module, (string) $entity->slug);
+
+        return $this->finalizeRequest($entity->slug, 'FieldSorted', [
+            'id' => $field->id,
+            'user_id' => Auth::id(),
+            'changed_by' => Auth::id(),
+            'module' => $module,
+            'new_section' => (int) $section->id,
+        ], ['id' => $field->id, 'section_id' => (int) $section->id]);
+    }
+
+    public function moduleAttach(Request $request)
+    {
+        if (!\App\Services\ModuleLayoutService::isSeeds()) {
+            return response()->json(['error' => 'Разделы модулей редактируются только в портале seeds'], 403);
+        }
+        $field = DB::table('data_rows')->where('id', (int) $request->id)->first();
+        $section = DB::table('field_sections')->where('id', (int) $request->section_id)->first();
+        if (!$field || !$section || !$section->module) {
+            return response()->json(['error' => 'Поле или раздел не найдены'], 404);
+        }
+        $entity = DB::table('data_types')->where('id', $field->data_type_id)->first();
+        $db = DB::connection();
+        \App\Services\ModuleLayoutService::attachField($db, $field, (string) $section->module, (int) $section->id, true);
+        $ordered = \App\Services\ModuleLayoutService::sectionFieldIds($db, (int) $section->id);
+        \App\Services\ModuleLayoutService::setSectionOrder($db, (int) $section->id, $ordered);
+        Settings::clear_cache();
+        \App\Services\ModuleLayoutService::queueSyncFromSeeds((string) $section->module, (string) $entity->slug);
+
+        return $this->finalizeRequest($entity->slug, 'FieldUpdated', [
+            'slug' => $entity->slug,
+            'user_id' => Auth::id(),
+            'changed_by' => Auth::id(),
+            'module' => $section->module,
+            'viewList' => ['id' => $field->id, 'section_id' => (int) $section->id],
+        ], ['id' => $field->id, 'section_id' => (int) $section->id]);
+    }
+
+    public function moduleDetach(Request $request)
+    {
+        if (!\App\Services\ModuleLayoutService::isSeeds()) {
+            return response()->json(['error' => 'Разделы модулей редактируются только в портале seeds'], 403);
+        }
+        $field = DB::table('data_rows')->where('id', (int) $request->id)->first();
+        $section = DB::table('field_sections')->where('id', (int) $request->section_id)->first();
+        if (!$field || !$section || !$section->module) {
+            return response()->json(['error' => 'Поле или раздел не найдены'], 404);
+        }
+        $entity = DB::table('data_types')->where('id', $field->data_type_id)->first();
+        \App\Services\ModuleLayoutService::detachField(DB::connection(), $field, (string) $section->module, (int) $section->id);
+        Settings::clear_cache();
+        \App\Services\ModuleLayoutService::queueSyncFromSeeds((string) $section->module, (string) $entity->slug);
+
+        return $this->finalizeRequest($entity->slug, 'FieldUpdated', [
+            'slug' => $entity->slug,
+            'user_id' => Auth::id(),
+            'changed_by' => Auth::id(),
+            'module' => $section->module,
+            'viewList' => ['id' => $field->id, 'section_id' => null],
+        ], ['id' => $field->id]);
+    }
+
+    public function moduleCandidates($slug, $module)
+    {
+        $typeId = DB::table('data_types')->where('slug', $slug)->value('id');
+        if (!$typeId) {
+            return response()->json(['data' => []]);
+        }
+        $sectionIds = \App\Services\ModuleLayoutService::moduleSectionIds(DB::connection(), (string) $slug, (string) $module);
+        $rows = DB::table('data_rows')
+            ->where('data_type_id', $typeId)
+            ->where('is_remove', 0)
+            ->whereNull('group_id')
+            ->whereNotNull('field')
+            ->orderBy('sort')
+            ->get(['id', 'field', 'title', 'type', 'module_section_id']);
+        $result = [];
+        foreach ($rows as $row) {
+            $sections = array_map('intval', \App\Services\ModuleLayoutService::decodeList($row->module_section_id));
+            if (array_intersect($sections, $sectionIds)) {
+                continue;
+            }
+            $result[] = ['id' => (int) $row->id, 'field' => $row->field, 'title' => $row->title, 'type' => $row->type];
+        }
+
+        return response()->json(['data' => $result]);
     }
 
     public function hide(int $id, Request $request)

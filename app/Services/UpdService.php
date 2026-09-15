@@ -99,9 +99,16 @@ class UpdService
         if (!is_dir($dir)) {
             @mkdir($dir, 0775, true);
         }
-        $main = tempnam($dir, 'upd_');
-        $out = tempnam($dir, 'print_');
-        file_put_contents($main, $bytes);
+        if (!is_dir($dir) || !is_writable($dir)) {
+            $dir = sys_get_temp_dir();
+        }
+        $token = uniqid('', true);
+        $main = $dir . '/upd_' . $token . '.pdf';
+        $out = $dir . '/print_' . $token . '.pdf';
+        if (@file_put_contents($main, $bytes) === false) {
+            \Log::warning('upd merge: не удалось записать временный файл', ['dir' => $dir]);
+            return null;
+        }
         $inputs = array_merge([$main], $files);
         $cmd = escapeshellarg($gs) . ' -q -dNOPAUSE -dBATCH -dSAFER -sDEVICE=pdfwrite -sOutputFile=' . escapeshellarg($out)
             . ' ' . implode(' ', array_map('escapeshellarg', $inputs)) . ' 2>&1';

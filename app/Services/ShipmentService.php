@@ -12,6 +12,7 @@ class ShipmentService
     public const SOURCES = ['logistic_tasks', 'pickups'];
     public const DOCUMENT = 'expense_invoices';
     public const RETURN_DOC = 'product_returns';
+    public const SUPPLIER = 'supplier_orders';
 
     public static function ready(): bool
     {
@@ -458,7 +459,7 @@ class ShipmentService
         }
         $parentSlugs = self::isSource($slug)
             ? ['deals']
-            : (in_array($slug, [self::DOCUMENT, self::RETURN_DOC], true) ? self::SOURCES : []);
+            : ($slug === self::DOCUMENT ? self::SOURCES : ($slug === self::RETURN_DOC ? array_merge(self::SOURCES, [self::SUPPLIER]) : []));
         if (!count($parentSlugs)) {
             return null;
         }
@@ -475,6 +476,9 @@ class ShipmentService
     {
         if ($slug === 'deals') {
             return self::SOURCES;
+        }
+        if ($slug === self::SUPPLIER) {
+            return [self::RETURN_DOC];
         }
         if (self::isSource($slug)) {
             return $id && self::isLoading($slug, $id) ? [self::RETURN_DOC] : [self::DOCUMENT];

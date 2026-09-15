@@ -1759,6 +1759,7 @@ class EntityObject
                 'expense_invoices' => \App\Models\ExpenseInvoice::class,
                 'product_returns' => \App\Models\ProductReturn::class,
                 'pickups' => \App\Models\Pickup::class,
+                'supplier_orders' => \App\Models\SupplierOrder::class,
                 'addresses' => \App\Models\Address::class,
             ][$request->order_entity] ?? \App\Models\Task::class;
             $order = $order_class::withTrashed()->where(['id' => $request->order_id])->first();
