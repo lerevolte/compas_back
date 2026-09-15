@@ -83,6 +83,8 @@ class InstallRelationsModule extends Command
                 $single = RelationFieldsService::isSingle($slug, $target);
                 if (!$sb->hasColumn($slug, $field)) {
                     $db->statement("ALTER TABLE `{$slug}` ADD COLUMN `{$field}` " . ($single ? 'INT NULL' : 'TEXT NULL'));
+                } elseif (!RelationFieldsService::isLegacy($slug, $target)) {
+                    $this->convertColumn($db, $slug, $field, $single, $label);
                 }
                 $title = $single ? (string) $present[$target]->title_singular : (string) $present[$target]->title_plural;
                 if ($slug === 'logistic_tasks' || $slug === 'pickups') {
@@ -144,6 +146,7 @@ class InstallRelationsModule extends Command
             }
             ModuleLayoutService::setSectionOrder($db, $sectionId, $ordered);
             ModuleLayoutService::ensureMenuChild($db, $slug, RelationFieldsService::MODULE, RelationFieldsService::MODULE_TITLE);
+            $this->dropSingleTabs($db, $slug, $present, $label);
             try {
                 if ($sb->hasTable('local_cache')) {
                     $db->table('local_cache')->where('url', 'fields/' . $slug)->update(['updated_at' => now()]);
@@ -168,6 +171,60 @@ class InstallRelationsModule extends Command
                 \App\Models\Settings::clear_cache();
             } catch (\Throwable $e) {
             }
+        }
+    }
+
+    private function convertColumn($db, string $slug, string $field, bool $single, string $label): void
+    {
+        $type = strtolower((string) $db->table('information_schema.COLUMNS')
+            ->whereRaw('TABLE_SCHEMA = DATABASE()')
+            ->where('TABLE_NAME', $slug)
+            ->where('COLUMN_NAME', $field)
+            ->value('DATA_TYPE'));
+        $isInt = in_array($type, ['int', 'integer', 'bigint', 'smallint', 'mediumint', 'tinyint'], true);
+        if ($single === $isInt) {
+            return;
+        }
+        $values = [];
+        foreach ($db->table($slug)->whereNotNull($field)->get(['id', $field]) as $row) {
+            $ids = RelationFieldsService::ids($row->{$field});
+            if (count($ids)) {
+                $values[(int) $row->id] = $single ? $ids[0] : json_encode($ids);
+            }
+        }
+        $db->table($slug)->whereNotNull($field)->update([$field => null]);
+        $db->statement("ALTER TABLE `{$slug}` MODIFY `{$field}` " . ($single ? 'INT NULL' : 'TEXT NULL'));
+        foreach ($values as $id => $value) {
+            $db->table($slug)->where('id', $id)->update([$field => $value]);
+        }
+        $this->line("    [{$label}] {$slug}.{$field}: колонка переведена в " . ($single ? 'одиночную' : 'множественную') . ', значений ' . count($values));
+    }
+
+    private function dropSingleTabs($db, string $slug, array $present, string $label): void
+    {
+        $singleFields = [];
+        foreach (array_keys($present) as $target) {
+            if ($target !== $slug && RelationFieldsService::isSingle($slug, $target) && !RelationFieldsService::isLegacy($slug, $target)) {
+                $singleFields[] = RelationFieldsService::field($slug, $target);
+            }
+        }
+        if (!count($singleFields)) {
+            return;
+        }
+        $dropped = 0;
+        foreach ($db->table('settings')->where(['type' => 'menu', 'entity' => $slug])->get(['id', 'value']) as $menu) {
+            $tabs = json_decode($menu->value, true);
+            if (!is_array($tabs)) {
+                continue;
+            }
+            $kept = array_values(array_filter($tabs, fn ($tab) => !isset($tab['tab']) || !in_array($tab['tab'], $singleFields, true)));
+            if (count($kept) !== count($tabs)) {
+                $db->table('settings')->where('id', $menu->id)->update(['value' => json_encode($kept)]);
+                $dropped += count($tabs) - count($kept);
+            }
+        }
+        if ($dropped) {
+            $this->line("    [{$label}] {$slug}: снято вкладок одиночных связей {$dropped}");
         }
     }
 }

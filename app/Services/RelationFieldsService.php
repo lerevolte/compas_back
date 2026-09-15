@@ -22,7 +22,7 @@ class RelationFieldsService
         'expense_invoices' => 2, 'product_returns' => 2,
     ];
 
-    public const SINGLE = [
+    public const LEGACY = [
         'logistic_tasks' => ['deals' => 'deal_id'],
         'pickups' => ['deals' => 'deal_id'],
     ];
@@ -36,12 +36,26 @@ class RelationFieldsService
 
     public static function field(string $slug, string $target): string
     {
-        return self::SINGLE[$slug][$target] ?? 'related_' . $target;
+        return self::LEGACY[$slug][$target] ?? 'related_' . $target;
+    }
+
+    public static function isLegacy(string $slug, string $target): bool
+    {
+        return isset(self::LEGACY[$slug][$target]);
     }
 
     public static function isSingle(string $slug, string $target): bool
     {
-        return isset(self::SINGLE[$slug][$target]);
+        if (self::isLegacy($slug, $target)) {
+            return true;
+        }
+
+        return (self::RANK[$slug] ?? 1) > (self::RANK[$target] ?? 1);
+    }
+
+    public static function singleValue($value): ?int
+    {
+        return self::ids($value)[0] ?? null;
     }
 
     public static function fieldsFor(string $slug, $db = null): array
@@ -78,11 +92,11 @@ class RelationFieldsService
         self::$fieldsCache = [];
     }
 
-    public static function pluralFieldsFor(string $slug): array
+    public static function managedFieldsFor(string $slug): array
     {
         $result = [];
         foreach (self::fieldsFor($slug) as $target => $field) {
-            if (!self::isSingle($slug, $target)) {
+            if (!self::isLegacy($slug, $target)) {
                 $result[$target] = $field;
             }
         }
@@ -191,6 +205,10 @@ class RelationFieldsService
         }
         $old = self::ids($oldValue);
         $new = self::ids($newValue);
+        if (self::isSingle($slug, $target)) {
+            $new = array_slice($new, 0, 1);
+            $old = array_values(array_unique(array_merge($old, self::relatedIds($slug, $id, $target))));
+        }
         $removed = array_values(array_diff($old, $new));
         $added = array_values(array_diff($new, $old));
         if (!count($removed) && !count($added)) {

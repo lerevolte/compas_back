@@ -67,7 +67,7 @@ class UninstallRelationsModule extends Command
             }
 
             foreach (RelationFieldsService::ENTITIES as $target) {
-                if ($target === $slug || RelationFieldsService::isSingle($slug, $target)) {
+                if ($target === $slug || RelationFieldsService::isLegacy($slug, $target)) {
                     continue;
                 }
                 $field = RelationFieldsService::field($slug, $target);

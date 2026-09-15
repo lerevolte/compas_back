@@ -9,8 +9,10 @@ trait HasRelationFields
     public static function bootHasRelationFields(): void
     {
         static::saving(function ($model) {
-            foreach (RelationFieldsService::pluralFieldsFor($model->getTable()) as $field) {
-                if (is_array($model->{$field})) {
+            foreach (RelationFieldsService::managedFieldsFor($model->getTable()) as $target => $field) {
+                if (RelationFieldsService::isSingle($model->getTable(), $target)) {
+                    $model->{$field} = RelationFieldsService::singleValue($model->{$field});
+                } elseif (is_array($model->{$field})) {
                     $model->{$field} = json_encode(RelationFieldsService::ids($model->{$field}));
                 }
             }
@@ -18,7 +20,7 @@ trait HasRelationFields
 
         static::saved(function ($model) {
             $changes = $model->getChanges();
-            foreach (RelationFieldsService::pluralFieldsFor($model->getTable()) as $target => $field) {
+            foreach (RelationFieldsService::managedFieldsFor($model->getTable()) as $target => $field) {
                 $created = $model->wasRecentlyCreated && count(RelationFieldsService::ids($model->{$field}));
                 if (!$created && !array_key_exists($field, $changes)) {
                     continue;
