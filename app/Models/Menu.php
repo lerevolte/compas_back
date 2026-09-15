@@ -48,6 +48,16 @@ class Menu
         }
         $count_new = 0;
         foreach($s[$slug]['fields'] as $field) {
+            if($field->type == 'relation' && !$field->is_plural && str_starts_with($field->field, 'related_')) {
+                foreach($menu as $k => $menu_item) {
+                    if(isset($menu_item['tab']) && $menu_item['tab'] == $field->field) {
+                        unset($menu[$k]);
+                        $count_new++;
+                    }
+                }
+                $menu = array_values($menu);
+                continue;
+            }
             if($field->type == 'relation' && $field->is_plural && $field->field != 'role_id' && $field->field != 'category_id') {
                 $need_create = true;
                 

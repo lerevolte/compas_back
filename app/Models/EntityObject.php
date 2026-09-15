@@ -929,6 +929,9 @@ class EntityObject
                 $list_values = array();
                 if(isset($settings['list_values'][$field->id]))
                     $list_values = $settings['list_values'][$field->id];
+                if($field->type == 'relation' && Settings::lazy_table($settings, $field->id)) {
+                    $list_values += Settings::resolve_list_values($settings, $field->id, $field_value);
+                }
                 if($field->type == 'relation' && $field->is_plural) {
                     $values = $field_value;
                     $fields_data[$field->field]['value'] = array(
@@ -981,10 +984,11 @@ class EntityObject
                         $field_values = array_slice($settings['list_values'][$field->id], 0, 10, true);
                         if($field->is_plural && isset($fields_data[$field->field]['value']['value'])) {
                             foreach($fields_data[$field->field]['value']['value'] as $field_val) {
-                                $field_values[$field_val] = $settings['list_values'][$field->id][$field_val];
+                                if(isset($list_values[$field_val]))
+                                    $field_values[$field_val] = $list_values[$field_val];
                             }
-                        } elseif($current->{$field->field} && isset($settings['list_values'][$field->id][$current->{$field->field}])) {
-                            $field_values[$current->{$field->field}] = $settings['list_values'][$field->id][$current->{$field->field}];
+                        } elseif($current->{$field->field} && isset($list_values[$current->{$field->field}])) {
+                            $field_values[$current->{$field->field}] = $list_values[$current->{$field->field}];
                         }
                         foreach($field_values as $fv_key => $fv_option) {
                             if(isset($fv_option['label']['occupied_by']))
