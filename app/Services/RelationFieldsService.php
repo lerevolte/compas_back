@@ -22,6 +22,18 @@ class RelationFieldsService
         'expense_invoices' => 2, 'product_returns' => 2,
     ];
 
+    public const PLURAL = [
+        'deals' => ['supplier_orders', 'logistic_tasks', 'pickups', 'payment_invoices', 'expense_invoices', 'product_returns'],
+        'supplier_orders' => ['deals', 'logistic_tasks', 'pickups', 'expense_invoices', 'product_returns'],
+        'logistic_tasks' => ['expense_invoices', 'product_returns'],
+        'pickups' => ['expense_invoices', 'product_returns'],
+        'payment_invoices' => ['expense_invoices', 'product_returns'],
+        'addresses' => ['logistic_tasks', 'pickups'],
+        'warehouses' => ['logistic_tasks', 'pickups'],
+        'expense_invoices' => [],
+        'product_returns' => [],
+    ];
+
     public const LEGACY = [
         'logistic_tasks' => ['deals' => 'deal_id'],
         'pickups' => ['deals' => 'deal_id'],
@@ -50,7 +62,7 @@ class RelationFieldsService
             return true;
         }
 
-        return (self::RANK[$slug] ?? 1) > (self::RANK[$target] ?? 1);
+        return !in_array($target, self::PLURAL[$slug] ?? [], true);
     }
 
     public static function singleValue($value): ?int
