@@ -39,8 +39,36 @@ class ShipmentService
     public const ACTION_UNLOADING = 'Выгрузка';
 
     private static array $actionCache = [];
+    private static ?array $actionIdsCache = null;
 
-    public static function actionLabel(string $slug, int $id): ?string
+    public static function actionValueIds(): array
+    {
+        if (self::$actionIdsCache !== null) {
+            return self::$actionIdsCache;
+        }
+        $result = [];
+        try {
+            $typeId = DB::table('data_types')->where('slug', 'logistic_tasks')->value('id');
+            $details = $typeId
+                ? DB::table('data_rows')->where('data_type_id', $typeId)->where('field', self::ACTION_FIELD)->value('details')
+                : null;
+            $decoded = is_string($details) ? json_decode($details, true) : null;
+            if (is_array($decoded)) {
+                $loading = $decoded['loading_value_id'] ?? null;
+                $unloading = $decoded['unloading_value_id'] ?? null;
+                if (is_numeric($loading) && is_numeric($unloading)) {
+                    $result = ['loading' => (int) $loading, 'unloading' => (int) $unloading];
+                }
+            }
+        } catch (\Throwable $e) {
+            $result = [];
+        }
+        self::$actionIdsCache = $result;
+
+        return $result;
+    }
+
+    public static function actionKind(string $slug, int $id): ?string
     {
         if ($slug !== 'logistic_tasks' || !$id) {
             return null;
@@ -58,9 +86,18 @@ class ShipmentService
                     $raw = $decoded[0] ?? null;
                 }
                 if ($raw !== null && $raw !== '' && is_numeric($raw)) {
-                    $label = DB::table('field_values')->where('id', (int) $raw)->value('value');
-                    $label = mb_strtolower(trim((string) $label));
-                    $result = $label !== '' ? $label : null;
+                    $valueId = (int) $raw;
+                    $ids = self::actionValueIds();
+                    if (count($ids)) {
+                        $result = $valueId === $ids['loading'] ? 'loading' : ($valueId === $ids['unloading'] ? 'unloading' : 'other');
+                    } else {
+                        $label = mb_strtolower(trim((string) DB::table('field_values')->where('id', $valueId)->value('value')));
+                        if ($label !== '') {
+                            $result = $label === mb_strtolower(self::ACTION_LOADING)
+                                ? 'loading'
+                                : ($label === mb_strtolower(self::ACTION_UNLOADING) ? 'unloading' : 'other');
+                        }
+                    }
                 }
             }
         } catch (\Throwable $e) {
@@ -73,21 +110,18 @@ class ShipmentService
 
     public static function isLoading(string $slug, int $id): bool
     {
-        return self::actionLabel($slug, $id) === mb_strtolower(self::ACTION_LOADING);
+        return self::actionKind($slug, $id) === 'loading';
     }
 
     public static function isNeutralAction(string $slug, int $id): bool
     {
-        $label = self::actionLabel($slug, $id);
-
-        return $label !== null
-            && $label !== mb_strtolower(self::ACTION_LOADING)
-            && $label !== mb_strtolower(self::ACTION_UNLOADING);
+        return self::actionKind($slug, $id) === 'other';
     }
 
     public static function forgetLoading(string $slug, int $id): void
     {
         unset(self::$actionCache[$slug . ':' . $id]);
+        self::$actionIdsCache = null;
     }
 
     public static function normalizeDealId($value): ?int
@@ -358,9 +392,6 @@ class ShipmentService
 
     public static function shippedBySource(string $slug, int $id): array
     {
-        if (self::isNeutralAction($slug, $id)) {
-            return ['id' => [], 'name' => [], 'price_id' => [], 'price_name' => []];
-        }
         if (self::isLoading($slug, $id)) {
             return self::returnsUsage($slug, $id);
         }
@@ -596,7 +627,9 @@ class ShipmentService
                 && !self::isLoading($parentSlug, $parentId) && !self::isNeutralAction($parentSlug, $parentId)) {
                 return self::validateReturn($parentSlug, $parentId, $exceptChildId, $products);
             }
-            if (!in_array($childSlug, self::childSlugsOf($parentSlug, $parentId), true)) {
+            $allowed = in_array($childSlug, self::childSlugsOf($parentSlug, $parentId), true)
+                || (self::isSource($parentSlug) && in_array($childSlug, [self::DOCUMENT, self::RETURN_DOC], true));
+            if (!$allowed) {
                 return [];
             }
             if (!Schema::hasTable($parentSlug) || !Schema::hasColumn($parentSlug, 'products')) {
@@ -682,21 +715,26 @@ class ShipmentService
             if (!ObjectRelation::ready()) {
                 return [];
             }
-            $childSlugs = $slug === 'deals'
-                ? self::SOURCES
-                : ($slug === self::SUPPLIER ? [self::RETURN_DOC] : (self::isSource($slug) ? self::childSlugsOf($slug, $id) : []));
-            if (!count($childSlugs)) {
-                return [];
-            }
-            $lines = self::childLines($slug, $id, $childSlugs);
-            if (self::isSource($slug) && in_array(self::DOCUMENT, $childSlugs, true)) {
+            if ($slug === 'deals') {
+                $lines = self::childLines($slug, $id, self::SOURCES);
+            } elseif ($slug === self::SUPPLIER) {
+                $lines = self::childLines($slug, $id, [self::RETURN_DOC]);
+            } elseif (self::isSource($slug)) {
+                $docs = self::childLines($slug, $id, [self::DOCUMENT]);
                 $returns = self::childLines($slug, $id, [self::RETURN_DOC]);
-                foreach ($returns as $key => $return) {
-                    if (isset($lines[$key])) {
-                        $lines[$key]['count'] = max(0, $lines[$key]['count'] - $return['count']);
-                        $lines[$key]['price_total'] = max(0, $lines[$key]['price_total'] - $return['price_total']);
+                if (self::isLoading($slug, $id) || (!count($docs) && count($returns))) {
+                    $lines = $returns;
+                } else {
+                    $lines = $docs;
+                    foreach ($returns as $key => $return) {
+                        if (isset($lines[$key])) {
+                            $lines[$key]['count'] = max(0, $lines[$key]['count'] - $return['count']);
+                            $lines[$key]['price_total'] = max(0, $lines[$key]['price_total'] - $return['price_total']);
+                        }
                     }
                 }
+            } else {
+                return [];
             }
             if (!count($lines)) {
                 return [];

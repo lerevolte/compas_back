@@ -126,34 +126,77 @@ class InstallActionTypeField extends Command
                 $this->line("    [{$label}] {$slug}: создано поле " . self::FIELD . " (id {$fieldId})");
             }
 
-            foreach (self::VALUES as $sort => $def) {
+            $details = json_decode((string) ($row->details ?? ($db->table('data_rows')->where('id', $fieldId)->value('details') ?? '')), true);
+            $details = is_array($details) ? $details : [];
+            $programIds = [];
+            foreach (['unloading_value_id', 'loading_value_id'] as $detailsKey) {
+                $candidate = $details[$detailsKey] ?? null;
+                if (is_numeric($candidate) && $db->table('field_values')->where('field_id', $fieldId)->where('id', (int) $candidate)->exists()) {
+                    $programIds[$detailsKey] = (int) $candidate;
+                }
+            }
+
+            $keyByText = ['Выгрузка' => 'unloading_value_id', 'Загрузка' => 'loading_value_id'];
+            foreach (self::VALUES as $def) {
+                $detailsKey = $keyByText[$def['value']];
+                if (isset($programIds[$detailsKey])) {
+                    continue;
+                }
                 $value = $db->table('field_values')
                     ->where('field_id', $fieldId)
                     ->where('value', $def['value'])
                     ->first();
                 if ($value) {
-                    $db->table('field_values')->where('id', $value->id)->update(['sort' => $sort, 'is_hidden' => 0]);
-                } else {
-                    $db->table('field_values')->insert([
-                        'field_id' => $fieldId,
-                        'value' => $def['value'],
-                        'color' => $def['color'],
-                        'sort' => $sort,
-                        'is_hidden' => 0,
-                    ]);
+                    $programIds[$detailsKey] = (int) $value->id;
                 }
             }
 
-            $defaultId = $db->table('field_values')
-                ->where('field_id', $fieldId)
-                ->where('value', self::VALUES[0]['value'])
-                ->value('id');
+            if (count($programIds) < 2) {
+                $taken = array_values($programIds);
+                $existing = $db->table('field_values')
+                    ->where('field_id', $fieldId)
+                    ->whereIntegerNotInRaw('id', $taken)
+                    ->orderBy('id')
+                    ->pluck('id')
+                    ->map(fn ($v) => (int) $v)
+                    ->all();
+                foreach (['unloading_value_id', 'loading_value_id'] as $detailsKey) {
+                    if (!isset($programIds[$detailsKey]) && count($existing)) {
+                        $programIds[$detailsKey] = array_shift($existing);
+                        $this->warn("    [{$label}] {$slug}: {$detailsKey} сопоставлен по порядку создания (id {$programIds[$detailsKey]}) — проверьте, что значение соответствует смыслу");
+                    }
+                }
+            }
+
+            foreach (self::VALUES as $sort => $def) {
+                $detailsKey = $keyByText[$def['value']];
+                if (isset($programIds[$detailsKey])) {
+                    $db->table('field_values')->where('id', $programIds[$detailsKey])->update(['is_hidden' => 0]);
+                    continue;
+                }
+                $programIds[$detailsKey] = (int) $db->table('field_values')->insertGetId([
+                    'field_id' => $fieldId,
+                    'value' => $def['value'],
+                    'color' => $def['color'],
+                    'sort' => $sort,
+                    'is_hidden' => 0,
+                ]);
+            }
+
+            $details['unloading_value_id'] = $programIds['unloading_value_id'];
+            $details['loading_value_id'] = $programIds['loading_value_id'];
+            $db->table('data_rows')->where('id', $fieldId)->update([
+                'details' => json_encode($details, JSON_UNESCAPED_UNICODE),
+            ]);
+            $this->line("    [{$label}] {$slug}: программные значения закреплены — выгрузка id {$programIds['unloading_value_id']}, загрузка id {$programIds['loading_value_id']}");
+
+            $defaultId = $programIds['unloading_value_id'];
             if ($defaultId) {
                 $filled = $db->table($slug)
                     ->where(fn ($q) => $q->whereNull(self::FIELD)->orWhere(self::FIELD, ''))
                     ->update([self::FIELD => $defaultId]);
                 if ($filled) {
-                    $this->line("    [{$label}] {$slug}: «Выгрузка» проставлена {$filled} строкам");
+                    $this->line("    [{$label}] {$slug}: значение выгрузки проставлено {$filled} строкам");
                 }
             }
 
