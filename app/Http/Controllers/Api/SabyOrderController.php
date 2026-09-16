@@ -20,7 +20,26 @@ class SabyOrderController extends Controller
             return response()->json(['enabled' => false, 'data' => [], 'waybills' => []]);
         }
 
-        $orders = SabyOrder::where('task_id', $id)->orderByDesc('id')->get()->map(fn ($o) => $this->present($o));
+        $rows = SabyOrder::where('task_id', $id)->orderByDesc('id')->get();
+        $service = SabyOrderService::make();
+        if ($service) {
+            $budget = 2;
+            foreach ($rows as $row) {
+                if ($budget <= 0 || !$row->doc_id) {
+                    break;
+                }
+                $stale = !$row->synced_at || \Carbon\Carbon::parse($row->synced_at)->lt(now()->subMinutes(2));
+                $needs = !$row->waybill_doc_id || (SabyWaybillService::isDraftState($row->waybill_state) && !$this->receiverFilled($row));
+                if ($stale && $needs) {
+                    try {
+                        $service->refreshOrder($row);
+                    } catch (\Throwable $e) {
+                    }
+                    $budget--;
+                }
+            }
+        }
+        $orders = $rows->map(fn ($o) => $this->present($o->fresh()));
         $waybills = [];
         try {
             $waybills = SabyWaybill::where('task_id', $id)->orderByDesc('id')->get()
@@ -166,14 +185,28 @@ class SabyOrderController extends Controller
         return response()->json(['data' => $this->present($order->fresh()), 'adopted' => $result['adopted'], 'waybill_number' => $result['waybill']->number]);
     }
 
+    private function receiverFilled(SabyOrder $order): bool
+    {
+        if (!$order->waybill_doc_id || !\Schema::hasTable('saby_waybills')) {
+            return false;
+        }
+        $row = SabyWaybill::where('doc_id', $order->waybill_doc_id)->first();
+
+        return (bool) ($row && is_array($row->payload) && !empty($row->payload['adopted']));
+    }
+
     private function present(SabyOrder $order): array
     {
         $code = (string) ($order->state_code ?? '0');
         $waybill = null;
         if ($order->waybill_doc_id) {
+            $row = \Schema::hasTable('saby_waybills') ? SabyWaybill::where('doc_id', $order->waybill_doc_id)->first() : null;
+            $rowError = $row && is_array($row->error) ? ($row->error['message'] ?? null) : null;
             $waybill = [
-                'id' => \Illuminate\Support\Facades\Schema::hasTable('saby_waybills') ? \App\Models\SabyWaybill::where('doc_id', $order->waybill_doc_id)->value('id') : null,
+                'id' => $row?->id,
                 'can_delete' => SabyWaybillService::isDraftState($order->waybill_state),
+                'receiver_filled' => (bool) ($row && is_array($row->payload) && !empty($row->payload['adopted'])),
+                'receiver_error' => $rowError,
                 'doc_id' => $order->waybill_doc_id,
                 'number' => $order->waybill_number,
                 'date' => $order->waybill_date,

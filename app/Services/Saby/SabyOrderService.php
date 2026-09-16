@@ -191,8 +191,39 @@ class SabyOrderService extends SabyWaybillService
 
         $order->synced_at = now();
         $order->save();
+        $this->ensureReceiver($order);
 
         return $order;
+    }
+
+    public function linkPendingWaybills(int $limit = 30): int
+    {
+        $linked = 0;
+        $orders = SabyOrder::whereNotNull('doc_id')->where('doc_id', '!=', '')
+            ->whereNull('waybill_doc_id')
+            ->where('created_at', '>=', now()->subDays(self::WAYBILL_LOOKBACK_DAYS))
+            ->orderByDesc('id')->limit($limit)->get();
+        foreach ($orders as $order) {
+            try {
+                $docId = $this->linkedWaybillDocId($order);
+                if (!$docId) {
+                    continue;
+                }
+                $order->waybill_doc_id = $docId;
+                $document = $this->client->call('СБИС.ПрочитатьДокумент', [
+                    'Документ' => ['Идентификатор' => $docId, 'ДопПоля' => 'ЭПД'],
+                ]);
+                $this->applyWaybillDocument($order, $document);
+                $order->synced_at = now();
+                $order->save();
+                $this->ensureReceiver($order);
+                $linked++;
+            } catch (\Throwable $e) {
+                $this->log('warning', 'link pending waybill failed', ['order_id' => $order->id, 'error' => $e->getMessage()]);
+            }
+        }
+
+        return $linked;
     }
 
     public function validateOrder(Task $task): array
@@ -566,6 +597,18 @@ class SabyOrderService extends SabyWaybillService
                 if (!$wasLinked) {
                     $stat['linked']++;
                 }
+                try {
+                    $this->ensureReceiver($order);
+                } catch (\Throwable $e) {
+                }
+            }
+        }
+
+        $stat['linked'] += $this->linkPendingWaybills();
+        foreach (SabyOrder::whereNotNull('waybill_doc_id')->where('created_at', '>=', now()->subDays(self::WAYBILL_LOOKBACK_DAYS))->orderByDesc('id')->limit(50)->get() as $order) {
+            try {
+                $this->ensureReceiver($order);
+            } catch (\Throwable $e) {
             }
         }
 

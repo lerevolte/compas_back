@@ -159,6 +159,68 @@ class SabyWaybillService
         return ['adopted' => false, 'waybill' => $this->create($task, $loadingTask, $massMethod, $unloadingTask)];
     }
 
+    public function ensureReceiver(SabyOrder $order, bool $force = false): ?SabyWaybill
+    {
+        if (!$order->waybill_doc_id || !self::isDraftState($order->waybill_state)) {
+            return null;
+        }
+        $existing = SabyWaybill::where('doc_id', $order->waybill_doc_id)->first();
+        if ($existing && !$force) {
+            $payload = is_array($existing->payload) ? $existing->payload : [];
+            if (!empty($payload['adopted'])) {
+                return $existing;
+            }
+            $error = is_array($existing->error) ? $existing->error : null;
+            if ($error && !empty($error['at'])) {
+                try {
+                    if (\Carbon\Carbon::parse($error['at'])->gt(now()->subMinutes(30))) {
+                        return $existing;
+                    }
+                } catch (\Throwable $e) {
+                }
+            }
+        }
+        $task = Task::find($order->task_id);
+        if (!$task) {
+            return $existing;
+        }
+        $loadingTask = null;
+        $unloadingTask = null;
+        if ($order->current_is_loading) {
+            $unloadingTask = $order->unloading_task_id ? Task::find($order->unloading_task_id) : null;
+        } elseif ($order->loading_task_id) {
+            $loadingTask = Task::find($order->loading_task_id);
+        }
+        $massMethod = $order->mass_method !== null && $order->mass_method !== '' ? (string) $order->mass_method : null;
+
+        try {
+            return $this->adopt($order, $order->waybill_doc_id, $task, $loadingTask, $massMethod, $unloadingTask);
+        } catch (SabyValidationException $e) {
+            $message = implode('; ', $e->errors());
+        } catch (\Throwable $e) {
+            $message = $e->getMessage();
+        }
+        $this->log('warning', 'auto receiver failed', ['order_id' => $order->id, 'doc_id' => $order->waybill_doc_id, 'error' => $message]);
+        $values = [
+            'task_id' => $task->id,
+            'route_id' => $task->route_id,
+            'doc_id' => $order->waybill_doc_id,
+            'number' => $order->waybill_number,
+            'date' => $order->waybill_date,
+            'status' => $order->waybill_state,
+            'pdf_url' => $order->waybill_pdf_url,
+            'cabinet_url' => $order->waybill_cabinet_url,
+            'archive_url' => $order->waybill_archive_url,
+            'error' => ['message' => $message, 'at' => now()->toDateTimeString()],
+        ];
+        if ($existing) {
+            $existing->update($values);
+            return $existing;
+        }
+
+        return SabyWaybill::create($values + ['payload' => null, 'user_id' => null]);
+    }
+
     public function linkedWaybillDocId(SabyOrder $order): ?string
     {
         if (!$order->doc_id) {
