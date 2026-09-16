@@ -60,7 +60,7 @@ class SabyWaybillService
         $route = $task->route_id ? Route::find($task->route_id) : null;
         $shipper = $this->companyOf($task, 'shipment_company_id');
         $carrier = $route ? $this->companyOf($route, 'company_id') : null;
-        [$receiver, $receiverContact] = $this->resolveReceiver($task, $unloadingTask);
+        [$receiver, $receiverContact] = $this->waybillReceiver($task, $unloadingTask);
 
         $number = $this->nextNumber($task);
         $document['СодИнфГО']['НомерТрН'] = $number;
@@ -252,7 +252,7 @@ class SabyWaybillService
             $errors[] = 'У перевозчика «' . $carrier->name . '» не заполнен ИНН';
         }
 
-        [$receiver, $receiverContact] = $this->resolveReceiver($task, $unloadingTask);
+        [$receiver, $receiverContact] = $this->waybillReceiver($task, $unloadingTask);
         if (!$receiver && !$receiverContact) {
             $errors[] = 'В задаче не заполнено ни поле «Компания», ни поле «Контакт» (грузополучатель)';
         }
@@ -352,7 +352,7 @@ class SabyWaybillService
         return $document;
     }
 
-    protected function resolveReceiver(Task $task, ?Task $unloadingTask = null): array
+    protected function waybillReceiver(Task $task, ?Task $unloadingTask = null): array
     {
         $receiver = $unloadingTask ? $this->companyOf($unloadingTask, 'company_id') : null;
         $receiverContact = $unloadingTask ? $this->contactOf($unloadingTask) : null;
