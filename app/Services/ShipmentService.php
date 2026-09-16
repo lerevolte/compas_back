@@ -654,6 +654,136 @@ class ShipmentService
         }
     }
 
+    public static function validateAgainstChildren(string $slug, int $id, array $products): array
+    {
+        try {
+            if (!ObjectRelation::ready()) {
+                return [];
+            }
+            $childSlugs = $slug === 'deals'
+                ? self::SOURCES
+                : ($slug === self::SUPPLIER ? [self::RETURN_DOC] : (self::isSource($slug) ? self::childSlugsOf($slug, $id) : []));
+            if (!count($childSlugs)) {
+                return [];
+            }
+            $lines = self::childLines($slug, $id, $childSlugs);
+            if (self::isSource($slug) && in_array(self::DOCUMENT, $childSlugs, true)) {
+                $returns = self::childLines($slug, $id, [self::RETURN_DOC]);
+                foreach ($returns as $key => $return) {
+                    if (isset($lines[$key])) {
+                        $lines[$key]['count'] = max(0, $lines[$key]['count'] - $return['count']);
+                        $lines[$key]['price_total'] = max(0, $lines[$key]['price_total'] - $return['price_total']);
+                    }
+                }
+            }
+            if (!count($lines)) {
+                return [];
+            }
+
+            $services = self::serviceIds(array_map(fn ($line) => $line['id'], $lines));
+            $format = fn ($v) => rtrim(rtrim(number_format((float) $v, 2, '.', ''), '0'), '.');
+            $label = $slug === 'deals' ? 'в связанных задачах/самовывозах' : 'в связанных документах';
+
+            $findProduct = function (array $line) use ($products) {
+                if ($line['id']) {
+                    foreach ($products as $product) {
+                        if (is_array($product) && (int) ($product['id'] ?? 0) === $line['id']) {
+                            return $product;
+                        }
+                    }
+                }
+                if ($line['name_key'] !== '') {
+                    foreach ($products as $product) {
+                        if (is_array($product) && self::nameKey($product['name'] ?? '') === $line['name_key']) {
+                            return $product;
+                        }
+                    }
+                }
+                return null;
+            };
+
+            $errors = [];
+            foreach ($lines as $line) {
+                $isService = $line['id'] && in_array($line['id'], $services, true);
+                if (!$isService && $line['count'] <= 0.0001) {
+                    continue;
+                }
+                if ($isService && $line['price_total'] <= 0.0001) {
+                    continue;
+                }
+                $name = $line['name'] !== '' ? $line['name'] : 'Товар';
+                $product = $findProduct($line);
+                if (!$product) {
+                    $errors[] = $isService
+                        ? "«{$name}»: услуга удалена из состава, но уже есть {$label} на {$format($line['price_total'])}"
+                        : "«{$name}»: удалён из состава, но уже есть {$label} {$format($line['count'])} шт";
+                    continue;
+                }
+                $count = (float) ($product['count'] ?? 0);
+                $price = (float) ($product['price'] ?? 0);
+                if ($isService) {
+                    $total = $price * ($count > 0 ? $count : 1);
+                    if ($line['price_total'] > $total + 0.0001) {
+                        $errors[] = "«{$name}»: стоимость услуги {$format($total)} меньше, чем уже распределено {$label} ({$format($line['price_total'])})";
+                    }
+                } elseif ($line['count'] > $count + 0.0001) {
+                    $errors[] = "«{$name}»: {$label} уже {$format($line['count'])} шт — нельзя указать меньше ({$format($count)} шт)";
+                }
+            }
+
+            return $errors;
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    private static function childLines(string $slug, int $id, array $childSlugs): array
+    {
+        $lines = [];
+        $relations = ObjectRelation::where('source_slug', $slug)
+            ->where('source_id', $id)
+            ->whereIn('target_slug', $childSlugs)
+            ->get(['target_slug', 'target_id']);
+
+        foreach ($relations->groupBy('target_slug') as $childSlug => $items) {
+            if (!Schema::hasTable($childSlug) || !Schema::hasColumn($childSlug, 'products')) {
+                continue;
+            }
+            $ids = $items->pluck('target_id')->map(fn ($v) => (int) $v)->all();
+            $query = DB::table($childSlug)->whereIn('id', $ids);
+            if (Schema::hasColumn($childSlug, 'deleted_at')) {
+                $query->whereNull('deleted_at');
+            }
+            foreach ($query->pluck('products') as $raw) {
+                foreach (self::decode($raw) as $product) {
+                    if (!is_array($product)) {
+                        continue;
+                    }
+                    $count = (float) ($product['count'] ?? 0);
+                    if ($count <= 0) {
+                        continue;
+                    }
+                    $productId = (int) ($product['id'] ?? 0);
+                    $nameKey = self::nameKey($product['name'] ?? '');
+                    $key = $productId ? 'id:' . $productId : 'name:' . $nameKey;
+                    if (!isset($lines[$key])) {
+                        $lines[$key] = [
+                            'id' => $productId,
+                            'name' => self::plainName($product['name'] ?? ''),
+                            'name_key' => $nameKey,
+                            'count' => 0.0,
+                            'price_total' => 0.0,
+                        ];
+                    }
+                    $lines[$key]['count'] += $count;
+                    $lines[$key]['price_total'] += (float) ($product['price'] ?? 0) * $count;
+                }
+            }
+        }
+
+        return $lines;
+    }
+
     public static function validateReturn(string $parentSlug, int $parentId, ?int $exceptChildId, array $products): array
     {
         try {

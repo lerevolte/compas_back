@@ -180,6 +180,13 @@ class InstallSaleDocsEntities extends Command
             $db->table('sidebar_items')->where('slug', 'deals')->update(['name' => 'Заказы покупателей']);
             $this->line("    [{$label}] deals переименованы в «Заказы покупателей»");
         }
+        $renamedTabs = $db->table('data_rows')
+            ->where('field', 'deal_id')
+            ->where('title', 'Сделки')
+            ->update(['title' => 'Заказы покупателя']);
+        if ($renamedTabs) {
+            $this->line("    [{$label}] поле deal_id переименовано в «Заказы покупателя» ({$renamedTabs})");
+        }
     }
 
     private function installEntity($db, string $label, string $slug, array $meta): void

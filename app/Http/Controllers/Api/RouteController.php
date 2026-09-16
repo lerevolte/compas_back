@@ -557,23 +557,27 @@ class RouteController extends Controller
                 $dayStart = strtotime($date . ' 00:00:00');
                 $dayEnd = $dayStart + 86399;
 
+                $tsExpr = 'COALESCE('
+                    . 'CASE WHEN client_time > 100000000000 THEN ROUND(client_time / 1000) ELSE client_time END, '
+                    . 'CASE WHEN gps_time > 100000000000 THEN ROUND(gps_time / 1000) ELSE gps_time END, '
+                    . 'UNIX_TIMESTAMP(created_at))';
+
                 $points = \DB::table('user_geopositions')
                     ->where('user_id', $driverUserId)
-                    ->where(function ($q) use ($dayStart, $dayEnd, $date) {
-                        $q->whereBetween('client_time', [$dayStart, $dayEnd])
-                            ->orWhere(function ($q) use ($dayStart, $dayEnd) {
-                                $q->whereNull('client_time')->whereBetween('gps_time', [$dayStart, $dayEnd]);
-                            })
-                            ->orWhere(function ($q) use ($date) {
-                                $q->whereNull('client_time')->whereNull('gps_time')->whereDate('created_at', $date);
-                            });
-                    })
-                    ->orderByRaw('COALESCE(client_time, gps_time, UNIX_TIMESTAMP(created_at))')
+                    ->whereRaw($tsExpr . ' BETWEEN ? AND ?', [$dayStart, $dayEnd])
+                    ->orderByRaw($tsExpr)
                     ->limit(5000)
                     ->get(['lat', 'lng', 'speed', 'client_time', 'gps_time', 'created_at']);
 
+                $normalize = function ($value) {
+                    if ($value === null || !is_numeric($value)) {
+                        return null;
+                    }
+                    $value = (int) $value;
+                    return $value > 100000000000 ? (int) round($value / 1000) : $value;
+                };
                 foreach ($points as $point) {
-                    $ts = $point->client_time ?: ($point->gps_time ?: ($point->created_at ? strtotime($point->created_at) : null));
+                    $ts = $normalize($point->client_time) ?: ($normalize($point->gps_time) ?: ($point->created_at ? strtotime($point->created_at) : null));
                     $actualPath[] = [
                         'lat' => (float) $point->lat,
                         'lon' => (float) $point->lng,
@@ -590,11 +594,14 @@ class RouteController extends Controller
                         if ($time && $time > 100000000000) {
                             $time = (int) round($time / 1000);
                         }
-                        $currentPosition = [
-                            'lat' => (float) $decoded['lat'],
-                            'lon' => (float) $decoded['lng'],
-                            'time' => $time ? date('d.m.Y H:i', $time) : '',
-                        ];
+                        if ($time && date('Y-m-d', $time) === $date) {
+                            $currentPosition = [
+                                'lat' => (float) $decoded['lat'],
+                                'lon' => (float) $decoded['lng'],
+                                'time' => date('d.m.Y H:i', $time),
+                                'timestamp' => $time,
+                            ];
+                        }
                     }
                 }
             }

@@ -86,10 +86,13 @@ class TaskController extends Controller
         if(!$object) {
             return response()->json(['error' => 404, 'text' => 'Задача не найдена'], 404);
         }
-        $errors = \App\Services\ShipmentService::validateAgainstParent($slug, (int) $id, $products);
+        $errors = array_merge(
+            \App\Services\ShipmentService::validateAgainstParent($slug, (int) $id, $products),
+            \App\Services\ShipmentService::validateAgainstChildren($slug, (int) $id, $products)
+        );
         if (count($errors)) {
             return response()->json([
-                'message' => 'Расхождение по составу с документом-основанием — сохранение запрещено',
+                'message' => 'Расхождение по составу со связанными документами — сохранение запрещено',
                 'errors' => $errors,
             ], 422);
         }

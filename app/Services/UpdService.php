@@ -41,35 +41,51 @@ class UpdService
         }
         $targets = array_keys(SaleDocumentService::TARGETS);
         $docs = [];
-        foreach ($ids as $id) {
-            $own = \App\Models\ObjectRelation::where('source_slug', $slug)
-                ->where('source_id', $id)
+        $own = \App\Models\ObjectRelation::where('source_slug', $slug)
+            ->whereIn('source_id', $ids)
+            ->whereIn('target_slug', $targets)
+            ->orderBy('id')
+            ->get(['target_slug', 'target_id']);
+        foreach ($own as $relation) {
+            $docs[$relation->target_slug . '#' . $relation->target_id] = [(string) $relation->target_slug, (int) $relation->target_id];
+        }
+        $dealIds = \App\Models\ObjectRelation::where('source_slug', 'deals')
+            ->where('target_slug', $slug)
+            ->whereIn('target_id', $ids)
+            ->pluck('source_id')
+            ->map(fn ($v) => (int) $v)
+            ->unique()
+            ->values()
+            ->all();
+        if (count($dealIds)) {
+            $dealDocs = \App\Models\ObjectRelation::where('source_slug', 'deals')
+                ->whereIn('source_id', $dealIds)
                 ->whereIn('target_slug', $targets)
                 ->orderBy('id')
                 ->get(['target_slug', 'target_id']);
-            foreach ($own as $relation) {
+            foreach ($dealDocs as $relation) {
                 $docs[$relation->target_slug . '#' . $relation->target_id] = [(string) $relation->target_slug, (int) $relation->target_id];
             }
-            $parent = ShipmentService::parentOf($slug, $id);
-            if ($parent && $parent[0] === 'deals') {
-                $dealDocs = \App\Models\ObjectRelation::where('source_slug', 'deals')
-                    ->where('source_id', $parent[1])
-                    ->whereIn('target_slug', $targets)
-                    ->orderBy('id')
-                    ->get(['target_slug', 'target_id']);
-                foreach ($dealDocs as $relation) {
-                    $docs[$relation->target_slug . '#' . $relation->target_id] = [(string) $relation->target_slug, (int) $relation->target_id];
-                }
+        }
+
+        $bySlug = [];
+        foreach ($docs as [$docSlug, $docId]) {
+            $bySlug[$docSlug][] = $docId;
+        }
+        $rows = [];
+        foreach ($bySlug as $docSlug => $docIds) {
+            if (!Schema::hasTable($docSlug)) {
+                continue;
+            }
+            foreach (DB::table($docSlug)->whereIn('id', $docIds)->get() as $row) {
+                $rows[$docSlug . '#' . $row->id] = $row;
             }
         }
 
         $disk = \Storage::disk('public');
         $files = [];
-        foreach ($docs as [$docSlug, $docId]) {
-            if (!Schema::hasTable($docSlug)) {
-                continue;
-            }
-            $row = DB::table($docSlug)->where('id', $docId)->first();
+        foreach ($docs as $key => [$docSlug, $docId]) {
+            $row = $rows[$key] ?? null;
             if (!$row || (property_exists($row, 'deleted_at') && $row->deleted_at)) {
                 continue;
             }

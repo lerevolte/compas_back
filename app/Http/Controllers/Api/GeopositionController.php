@@ -134,6 +134,10 @@ class GeopositionController extends Controller
                                 'geoposition' => json_encode($value),
                             ]);
                         }
+                        try {
+                            \App\Services\GeolocationStatusService::refresh(array_keys($latest));
+                        } catch (\Throwable $e) {
+                        }
                     }
                 });
             } catch (\Throwable $e) {
