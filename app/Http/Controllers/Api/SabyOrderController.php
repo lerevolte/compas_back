@@ -134,6 +134,8 @@ class SabyOrderController extends Controller
         $waybill = null;
         if ($order->waybill_doc_id) {
             $waybill = [
+                'id' => \Illuminate\Support\Facades\Schema::hasTable('saby_waybills') ? \App\Models\SabyWaybill::where('doc_id', $order->waybill_doc_id)->value('id') : null,
+                'can_delete' => SabyWaybillService::isDraftState($order->waybill_state),
                 'doc_id' => $order->waybill_doc_id,
                 'number' => $order->waybill_number,
                 'date' => $order->waybill_date,

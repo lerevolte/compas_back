@@ -228,7 +228,11 @@ class SabyWaybillController extends Controller
 
         $service = SabyWaybillService::make();
         if ($service) {
-            $service->delete($waybill);
+            try {
+                $service->delete($waybill);
+            } catch (SabyException $e) {
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
         } else {
             $waybill->delete();
         }
@@ -263,6 +267,7 @@ class SabyWaybillController extends Controller
             'loading_task' => $this->presentLoadingTask($waybill->loading_task_id),
             'mass_method' => $waybill->mass_method ?? null,
             'mass_method_label' => SabyWaybillService::MASS_METHODS[(string) ($waybill->mass_method ?? '')] ?? null,
+            'can_delete' => !$waybill->doc_id || SabyWaybillService::isDraftState($waybill->status),
         ];
     }
 

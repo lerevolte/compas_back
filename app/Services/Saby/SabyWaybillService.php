@@ -172,18 +172,73 @@ class SabyWaybillService
         $this->log('info', 'waybill linked to order', ['order_id' => $order->id, 'waybill_doc_id' => $waybill->doc_id]);
     }
 
+    public static function isDraftState($state): bool
+    {
+        $state = mb_strtolower(trim((string) $state));
+        if ($state === '') {
+            return true;
+        }
+        foreach (['редактир', 'черновик', 'создан'] as $marker) {
+            if (str_contains($state, $marker)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function canDelete(SabyWaybill $waybill): bool
+    {
+        if (!$waybill->doc_id) {
+            return true;
+        }
+        $state = $waybill->status;
+        if (Schema::hasTable('saby_orders')) {
+            $order = SabyOrder::where('waybill_doc_id', $waybill->doc_id)->first();
+            if ($order && $order->waybill_state) {
+                $state = $order->waybill_state;
+            }
+        }
+
+        return self::isDraftState($state);
+    }
+
     public function delete(SabyWaybill $waybill): void
     {
         if ($waybill->doc_id) {
+            $missing = false;
             try {
-                $this->client->call('СБИС.УдалитьДокумент', [
+                $document = $this->client->call('СБИС.ПрочитатьДокумент', [
                     'Документ' => ['Идентификатор' => $waybill->doc_id],
                 ]);
-            } catch (\Throwable $e) {
-                $this->log('warning', 'waybill delete in saby failed', [
-                    'doc_id' => $waybill->doc_id,
-                    'error' => $e->getMessage(),
-                ]);
+                $state = $document['Состояние']['Название'] ?? null;
+                if (!self::isDraftState($state)) {
+                    $waybill->update(['status' => $state]);
+                    if (Schema::hasTable('saby_orders')) {
+                        SabyOrder::where('waybill_doc_id', $waybill->doc_id)->update(['waybill_state' => $state, 'waybill_checked_at' => now()]);
+                    }
+                    throw new SabyException('Накладная уже подписана или отправлена (' . $state . ') — удалить её можно только в Saby');
+                }
+            } catch (SabyException $e) {
+                if (!$this->isMissingDocumentError($e)) {
+                    throw $e;
+                }
+                $missing = true;
+            }
+            if (!$missing) {
+                try {
+                    $this->client->call('СБИС.УдалитьДокумент', [
+                        'Документ' => ['Идентификатор' => $waybill->doc_id],
+                    ]);
+                } catch (\Throwable $e) {
+                    $this->log('warning', 'waybill delete in saby failed', [
+                        'doc_id' => $waybill->doc_id,
+                        'error' => $e->getMessage(),
+                    ]);
+                    if (!$this->isMissingDocumentError($e)) {
+                        throw new SabyException('Saby не позволил удалить накладную: ' . $e->getMessage());
+                    }
+                }
             }
         }
 
@@ -220,6 +275,18 @@ class SabyWaybillService
         ]);
 
         return $waybill;
+    }
+
+    protected function isMissingDocumentError(\Throwable $e): bool
+    {
+        $message = mb_strtolower($e->getMessage());
+        foreach (['не найден', 'not found', 'удален', 'удалён', 'не существует'] as $marker) {
+            if (str_contains($message, $marker)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected function log(string $level, string $message, array $context = []): void
