@@ -151,7 +151,9 @@ class ObjectRelationController extends Controller
             }
             $row = DB::table($parentSlug)->where('id', $parentId)->first();
             $products = \App\Services\ShipmentService::decode($row->products ?? null);
-            if ($slug === \App\Services\ShipmentService::RETURN_DOC && \App\Services\ShipmentService::isSource($parentSlug) && !\App\Services\ShipmentService::isLoading($parentSlug, (int) $parentId)) {
+            if ($slug === \App\Services\ShipmentService::RETURN_DOC && \App\Services\ShipmentService::isSource($parentSlug)
+                && !\App\Services\ShipmentService::isLoading($parentSlug, (int) $parentId)
+                && !\App\Services\ShipmentService::isNeutralAction($parentSlug, (int) $parentId)) {
                 $shipped = \App\Services\ShipmentService::invoicesUsage($parentSlug, (int) $parentId);
                 $otherReturns = \App\Services\ShipmentService::returnsUsage($parentSlug, (int) $parentId, (int) $id);
                 foreach ($products as $product) {
@@ -189,7 +191,13 @@ class ObjectRelationController extends Controller
             }
         }
 
-        return response()->json(['parent' => $parentInfo, 'limits' => $limits, 'usage' => $usage, 'loading' => $loading]);
+        return response()->json([
+            'parent' => $parentInfo,
+            'limits' => $limits,
+            'usage' => $usage,
+            'loading' => $loading,
+            'neutral' => \App\Services\ShipmentService::isNeutralAction($slug, $id),
+        ]);
     }
 
     public function printDocuments($slug, $id)

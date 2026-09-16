@@ -38,18 +38,18 @@ class ShipmentService
     public const ACTION_LOADING = 'Загрузка';
     public const ACTION_UNLOADING = 'Выгрузка';
 
-    private static array $loadingCache = [];
+    private static array $actionCache = [];
 
-    public static function isLoading(string $slug, int $id): bool
+    public static function actionLabel(string $slug, int $id): ?string
     {
         if ($slug !== 'logistic_tasks' || !$id) {
-            return false;
+            return null;
         }
         $key = $slug . ':' . $id;
-        if (array_key_exists($key, self::$loadingCache)) {
-            return self::$loadingCache[$key];
+        if (array_key_exists($key, self::$actionCache)) {
+            return self::$actionCache[$key];
         }
-        $result = false;
+        $result = null;
         try {
             if (Schema::hasColumn($slug, self::ACTION_FIELD)) {
                 $raw = DB::table($slug)->where('id', $id)->value(self::ACTION_FIELD);
@@ -59,20 +59,35 @@ class ShipmentService
                 }
                 if ($raw !== null && $raw !== '' && is_numeric($raw)) {
                     $label = DB::table('field_values')->where('id', (int) $raw)->value('value');
-                    $result = mb_strtolower(trim((string) $label)) === mb_strtolower(self::ACTION_LOADING);
+                    $label = mb_strtolower(trim((string) $label));
+                    $result = $label !== '' ? $label : null;
                 }
             }
         } catch (\Throwable $e) {
-            $result = false;
+            $result = null;
         }
-        self::$loadingCache[$key] = $result;
+        self::$actionCache[$key] = $result;
 
         return $result;
     }
 
+    public static function isLoading(string $slug, int $id): bool
+    {
+        return self::actionLabel($slug, $id) === mb_strtolower(self::ACTION_LOADING);
+    }
+
+    public static function isNeutralAction(string $slug, int $id): bool
+    {
+        $label = self::actionLabel($slug, $id);
+
+        return $label !== null
+            && $label !== mb_strtolower(self::ACTION_LOADING)
+            && $label !== mb_strtolower(self::ACTION_UNLOADING);
+    }
+
     public static function forgetLoading(string $slug, int $id): void
     {
-        unset(self::$loadingCache[$slug . ':' . $id]);
+        unset(self::$actionCache[$slug . ':' . $id]);
     }
 
     public static function normalizeDealId($value): ?int
@@ -343,6 +358,9 @@ class ShipmentService
 
     public static function shippedBySource(string $slug, int $id): array
     {
+        if (self::isNeutralAction($slug, $id)) {
+            return ['id' => [], 'name' => [], 'price_id' => [], 'price_name' => []];
+        }
         if (self::isLoading($slug, $id)) {
             return self::returnsUsage($slug, $id);
         }
@@ -481,6 +499,9 @@ class ShipmentService
             return [self::RETURN_DOC];
         }
         if (self::isSource($slug)) {
+            if ($id && self::isNeutralAction($slug, $id)) {
+                return [];
+            }
             return $id && self::isLoading($slug, $id) ? [self::RETURN_DOC] : [self::DOCUMENT];
         }
 
@@ -571,7 +592,8 @@ class ShipmentService
             if (!count($products)) {
                 return [];
             }
-            if ($childSlug === self::RETURN_DOC && self::isSource($parentSlug) && !self::isLoading($parentSlug, $parentId)) {
+            if ($childSlug === self::RETURN_DOC && self::isSource($parentSlug)
+                && !self::isLoading($parentSlug, $parentId) && !self::isNeutralAction($parentSlug, $parentId)) {
                 return self::validateReturn($parentSlug, $parentId, $exceptChildId, $products);
             }
             if (!in_array($childSlug, self::childSlugsOf($parentSlug, $parentId), true)) {
@@ -824,6 +846,12 @@ class ShipmentService
         $products = array_values(array_filter(self::decode($row->products ?? null), 'is_array'));
         if (!count($products)) {
             return [];
+        }
+        if (self::isNeutralAction($parentSlug, $parentId)) {
+            foreach ($products as $i => $product) {
+                unset($products[$i]['shipped']);
+            }
+            return array_values($products);
         }
         if (self::isLoading($parentSlug, $parentId)) {
             return self::residualProducts($parentSlug, $parentId, $products, $exceptChildId ? [self::RETURN_DOC, $exceptChildId] : null);
