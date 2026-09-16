@@ -174,6 +174,12 @@ class SabyOrderService extends SabyWaybillService
             $this->applyOrderDocument($order, $document);
         }
 
+        if (!$order->waybill_doc_id && isset($document) && is_array($document)) {
+            $linked = self::linkedDocumentId($document, self::DOC_TYPE);
+            if ($linked) {
+                $order->waybill_doc_id = $linked;
+            }
+        }
         if ($order->waybill_doc_id) {
             $document = $this->client->call('СБИС.ПрочитатьДокумент', [
                 'Документ' => ['Идентификатор' => $order->waybill_doc_id, 'ДопПоля' => 'ЭПД'],
@@ -684,6 +690,14 @@ class SabyOrderService extends SabyWaybillService
             $known = SabyOrder::where('waybill_doc_id', $docId)->first();
             if ($known) {
                 return $known;
+            }
+        }
+
+        $orderDocId = self::linkedDocumentId($document, self::ORDER_DOC_TYPE);
+        if ($orderDocId) {
+            $byOrder = SabyOrder::where('doc_id', $orderDocId)->whereNull('waybill_doc_id')->first();
+            if ($byOrder) {
+                return $byOrder;
             }
         }
 

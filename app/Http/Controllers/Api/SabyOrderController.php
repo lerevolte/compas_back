@@ -128,6 +128,44 @@ class SabyOrderController extends Controller
         return response()->json(['success' => true]);
     }
 
+    public function waybill($id)
+    {
+        $service = SabyWaybillService::make();
+        $orderService = SabyOrderService::make();
+        if (!$service || !$orderService || !SabyOrderService::tableReady()) {
+            return response()->json(['message' => 'Модуль Saby не настроен'], 422);
+        }
+        $order = SabyOrder::find($id);
+        if (!$order) {
+            return response()->json(['message' => 'Заказ не найден'], 404);
+        }
+        $task = Task::find($order->task_id);
+        if (!$task) {
+            return response()->json(['message' => 'Задача заказа не найдена'], 404);
+        }
+        $loadingTask = null;
+        $unloadingTask = null;
+        if ($order->current_is_loading) {
+            $unloadingTask = $order->unloading_task_id ? Task::find($order->unloading_task_id) : null;
+            if (!$unloadingTask) {
+                return response()->json(['message' => 'У заказа не найдена точка выгрузки'], 422);
+            }
+        } elseif ($order->loading_task_id) {
+            $loadingTask = Task::find($order->loading_task_id);
+        }
+        $massMethod = $order->mass_method !== null && $order->mass_method !== '' ? (string) $order->mass_method : null;
+
+        try {
+            $result = $service->createOrAdopt($order, $task, $loadingTask, $massMethod, $unloadingTask);
+        } catch (SabyValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 422);
+        } catch (SabyException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['data' => $this->present($order->fresh()), 'adopted' => $result['adopted'], 'waybill_number' => $result['waybill']->number]);
+    }
+
     private function present(SabyOrder $order): array
     {
         $code = (string) ($order->state_code ?? '0');

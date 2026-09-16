@@ -149,10 +149,207 @@ class SabyWaybillService
             ->first();
     }
 
+    public function createOrAdopt(SabyOrder $order, Task $task, ?Task $loadingTask = null, ?string $massMethod = null, ?Task $unloadingTask = null): array
+    {
+        $docId = $order->waybill_doc_id ?: $this->linkedWaybillDocId($order);
+        if ($docId) {
+            return ['adopted' => true, 'waybill' => $this->adopt($order, $docId, $task, $loadingTask, $massMethod, $unloadingTask)];
+        }
+
+        return ['adopted' => false, 'waybill' => $this->create($task, $loadingTask, $massMethod, $unloadingTask)];
+    }
+
+    public function linkedWaybillDocId(SabyOrder $order): ?string
+    {
+        if (!$order->doc_id) {
+            return null;
+        }
+        try {
+            $document = $this->client->call('СБИС.ПрочитатьДокумент', ['Документ' => ['Идентификатор' => $order->doc_id]]);
+        } catch (SabyException $e) {
+            return null;
+        }
+
+        return self::linkedDocumentId($document, self::DOC_TYPE);
+    }
+
+    public static function linkedDocumentId(array $document, string $type): ?string
+    {
+        foreach (['ДокументСледствие', 'ДокументОснование'] as $key) {
+            foreach ((array) ($document[$key] ?? []) as $link) {
+                $linked = is_array($link) ? ($link['Документ'] ?? []) : [];
+                if (($linked['Тип'] ?? '') === $type && !empty($linked['Идентификатор']) && (($linked['Удален'] ?? 'Нет') !== 'Да')) {
+                    return (string) $linked['Идентификатор'];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public function adopt(SabyOrder $order, string $docId, Task $task, ?Task $loadingTask = null, ?string $massMethod = null, ?Task $unloadingTask = null): SabyWaybill
+    {
+        if ($unloadingTask && !$loadingTask) {
+            $loadingTask = $task;
+        }
+        $document = $this->client->call('СБИС.ПрочитатьДокумент', ['Документ' => ['Идентификатор' => $docId, 'ДопПоля' => 'ЭПД']]);
+        $state = $document['Состояние']['Название'] ?? null;
+        if (!self::isDraftState($state)) {
+            throw new SabyException('Накладная № ' . ($document['Номер'] ?? '') . ' в Saby уже подписана или отправлена (' . $state . ') — грузополучателя можно изменить только в Saby');
+        }
+        $attachment = null;
+        foreach ((array) ($document['Вложение'] ?? []) as $item) {
+            if (($item['Тип'] ?? '') === 'ЭТрН' && (string) ($item['Подтип'] ?? '') === (string) self::SHIPPER_TITLE_KND && (($item['Удален'] ?? 'Нет') !== 'Да')) {
+                $attachment = $item;
+                break;
+            }
+        }
+        if (!$attachment || empty($attachment['Файл']['Ссылка'])) {
+            throw new SabyException('В накладной Saby нет титула грузоотправителя, который можно дополнить');
+        }
+
+        $theirXml = $this->downloadAttachment($attachment);
+        $ourDocument = $this->buildDocument($task, $loadingTask, $massMethod, $unloadingTask);
+        $ourDocument['СодИнфГО']['НомерТрН'] = (string) ($document['Номер'] ?? $ourDocument['СодИнфГО']['НомерТрН']);
+        $generated = $this->client->call('СБИС.СгенерироватьВложение', [
+            'Документ' => [
+                'Вложение' => [
+                    'Тип' => 'ЭТрН',
+                    'Подтип' => self::SHIPPER_TITLE_KND,
+                    'ВерсияФормата' => (string) $this->client->config()->param('format_version', self::FORMAT_VERSION),
+                    'Подстановка' => [
+                        self::SHIPPER_TITLE_KND => ['Файл' => ['Документ' => $ourDocument]],
+                    ],
+                ],
+            ],
+        ]);
+        $ourFile = $generated['Вложение'][0]['Файл'] ?? null;
+        if (!isset($ourFile['ДвоичныеДанные'])) {
+            throw new SabyException('Saby не вернул сформированный титул с грузополучателем');
+        }
+        $merged = $this->mergeReceiver($theirXml, base64_decode($ourFile['ДвоичныеДанные']));
+
+        $payload = [
+            'Идентификатор' => $docId,
+            'Тип' => self::DOC_TYPE,
+            'Вложение' => [
+                ['Идентификатор' => $attachment['Идентификатор'] ?? null, 'Файл' => [
+                    'Имя' => $attachment['Файл']['Имя'] ?? ($ourFile['Имя'] ?? 'ON_TRNACLGROT.xml'),
+                    'ДвоичныеДанные' => base64_encode($merged),
+                ]],
+            ],
+        ];
+        if (empty($payload['Вложение'][0]['Идентификатор'])) {
+            unset($payload['Вложение'][0]['Идентификатор']);
+        }
+        $written = $this->client->call('СБИС.ЗаписатьДокумент', ['Документ' => $payload]);
+        $writtenAttachment = $written['Вложение'][0] ?? [];
+
+        $values = [
+            'task_id' => $task->id,
+            'loading_task_id' => $loadingTask?->id,
+            'mass_method' => Schema::hasColumn('saby_waybills', 'mass_method') ? $massMethod : null,
+            'route_id' => $task->route_id,
+            'doc_id' => $docId,
+            'attachment_id' => $writtenAttachment['Идентификатор'] ?? ($attachment['Идентификатор'] ?? null),
+            'number' => $written['Номер'] ?? ($document['Номер'] ?? null),
+            'date' => $written['Дата'] ?? ($document['Дата'] ?? now()->format('d.m.Y')),
+            'status' => $written['Состояние']['Название'] ?? $state,
+            'pdf_url' => $written['СсылкаНаPDF'] ?? ($document['СсылкаНаPDF'] ?? null),
+            'cabinet_url' => $written['СсылкаДляНашаОрганизация'] ?? ($document['СсылкаДляНашаОрганизация'] ?? null),
+            'archive_url' => $written['СсылкаНаАрхив'] ?? ($document['СсылкаНаАрхив'] ?? null),
+            'payload' => ['adopted' => true, 'receiver' => $ourDocument['СодИнфГО']['СвГП'] ?? null],
+            'error' => null,
+            'user_id' => auth()->id(),
+        ];
+        $waybill = SabyWaybill::where('doc_id', $docId)->first();
+        if ($waybill) {
+            $waybill->update($values);
+        } else {
+            $waybill = SabyWaybill::create($values);
+        }
+
+        $this->log('info', 'waybill adopted from saby', [
+            'task_id' => $task->id,
+            'order_id' => $order->id,
+            'doc_id' => $docId,
+            'number' => $waybill->number,
+            'flc_errors' => $writtenAttachment['КоличествоОшибок'] ?? null,
+        ]);
+
+        $this->linkWaybillToOrder($order, $waybill, $written);
+
+        return $waybill;
+    }
+
+    protected function downloadAttachment(array $attachment): string
+    {
+        $link = (string) ($attachment['Файл']['Ссылка'] ?? '');
+        $response = \Illuminate\Support\Facades\Http::withHeaders(['X-SBISSessionID' => $this->client->sessionId()])->timeout(30)->get($link);
+        if (!$response->successful() || trim($response->body()) === '') {
+            throw new SabyException('Не удалось скачать титул накладной из Saby (HTTP ' . $response->status() . ')');
+        }
+
+        return $response->body();
+    }
+
+    protected function mergeReceiver(string $theirXml, string $ourXml): string
+    {
+        $theirs = new \DOMDocument();
+        $ours = new \DOMDocument();
+        if (!@$theirs->loadXML($theirXml) || !@$ours->loadXML($ourXml)) {
+            throw new SabyException('Не удалось разобрать XML титула накладной');
+        }
+        $xpTheirs = new \DOMXPath($theirs);
+        $xpOurs = new \DOMXPath($ours);
+        $theirBody = $xpTheirs->query('/Файл/Документ/СодИнфГО')->item(0);
+        $ourReceiver = $xpOurs->query('/Файл/Документ/СодИнфГО/СвГП')->item(0);
+        if (!$theirBody || !$ourReceiver) {
+            throw new SabyException('В титуле накладной не найден блок грузополучателя');
+        }
+        $imported = $theirs->importNode($ourReceiver, true);
+        $theirReceiver = $xpTheirs->query('СвГП', $theirBody)->item(0);
+        if ($theirReceiver) {
+            $theirBody->replaceChild($imported, $theirReceiver);
+        } else {
+            $shipper = $xpTheirs->query('СвГО', $theirBody)->item(0);
+            if ($shipper && $shipper->nextSibling) {
+                $theirBody->insertBefore($imported, $shipper->nextSibling);
+            } else {
+                $theirBody->appendChild($imported);
+            }
+        }
+
+        $theirLoading = $xpTheirs->query('СвПогруз', $theirBody)->item(0);
+        $ourLoading = $xpOurs->query('/Файл/Документ/СодИнфГО/СвПогруз')->item(0);
+        if ($theirLoading && $ourLoading) {
+            foreach (['МасБрутОтгр', 'КолМестПрием'] as $attr) {
+                if (!$theirLoading->hasAttribute($attr) && $ourLoading->hasAttribute($attr)) {
+                    $theirLoading->setAttribute($attr, $ourLoading->getAttribute($attr));
+                }
+            }
+        }
+
+        $xml = $theirs->saveXML();
+        if ($xml === false) {
+            throw new SabyException('Не удалось собрать XML титула накладной');
+        }
+
+        return $xml;
+    }
+
     protected function linkOrder(Task $task, SabyWaybill $waybill, array $written): void
     {
         $order = $this->orderFor($task);
         if (!$order || !$waybill->doc_id) {
+            return;
+        }
+        $this->linkWaybillToOrder($order, $waybill, $written);
+    }
+
+    protected function linkWaybillToOrder(SabyOrder $order, SabyWaybill $waybill, array $written): void
+    {
+        if (!$waybill->doc_id) {
             return;
         }
         $attachment = $written['Вложение'][0] ?? [];
