@@ -50,15 +50,17 @@ class SabyWaybillService
         return SabyClient::ready();
     }
 
-    public function create(Task $task, ?Task $loadingTask = null, ?string $massMethod = null): SabyWaybill
+    public function create(Task $task, ?Task $loadingTask = null, ?string $massMethod = null, ?Task $unloadingTask = null): SabyWaybill
     {
-        $document = $this->buildDocument($task, $loadingTask, $massMethod);
+        if ($unloadingTask && !$loadingTask) {
+            $loadingTask = $task;
+        }
+        $document = $this->buildDocument($task, $loadingTask, $massMethod, $unloadingTask);
         $config = $this->client->config();
         $route = $task->route_id ? Route::find($task->route_id) : null;
         $shipper = $this->companyOf($task, 'shipment_company_id');
         $carrier = $route ? $this->companyOf($route, 'company_id') : null;
-        $receiver = $this->companyOf($task, 'company_id');
-        $receiverContact = $this->contactOf($task);
+        [$receiver, $receiverContact] = $this->resolveReceiver($task, $unloadingTask);
 
         $number = $this->nextNumber($task);
         $document['СодИнфГО']['НомерТрН'] = $number;
@@ -228,10 +230,13 @@ class SabyWaybillService
         }
     }
 
-    public function buildDocument(Task $task, ?Task $loadingTask = null, ?string $massMethod = null): array
+    public function buildDocument(Task $task, ?Task $loadingTask = null, ?string $massMethod = null, ?Task $unloadingTask = null): array
     {
         $errors = [];
 
+        if ($unloadingTask && !$loadingTask) {
+            $loadingTask = $task;
+        }
         $route = $task->route_id ? Route::find($task->route_id) : null;
 
         $shipper = $this->companyOf($task, 'shipment_company_id');
@@ -247,8 +252,7 @@ class SabyWaybillService
             $errors[] = 'У перевозчика «' . $carrier->name . '» не заполнен ИНН';
         }
 
-        $receiver = $this->companyOf($task, 'company_id');
-        $receiverContact = $this->contactOf($task);
+        [$receiver, $receiverContact] = $this->resolveReceiver($task, $unloadingTask);
         if (!$receiver && !$receiverContact) {
             $errors[] = 'В задаче не заполнено ни поле «Компания», ни поле «Контакт» (грузополучатель)';
         }
@@ -258,9 +262,12 @@ class SabyWaybillService
             $errors[] = 'В задаче не заполнено поле «Состав»';
         }
 
-        $deliveryAddress = $this->taskAddress($task, $receiver);
+        $deliveryAddress = $this->taskAddress($unloadingTask ?: $task, $receiver);
+        if ($deliveryAddress === '' && $unloadingTask) {
+            $deliveryAddress = $this->taskAddress($task, $receiver);
+        }
         if ($deliveryAddress === '') {
-            $errors[] = 'В задаче не заполнен адрес доставки';
+            $errors[] = $unloadingTask ? 'У точки выгрузки не заполнен адрес доставки' : 'В задаче не заполнен адрес доставки';
         }
 
         if ($shipper && $this->inn($shipper) === '') {
@@ -343,6 +350,18 @@ class SabyWaybillService
         }
 
         return $document;
+    }
+
+    protected function resolveReceiver(Task $task, ?Task $unloadingTask = null): array
+    {
+        $receiver = $unloadingTask ? $this->companyOf($unloadingTask, 'company_id') : null;
+        $receiverContact = $unloadingTask ? $this->contactOf($unloadingTask) : null;
+        if (!$receiver && !$receiverContact) {
+            $receiver = $this->companyOf($task, 'company_id');
+            $receiverContact = $this->contactOf($task);
+        }
+
+        return [$receiver, $receiverContact];
     }
 
     public function validate(Task $task): array

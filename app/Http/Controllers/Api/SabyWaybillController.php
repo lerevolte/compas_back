@@ -52,13 +52,24 @@ class SabyWaybillController extends Controller
             }
         }
 
+        $unloadingTask = null;
+        if ($request->unloading_task_id) {
+            $unloadingTask = Task::find($request->unloading_task_id);
+            if (!$unloadingTask) {
+                return response()->json(['message' => 'Точка выгрузки не найдена'], 422);
+            }
+            if ($task->route_id && (int) $unloadingTask->route_id !== (int) $task->route_id) {
+                return response()->json(['message' => 'Точка выгрузки должна быть из маршрута задачи'], 422);
+            }
+        }
+
         $massMethod = $request->mass_method !== null && $request->mass_method !== '' ? (string) $request->mass_method : null;
         if ($massMethod !== null && !isset(SabyWaybillService::MASS_METHODS[$massMethod])) {
             return response()->json(['message' => 'Неизвестный метод определения массы'], 422);
         }
 
         try {
-            $waybill = $service->create($task, $loadingTask, $massMethod);
+            $waybill = $service->create($task, $loadingTask, $massMethod, $unloadingTask);
         } catch (SabyValidationException $e) {
             return response()->json([
                 'message' => $e->getMessage(),
