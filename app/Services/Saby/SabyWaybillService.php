@@ -108,6 +108,7 @@ class SabyWaybillService
         $waybill = SabyWaybill::create([
             'task_id' => $task->id,
             'loading_task_id' => $loadingTask?->id,
+            'unloading_task_id' => Schema::hasColumn('saby_waybills', 'unloading_task_id') ? $unloadingTask?->id : null,
             'mass_method' => Schema::hasColumn('saby_waybills', 'mass_method') ? $massMethod : null,
             'route_id' => $task->route_id,
             'doc_id' => $written['Идентификатор'] ?? null,
@@ -310,6 +311,7 @@ class SabyWaybillService
         $values = [
             'task_id' => $task->id,
             'loading_task_id' => $loadingTask?->id,
+            'unloading_task_id' => Schema::hasColumn('saby_waybills', 'unloading_task_id') ? $unloadingTask?->id : null,
             'mass_method' => Schema::hasColumn('saby_waybills', 'mass_method') ? $massMethod : null,
             'route_id' => $task->route_id,
             'doc_id' => $docId,
@@ -510,6 +512,107 @@ class SabyWaybillService
             ]);
         }
         $waybill->delete();
+    }
+
+    public function updateData(SabyWaybill $waybill): SabyWaybill
+    {
+        if (!$waybill->doc_id) {
+            throw new SabyException('У накладной нет документа в Saby — обновлять нечего');
+        }
+        $task = Task::find($waybill->task_id);
+        if (!$task) {
+            throw new SabyException('Задача накладной не найдена');
+        }
+
+        $loadingTask = $waybill->loading_task_id ? Task::find($waybill->loading_task_id) : null;
+        $unloadingTask = null;
+        if (Schema::hasColumn('saby_waybills', 'unloading_task_id') && $waybill->unloading_task_id) {
+            $unloadingTask = Task::find($waybill->unloading_task_id);
+        }
+        $order = $this->orderFor($task);
+        if (!$unloadingTask && $order && $order->current_is_loading && $order->unloading_task_id) {
+            $unloadingTask = Task::find($order->unloading_task_id);
+        }
+        $massMethod = $waybill->mass_method !== null && $waybill->mass_method !== '' && isset(self::MASS_METHODS[$waybill->mass_method])
+            ? (string) $waybill->mass_method
+            : null;
+
+        $payload = is_array($waybill->payload) ? $waybill->payload : [];
+        if (!empty($payload['adopted']) && $order) {
+            return $this->adopt($order, $waybill->doc_id, $task, $loadingTask, $massMethod, $unloadingTask);
+        }
+
+        $document = $this->client->call('СБИС.ПрочитатьДокумент', [
+            'Документ' => ['Идентификатор' => $waybill->doc_id, 'ДопПоля' => 'ЭПД'],
+        ]);
+        $state = $document['Состояние']['Название'] ?? null;
+        if (!self::isDraftState($state)) {
+            throw new SabyException('Накладная № ' . ($document['Номер'] ?? $waybill->number) . ' в Saby уже подписана или отправлена (' . $state . ') — данные можно изменить только в Saby');
+        }
+
+        $attachment = null;
+        foreach ((array) ($document['Вложение'] ?? []) as $item) {
+            if (($item['Тип'] ?? '') === 'ЭТрН' && (string) ($item['Подтип'] ?? '') === (string) self::SHIPPER_TITLE_KND && (($item['Удален'] ?? 'Нет') !== 'Да')) {
+                $attachment = $item;
+                break;
+            }
+        }
+
+        $ourDocument = $this->buildDocument($task, $loadingTask, $massMethod, $unloadingTask);
+        $ourDocument['СодИнфГО']['НомерТрН'] = (string) ($document['Номер'] ?? ($waybill->number ?: $ourDocument['СодИнфГО']['НомерТрН']));
+
+        $generated = $this->client->call('СБИС.СгенерироватьВложение', [
+            'Документ' => [
+                'Вложение' => [
+                    'Тип' => 'ЭТрН',
+                    'Подтип' => self::SHIPPER_TITLE_KND,
+                    'ВерсияФормата' => (string) $this->client->config()->param('format_version', self::FORMAT_VERSION),
+                    'Подстановка' => [
+                        self::SHIPPER_TITLE_KND => ['Файл' => ['Документ' => $ourDocument]],
+                    ],
+                ],
+            ],
+        ]);
+        $file = $generated['Вложение'][0]['Файл'] ?? null;
+        if (!isset($file['ДвоичныеДанные'])) {
+            throw new SabyException('Saby не вернул сформированный файл накладной');
+        }
+
+        $writePayload = [
+            'Идентификатор' => $waybill->doc_id,
+            'Тип' => self::DOC_TYPE,
+            'Вложение' => [
+                array_filter([
+                    'Идентификатор' => $attachment['Идентификатор'] ?? ($waybill->attachment_id ?: null),
+                    'Файл' => [
+                        'Имя' => $attachment['Файл']['Имя'] ?? ($file['Имя'] ?? 'ON_TRNACLGROT.xml'),
+                        'ДвоичныеДанные' => $file['ДвоичныеДанные'],
+                    ],
+                ]),
+            ],
+        ];
+        $written = $this->client->call('СБИС.ЗаписатьДокумент', ['Документ' => $writePayload]);
+        $writtenAttachment = $written['Вложение'][0] ?? [];
+
+        $waybill->update([
+            'attachment_id' => $writtenAttachment['Идентификатор'] ?? $waybill->attachment_id,
+            'number' => $written['Номер'] ?? $waybill->number,
+            'status' => $written['Состояние']['Название'] ?? $state,
+            'pdf_url' => $written['СсылкаНаPDF'] ?? $waybill->pdf_url,
+            'cabinet_url' => $written['СсылкаДляНашаОрганизация'] ?? $waybill->cabinet_url,
+            'archive_url' => $written['СсылкаНаАрхив'] ?? $waybill->archive_url,
+            'payload' => $ourDocument,
+            'error' => null,
+        ]);
+
+        $this->log('info', 'waybill data updated', [
+            'task_id' => $task->id,
+            'doc_id' => $waybill->doc_id,
+            'number' => $waybill->number,
+            'flc_errors' => $writtenAttachment['КоличествоОшибок'] ?? null,
+        ]);
+
+        return $waybill;
     }
 
     public function refresh(SabyWaybill $waybill): SabyWaybill

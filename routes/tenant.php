@@ -451,6 +451,7 @@ Route::middleware([
         Route::get('logistic_tasks/{id}/saby-waybills/check', [App\Http\Controllers\Api\SabyWaybillController::class, 'check'])->name('saby.waybills.check');
         Route::get('logistic_tasks/{id}/saby-waybills/route-tasks', [App\Http\Controllers\Api\SabyWaybillController::class, 'routeTasks'])->name('saby.waybills.route_tasks');
         Route::post('saby-waybills/{id}/refresh', [App\Http\Controllers\Api\SabyWaybillController::class, 'refresh'])->name('saby.waybills.refresh');
+        Route::post('saby-waybills/{id}/update-data', [App\Http\Controllers\Api\SabyWaybillController::class, 'updateData'])->name('saby.waybills.update_data');
         Route::delete('saby-waybills/{id}', [App\Http\Controllers\Api\SabyWaybillController::class, 'destroy'])->name('saby.waybills.destroy');
         Route::get('logistic_tasks/{id}/saby-orders', [App\Http\Controllers\Api\SabyOrderController::class, 'index'])->name('saby.orders');
         Route::post('logistic_tasks/{id}/saby-orders', [App\Http\Controllers\Api\SabyOrderController::class, 'store'])->name('saby.orders.store');

@@ -939,6 +939,7 @@ class InstallSabyModule extends Command
                 CREATE TABLE `saby_waybills` (
                     `id` bigint unsigned NOT NULL AUTO_INCREMENT,
                     `route_id` bigint unsigned DEFAULT NULL,
+                    `unloading_task_id` bigint unsigned DEFAULT NULL,
                     `doc_id` varchar(64) DEFAULT NULL,
                     `attachment_id` varchar(64) DEFAULT NULL,
                     `number` varchar(64) DEFAULT NULL,
@@ -1033,6 +1034,10 @@ class InstallSabyModule extends Command
 
         if (!$sb->hasColumn('saby_waybills', 'mass_method')) {
             $db->statement("ALTER TABLE `saby_waybills` ADD COLUMN `mass_method` VARCHAR(4) NULL");
+        }
+
+        if (!$sb->hasColumn('saby_waybills', 'unloading_task_id')) {
+            $db->statement("ALTER TABLE `saby_waybills` ADD COLUMN `unloading_task_id` BIGINT UNSIGNED NULL");
         }
 
         if (!$sb->hasColumn('saby_orders', 'unloading_task_id')) {

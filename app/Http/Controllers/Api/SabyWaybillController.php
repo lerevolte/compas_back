@@ -219,6 +219,29 @@ class SabyWaybillController extends Controller
         return response()->json(['data' => $this->present($waybill)]);
     }
 
+    public function updateData($waybillId)
+    {
+        $service = SabyWaybillService::make();
+        if (!$service) {
+            return response()->json(['message' => 'Модуль Saby не настроен'], 422);
+        }
+
+        $waybill = SabyWaybill::find($waybillId);
+        if (!$waybill) {
+            return response()->json(['message' => 'Накладная не найдена'], 404);
+        }
+
+        try {
+            $waybill = $service->updateData($waybill);
+        } catch (\App\Services\Saby\SabyValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 422);
+        } catch (SabyException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['data' => $this->present($waybill)]);
+    }
+
     public function destroy($waybillId)
     {
         $waybill = SabyWaybill::find($waybillId);
