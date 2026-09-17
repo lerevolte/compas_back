@@ -787,6 +787,7 @@ class SabyWaybillService
 
         if (count($redirectContact)) {
             $document['СодИнфГО']['УказГО'] = [
+                'УкНормПрвз' => 'Отсутствуют',
                 'СвПА' => [
                     'ЛицоПА' => 'Грузоотправитель',
                     'СпосПерУкПА' => 'Электронное уведомление перевозчика о переадресовке',
@@ -963,7 +964,18 @@ class SabyWaybillService
     protected function contactInfo(string $contactPhone, string $email, string $companyPhone): array
     {
         $info = [];
-        $phones = array_values(array_unique(array_filter([$contactPhone, $companyPhone], fn ($v) => $v !== '')));
+        $phones = [];
+        foreach ([$contactPhone, $companyPhone] as $phone) {
+            $digits = preg_replace('/\D/', '', (string) $phone);
+            if (strlen($digits) === 11 && $digits[0] === '8') {
+                $digits = '7' . substr($digits, 1);
+            }
+            if ($phone === '' || $digits === '' || isset($phones[$digits])) {
+                continue;
+            }
+            $phones[$digits] = $phone;
+        }
+        $phones = array_values($phones);
         if (count($phones)) {
             $info['Тлф'] = array_map(fn ($phone) => ['value' => $phone], $phones);
         }
