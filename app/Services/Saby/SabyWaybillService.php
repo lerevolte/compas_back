@@ -603,6 +603,13 @@ class SabyWaybillService
             $errors[] = 'У получателя «' . $receiver->name . '» не заполнен ИНН';
         }
 
+        $redirectContact = $shipper
+            ? $this->contactInfo('', $this->companyEmail($shipper), $this->phone($shipper))
+            : [];
+        if ($shipper && !count($redirectContact)) {
+            $errors[] = 'У компании отгрузки «' . $shipper->name . '» не заполнены телефон и почта — они нужны для «Контакты лица переадресовки» в ТрН';
+        }
+
         if (count($errors)) {
             throw new SabyValidationException($errors);
         }
@@ -625,6 +632,16 @@ class SabyWaybillService
         $document['СодИнфГО']['ДатаЗак'] = $order && $order->date ? (string) $order->date : $document['СодИнфГО']['ДатаТрН'];
 
         $document['СодИнфГО']['СвПер'] = $this->party($carrier);
+
+        if (count($redirectContact)) {
+            $document['СодИнфГО']['УказГО'] = [
+                'СвПА' => [
+                    'ЛицоПА' => 'Грузоотправитель',
+                    'СпосПерУкПА' => 'Электронное уведомление перевозчика о переадресовке',
+                    'КонтПА' => $redirectContact,
+                ],
+            ];
+        }
 
         $loading = [];
         $gross = $this->number($this->attr($task, 'weight'));
@@ -1337,6 +1354,18 @@ class SabyWaybillService
         $requisite = $this->requisite($company);
 
         return $requisite ? preg_replace('/\D/', '', (string) $requisite->{$field}) : '';
+    }
+
+    protected function companyEmail(Company $company): string
+    {
+        foreach (['emails', 'email'] as $field) {
+            $value = $this->phoneValue($this->attr($company, $field));
+            if ($value !== '' && str_contains($value, '@')) {
+                return $value;
+            }
+        }
+
+        return '';
     }
 
     protected function phone(Company $company): string
