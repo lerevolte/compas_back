@@ -24,6 +24,11 @@ class ObjectRelationController extends Controller
             return response()->json(['ok' => false], 200);
         }
 
+        return \App\Services\ShipmentService::withFamilyLock($data['source_slug'], (int) $data['source_id'], fn () => $this->storeLinked($data));
+    }
+
+    private function storeLinked(array $data)
+    {
         ObjectRelation::link($data['source_slug'], $data['source_id'], $data['target_slug'], $data['target_id']);
         if ($data['source_slug'] === 'deals' && \App\Services\ShipmentService::isSource($data['target_slug'])) {
             \App\Services\ShipmentService::setDealColumn($data['target_slug'], (int) $data['target_id'], (int) $data['source_id']);

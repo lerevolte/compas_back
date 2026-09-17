@@ -82,26 +82,36 @@ class TaskController extends Controller
                 'nds_included' => $product['product_nds_included'] ?? ($product['nds_included'] ?? null),
             );
         }
-        $object = $class::find($id);
-        if(!$object) {
+        $errors = \App\Services\ShipmentService::withFamilyLock($slug, (int) $id, function () use ($class, $slug, $id, $products) {
+            $object = $class::find($id);
+            if (!$object) {
+                return null;
+            }
+            $errors = array_merge(
+                \App\Services\ShipmentService::validateAgainstParent($slug, (int) $id, $products),
+                \App\Services\ShipmentService::validateAgainstChildren($slug, (int) $id, $products)
+            );
+            if (count($errors)) {
+                return $errors;
+            }
+            $object->setProducts($products);
+            if (\App\Services\ShipmentService::isSource($slug)) {
+                \App\Services\ShipmentService::recalcForSource($slug, (int) $id);
+            }
+            if ($slug === 'deals') {
+                \App\Services\ShipmentService::recalcDealShipped((int) $id);
+            }
+
+            return [];
+        });
+        if ($errors === null) {
             return response()->json(['error' => 404, 'text' => 'Задача не найдена'], 404);
         }
-        $errors = array_merge(
-            \App\Services\ShipmentService::validateAgainstParent($slug, (int) $id, $products),
-            \App\Services\ShipmentService::validateAgainstChildren($slug, (int) $id, $products)
-        );
         if (count($errors)) {
             return response()->json([
                 'message' => 'Расхождение по составу со связанными документами — сохранение запрещено',
                 'errors' => $errors,
             ], 422);
-        }
-        $object->setProducts($products);
-        if (\App\Services\ShipmentService::isSource($slug)) {
-            \App\Services\ShipmentService::recalcForSource($slug, (int) $id);
-        }
-        if ($slug === 'deals') {
-            \App\Services\ShipmentService::recalcDealShipped((int) $id);
         }
 
         $ids = array_values(array_filter(array_map(function ($p) { return (int) $p['id']; }, $products)));

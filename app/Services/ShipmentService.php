@@ -124,6 +124,45 @@ class ShipmentService
         self::$actionIdsCache = null;
     }
 
+    public static function familyRoot(string $slug, int $id): array
+    {
+        $current = [$slug, $id];
+        for ($i = 0; $i < 4; $i++) {
+            try {
+                $parent = self::parentOf($current[0], (int) $current[1]);
+            } catch (\Throwable $e) {
+                $parent = null;
+            }
+            if (!$parent) {
+                break;
+            }
+            $current = $parent;
+        }
+
+        return $current;
+    }
+
+    public static function withFamilyLock(string $slug, int $id, callable $callback)
+    {
+        [$rootSlug, $rootId] = self::familyRoot($slug, $id);
+        $name = substr('prodfam_' . tenant('id') . '_' . $rootSlug . '_' . $rootId, 0, 64);
+        $locked = false;
+        try {
+            $locked = (int) (DB::selectOne('SELECT GET_LOCK(?, 30) AS l', [$name])->l ?? 0) === 1;
+        } catch (\Throwable $e) {
+        }
+        try {
+            return $callback();
+        } finally {
+            if ($locked) {
+                try {
+                    DB::selectOne('SELECT RELEASE_LOCK(?) AS l', [$name]);
+                } catch (\Throwable $e) {
+                }
+            }
+        }
+    }
+
     public static function normalizeDealId($value): ?int
     {
         if (is_string($value) && is_array($decoded = json_decode($value, true))) {
