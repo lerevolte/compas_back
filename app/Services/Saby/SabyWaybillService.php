@@ -406,6 +406,29 @@ class SabyWaybillService
             }
         }
 
+        $ourCargo = [];
+        foreach ($xpOurs->query('/Файл/Документ/СодИнфГО/СвГруз/ОпГруз') as $node) {
+            $ourCargo[mb_strtolower(trim($node->getAttribute('НаимГруз')))] = $node;
+        }
+        foreach ($xpTheirs->query('СвГруз/ОпГруз', $theirBody) as $theirItem) {
+            $ourItem = $ourCargo[mb_strtolower(trim($theirItem->getAttribute('НаимГруз')))] ?? null;
+            if (!$ourItem) {
+                continue;
+            }
+            if ($ourItem->hasAttribute('Объем') && !$theirItem->hasAttribute('Объем')) {
+                $theirItem->setAttribute('Объем', $ourItem->getAttribute('Объем'));
+            }
+            $ourMass = $xpOurs->query('ПлМасГруз', $ourItem)->item(0);
+            $theirMass = $xpTheirs->query('ПлМасГруз', $theirItem)->item(0);
+            if ($ourMass && $ourMass->hasAttribute('МасБрутЗнач')) {
+                if (!$theirMass) {
+                    $theirItem->appendChild($theirs->importNode($ourMass, true));
+                } elseif (!$theirMass->hasAttribute('МасБрутЗнач')) {
+                    $theirMass->setAttribute('МасБрутЗнач', $ourMass->getAttribute('МасБрутЗнач'));
+                }
+            }
+        }
+
         $theirLoading = $xpTheirs->query('СвПогруз', $theirBody)->item(0);
         $ourLoading = $xpOurs->query('/Файл/Документ/СодИнфГО/СвПогруз')->item(0);
         if ($theirLoading && $ourLoading) {
@@ -1271,9 +1294,17 @@ class SabyWaybillService
                     ];
                 }
                 $count = $this->number($product['count'] ?? 0);
+                $unitWeight = $this->number($product['weight'] ?? 0);
+                if ($unitWeight <= 0) {
+                    $unitWeight = $this->number($this->productAttr($product['id'] ?? null, 'weight', '0'));
+                }
+                $unitVolume = $this->number($product['volume'] ?? 0);
+                if ($unitVolume <= 0) {
+                    $unitVolume = $this->number($this->productAttr($product['id'] ?? null, 'volume', '0'));
+                }
                 $items[$key]['count'] += $count;
-                $items[$key]['weight'] += $this->number($product['weight'] ?? 0) * ($count ?: 1);
-                $items[$key]['volume'] += $this->number($product['volume'] ?? 0) * ($count ?: 1);
+                $items[$key]['weight'] += $unitWeight * ($count ?: 1);
+                $items[$key]['volume'] += $unitVolume * ($count ?: 1);
             }
         }
 
