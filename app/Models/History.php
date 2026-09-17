@@ -585,7 +585,7 @@ class History extends Model
         return $res;
     }
     
-    public static function saveForObject($slug, $rows, $fire_event = true, $old_values = array(), $settings = array())
+    public static function saveForObject($slug, $rows, $fire_event = true, $old_values = array(), $settings = array(), $allow_read_only = false)
     {
         if(!count($settings))
             $settings = \App\Models\Settings::get();//\App\Models\Settings::get();
@@ -652,7 +652,7 @@ class History extends Model
                     $rows[$id][$field_name] = json_encode($value, JSON_UNESCAPED_UNICODE);
                 } else {
                     foreach($model_fields as $field) {
-                        if($field->only_read && $field->field != 'id' && $field->field == $field_name) {
+                        if($field->only_read && !$allow_read_only && $field->field != 'id' && $field->field == $field_name) {
                             unset($rows[$id][$field_name]);
                             continue;
                         }

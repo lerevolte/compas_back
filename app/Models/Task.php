@@ -201,7 +201,7 @@ class Task extends Model
             return;
         }
         try {
-            History::saveForObject($this->getTable(), [['id' => $this->id, 'delivery_price' => $formatted]]);
+            History::saveForObject($this->getTable(), [['id' => $this->id, 'delivery_price' => $formatted]], true, [], [], true);
         } catch (\Throwable $e) {
         }
         $this->delivery_price = $formatted;
