@@ -514,6 +514,30 @@ class SabyWaybillService
         $waybill->delete();
     }
 
+    public function generatePreview(Task $task): array
+    {
+        $document = $this->buildDocument($task);
+        $generated = $this->client->call('СБИС.СгенерироватьВложение', [
+            'Документ' => [
+                'Вложение' => [
+                    'Тип' => 'ЭТрН',
+                    'Подтип' => self::SHIPPER_TITLE_KND,
+                    'ВерсияФормата' => (string) $this->client->config()->param('format_version', self::FORMAT_VERSION),
+                    'Подстановка' => [
+                        self::SHIPPER_TITLE_KND => ['Файл' => ['Документ' => $document]],
+                    ],
+                ],
+            ],
+        ]);
+        $attachment = $generated['Вложение'][0] ?? [];
+
+        return [
+            'document' => $document,
+            'errors' => $attachment['КоличествоОшибок'] ?? null,
+            'xml' => base64_decode((string) ($attachment['Файл']['ДвоичныеДанные'] ?? ''), true) ?: '',
+        ];
+    }
+
     public function updateData(SabyWaybill $waybill): SabyWaybill
     {
         if (!$waybill->doc_id) {
@@ -705,6 +729,9 @@ class SabyWaybillService
         if ($receiver && $this->inn($receiver) === '') {
             $errors[] = 'У получателя «' . $receiver->name . '» не заполнен ИНН';
         }
+        if (!$receiver && $receiverContact) {
+            $errors = array_merge($errors, $this->receiverContactErrors($receiverContact));
+        }
 
         $redirectContact = $shipper
             ? $this->contactInfo('', $this->companyEmail($shipper), $this->phone($shipper))
@@ -873,17 +900,42 @@ class SabyWaybillService
     protected function contactParty(Contact $contact): array
     {
         $inn = $this->contactInn($contact);
-        $party = ['ИдСв' => ['СвИП' => array_filter([
-            'ИННФЛ' => $inn !== '' ? $inn : null,
+        $phone = $this->contactPhone($contact);
+        $party = ['ИдСв' => ['СвФЛУч' => array_filter([
+            'ИННФЛ' => strlen($inn) === 12 ? $inn : null,
+            'ИныеСвед' => strlen($inn) === 12 ? null : $this->individualOtherInfo($contact, $phone),
             'ФИО' => $this->splitName($this->contactName($contact)),
         ])]];
 
-        $contactInfo = $this->contactInfo($this->contactPhone($contact), $this->contactEmail($contact), '');
+        $contactInfo = $this->contactInfo($phone, $this->contactEmail($contact), '');
         if (count($contactInfo)) {
             $party['Контакт'] = $contactInfo;
         }
 
         return $party;
+    }
+
+    protected function individualOtherInfo(Contact $contact, string $phone): string
+    {
+        $text = 'Физическое лицо ' . $this->contactName($contact) . ($phone !== '' ? ', тел. ' . $phone : '');
+
+        return mb_substr($text, 0, 255);
+    }
+
+    protected function receiverContactErrors(Contact $contact): array
+    {
+        $errors = [];
+        $name = $this->contactName($contact);
+        $parts = $this->splitName($name);
+        if (empty($parts['Фамилия']) || empty($parts['Имя'])) {
+            $errors[] = 'У контакта-получателя «' . ($name !== '' ? $name : '#' . $contact->id) . '» укажите полные ФИО (минимум фамилия и имя) — физлицо без ИНН идентифицируется по ФИО';
+        }
+        $inn = $this->contactInn($contact);
+        if ($inn !== '' && strlen($inn) !== 12) {
+            $errors[] = 'У контакта-получателя «' . $name . '» ИНН должен состоять из 12 цифр (или оставьте поле пустым)';
+        }
+
+        return $errors;
     }
 
     protected function contactInfo(string $contactPhone, string $email, string $companyPhone): array

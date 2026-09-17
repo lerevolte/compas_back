@@ -280,8 +280,8 @@ class SabyOrderService extends SabyWaybillService
             $errors[] = 'У компании-получателя «' . $receiver->name . '» не заполнен ИНН';
         } elseif ($receiver && strlen($this->inn($receiver)) <= 10 && $this->kpp($receiver) === '') {
             $errors[] = 'У компании-получателя «' . $receiver->name . '» не заполнен КПП';
-        } elseif (!$receiver && $receiverContact && !in_array(strlen($this->contactInn($receiverContact)), [0, 12], true)) {
-            $errors[] = 'У контакта-получателя «' . $this->contactName($receiverContact) . '» ИНН должен состоять из 12 цифр';
+        } elseif (!$receiver && $receiverContact) {
+            $errors = array_merge($errors, $this->receiverContactErrors($receiverContact));
         }
 
         $positions = $this->orderCargo($task, $massMethod);
@@ -330,7 +330,9 @@ class SabyOrderService extends SabyWaybillService
         if ($receiver) {
             $receiverLabel = trim((string) $receiver->name) . ($this->inn($receiver) !== '' ? ', ИНН ' . $this->inn($receiver) : '');
         } elseif ($receiverContact) {
-            $receiverLabel = $this->contactName($receiverContact) . ($this->contactInn($receiverContact) !== '' ? ', ИНН ' . $this->contactInn($receiverContact) : '');
+            $receiverLabel = 'физлицо ' . $this->contactName($receiverContact)
+                . ($this->contactInn($receiverContact) !== '' ? ', ИНН ' . $this->contactInn($receiverContact) : '')
+                . ($this->contactPhone($receiverContact) !== '' ? ', тел. ' . $this->contactPhone($receiverContact) : '');
         }
         $unloadingText = $receiverLabel !== '' ? $deliveryAddress . '. Грузополучатель: ' . $receiverLabel : $deliveryAddress;
         $unloadingPoint = [
