@@ -384,6 +384,28 @@ class SabyWaybillService
             }
         }
 
+        $ourInstructions = $xpOurs->query('/Файл/Документ/СодИнфГО/УказГО')->item(0);
+        if ($ourInstructions) {
+            $importedInstructions = $theirs->importNode($ourInstructions, true);
+            $theirInstructions = $xpTheirs->query('УказГО', $theirBody)->item(0);
+            if ($theirInstructions) {
+                $theirBody->replaceChild($importedInstructions, $theirInstructions);
+            } else {
+                $anchor = null;
+                foreach (['СвПер', 'СвВодит', 'СвТС', 'СвПогруз', 'ПодпИнфГО'] as $tag) {
+                    $anchor = $xpTheirs->query($tag, $theirBody)->item(0);
+                    if ($anchor) {
+                        break;
+                    }
+                }
+                if ($anchor) {
+                    $theirBody->insertBefore($importedInstructions, $anchor);
+                } else {
+                    $theirBody->appendChild($importedInstructions);
+                }
+            }
+        }
+
         $theirLoading = $xpTheirs->query('СвПогруз', $theirBody)->item(0);
         $ourLoading = $xpOurs->query('/Файл/Документ/СодИнфГО/СвПогруз')->item(0);
         if ($theirLoading && $ourLoading) {
