@@ -13,7 +13,6 @@ class Task extends Model
 {
     use FieldValue, ModelActions, ColorGenerator, SoftDeletes, HasRelationFields;
 
-    //protected $fillable = ['store_name', 'is_store', 'is_supply', 'is_tc', 'is_address'];
     protected $guarded = ['id'];
     protected $table = 'logistic_tasks';
 
@@ -55,6 +54,7 @@ class Task extends Model
                     $model->recalcServicesPrice();
                 } catch (\Throwable $e) {
                 }
+                \App\Services\ProductPriceService::recalcFromChange($model->products, $model->wasRecentlyCreated ? null : $model->getOriginal('products'));
             }
        });
 
@@ -63,17 +63,15 @@ class Task extends Model
             if (\Schema::hasColumn($model->getTable(), 'deal_id')) {
                 $model->deal_id = \App\Services\ShipmentService::normalizeDealId($model->deal_id);
             }
+            if ($model->isDirty(\App\Services\ShipmentService::ACTION_FIELD) && $model->{\App\Services\ShipmentService::ACTION_FIELD} !== null) {
+                $model->{\App\Services\ShipmentService::ACTION_FIELD} = \App\Services\ShipmentService::taskActionValue($model->{\App\Services\ShipmentService::ACTION_FIELD});
+            }
             if (is_array($model->employee_id)) {
                 $ids = array_values(array_map('intval', array_filter($model->employee_id, 'is_numeric')));
                 $model->employee_id = json_encode($ids);
             }
        });
 
-       // Задача создаётся/привязывается к маршруту — подтягиваем дату
-       // маршрута в delivery_date. Срабатывает и на create, и на update,
-       // т.к. для нового объекта isDirty('route_id') == true. Обратная
-       // сторона уже работает в Route::boot (updating: isDirty('date') ->
-       // update всех logistic_tasks).
        static::saving(function($model)
        {
             if ($model->isDirty('route_id') && $model->route_id) {
@@ -107,26 +105,23 @@ class Task extends Model
             }
        });
 
-       // 1. Логика пересчета маршрута при сохранении задачи
        static::saved(function($model) {
-            // Если изменился route_id (задача привязана к новому или отвязана)
+
             if ($model->isDirty('route_id')) {
                 $newRouteId = $model->route_id;
                 $oldRouteId = $model->getOriginal('route_id');
 
-                // Пересчитываем СТАРЫЙ маршрут (если был)
                 if ($oldRouteId) {
                     $oldRoute = Route::find($oldRouteId);
                     if ($oldRoute) $oldRoute->recalculateTotals();
                 }
 
-                // Пересчитываем НОВЫЙ маршрут (если есть)
                 if ($newRouteId) {
                     $newRoute = Route::find($newRouteId);
                     if ($newRoute) $newRoute->recalculateTotals();
                 }
             } else {
-                // Если маршрут тот же, но поменялись вес или объем, нужно обновить текущий маршрут
+
                 if ($model->route_id && ($model->isDirty('weight') || $model->isDirty('volume') || $model->isDirty('delivery_price'))) {
                     if ($model->route) {
                         $model->route->recalculateTotals();
@@ -135,7 +130,6 @@ class Task extends Model
             }
        });
 
-       // 1. Логика пересчета маршрута при удалении задачи
        static::deleted(function($model) {
            if ($model->route_id) {
                $route = Route::find($model->route_id);
@@ -147,77 +141,18 @@ class Task extends Model
         {
 
             if($model->getOriginal('client_id') != $model->client_id) {
-                // if($model->getOriginal('client_id')) {
-                //     if(is_array($model->getOriginal('client_id')))
-                //         $client_ids = $model->getOriginal('client_id');
-                //     else
-                //         $client_ids = json_decode($model->getOriginal('client_id'), true);
-                //     $clients = Client::whereIntegerInRaw('id', $client_ids)->get();
-                //     if(count($clients)) {
-                //         foreach ($clients as $client) {
-                //             if(is_array($client->task_id))
-                //                 $client_tasks = $client->task_id;
-                //             else
-                //                 $client_tasks = json_decode($client->task_id, true);
-                            
-                //             if(is_array($client_tasks)) {
-                //                 $k = array_search($model->id, $client_tasks);
-                //                 unset($client_tasks[$k]);
-                //                 $client->saveRelations('task_id', $client_tasks);
-                //                 $client->task_id = json_encode($client_tasks);
-                //                 $client->saveQuietly();
-                //             }
-                //         }
-                //     }
-                // }
 
-                // if($model->client_id) {
-                //     if(is_array($model->client_id))
-                //         $client_ids = $model->client_id;
-                //     else
-                //         $client_ids = json_decode($model->client_id, true);
-                //     if(is_array($client_ids)) {
-                //         $clients = Client::whereIntegerInRaw('id', $client_ids)->get();
-                //         if(count($clients)) {
-                //             foreach ($clients as $client) {
-                //                 $client_tasks = array();
-                //                 if($client->task_id) {
-                //                     if(is_array($client->task_id))
-                //                         $client_tasks = $client->task_id;
-                //                     else
-                //                         $client_tasks = json_decode($client->task_id, true);
-                //                 }
-                //                 if(!in_array($model->id, $client_tasks)) {
-                //                     $client_tasks[] = $model->id;
-                //                     $client->saveRelations('task_id', $client_tasks);
-                //                     $client->task_id = json_encode($client_tasks);
-                //                     $client->saveQuietly();
-                //                 }
-                //             }
-                //         }
-                //     }
-                // }
             }
         });
-        static::deleting(function($model){ 
-            //$model->clients()->sync([]);
-        });
-       // static::updating(function($model)
-       // {
-       //     $user = Auth::user();
-       //     $model->updated_by = $user->id;
-       // });
-    }
+        static::deleting(function($model){
 
-    // public function status()
-    // {
-    //     return \DB::table('field_values')->where('id', $this->point_status)->first();
-    // }
+        });
+
+    }
 
     public function status()
     {
-        // 'point_status' - это поле в таблице tasks
-        // 'id' - это поле в таблице field_values
+
         return $this->belongsTo(\App\Models\FieldValue::class, 'point_status', 'id');
     }
     public function generateLink() {
@@ -265,6 +200,10 @@ class Task extends Model
         if ($formatted === null || (string) $this->delivery_price === $formatted) {
             return;
         }
+        try {
+            History::saveForObject($this->getTable(), [['id' => $this->id, 'delivery_price' => $formatted]]);
+        } catch (\Throwable $e) {
+        }
         $this->delivery_price = $formatted;
         $this->timestamps = false;
         $this->saveQuietly();
@@ -274,8 +213,6 @@ class Task extends Model
     public function setProducts(array $products)
     {
         $this->products = json_encode($products);
-        // Пересчёт суммарных веса и объёма задачи из товаров.
-        // weight/volume у товара — на единицу, поэтому умножаем на count.
         $totalWeight = 0;
         $totalVolume = 0;
         foreach ($products as $product) {
@@ -313,7 +250,6 @@ class Task extends Model
                 $html.= (is_array($product['name']) ? $product['name'][0] : $product['name']).' <b>'.$product['count'].' шт.</b><br>';
             }
         }
-        
 
         return $html;
     }

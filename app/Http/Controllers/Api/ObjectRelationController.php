@@ -379,7 +379,7 @@ class ObjectRelationController extends Controller
                     ? date('d.m.Y', strtotime($row->created_at))
                     : date('d.m.Y H:i:s', strtotime($row->created_at)))
                 : null,
-            'products' => in_array($slug, array_merge([\App\Services\ShipmentService::DOCUMENT, \App\Services\ShipmentService::RETURN_DOC, \App\Services\ShipmentService::SUPPLIER], \App\Services\ShipmentService::SOURCES), true) ? $this->productsOf($row) : [],
+            'products' => in_array($slug, array_merge(['deals', \App\Services\ShipmentService::DOCUMENT, \App\Services\ShipmentService::RETURN_DOC, \App\Services\ShipmentService::SUPPLIER], \App\Services\ShipmentService::SOURCES), true) ? $this->productsOf($row) : [],
         ];
     }
 

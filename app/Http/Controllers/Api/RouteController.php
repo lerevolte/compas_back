@@ -21,12 +21,6 @@ class RouteController extends Controller
         $this->middleware('logistic.read:routes')->only(['tasks', 'map_data', 'task_filter', 'tasks_view_fields']);
     }
 
-    /**
-     * Поправочный коэффициент на пробки. Время в пути, которое отдаёт OSRM
-     * (расчёт по свободной дороге), умножаем на него, чтобы время прибытия на
-     * точки и общая длительность маршрута учитывали реальные пробки (8508).
-     * Применяется только к driving-времени, не к service_time на точках.
-     */
     const TRAFFIC_COEFFICIENT = 2;
 
     public function list(Request $request)
@@ -69,10 +63,10 @@ class RouteController extends Controller
         }
 
         $paginator = $paginator->paginate($limit);
-        
+
         $objects = array();
         $field_values = array();
-        
+
         foreach ($paginator->items() as $item) {
             $data = array(
                 'id' => $item->id
@@ -188,7 +182,7 @@ class RouteController extends Controller
         $objects = $objects_collection->keyBy('id')->toArray();
         $history_items = array();
         foreach($rows as $id => $row) {
-            
+
             foreach($rows[$id] as $field_name => $value) {
                 if(!$value && $field_name == 'name') {
                     continue;
@@ -212,8 +206,7 @@ class RouteController extends Controller
             }
 
             $keys = array_keys($row);
-            
-            
+
             foreach($model_fields as $field) {
                 if($field->field == 'id' || $field->field == 'password')
                     continue;
@@ -227,7 +220,7 @@ class RouteController extends Controller
                             })->pluck('id')->toArray();
                         $old_status = $statuses->firstWhere('id', $objects[$row['id']][$field->field]);
                         $new_status = $statuses->firstWhere('id', $row[$field->field]);
-                        
+
                         if($old_status && $new_status) {
                             if($old_status->is_hidden) {
                                 $old_value = $old_status->color;
@@ -271,7 +264,7 @@ class RouteController extends Controller
                                 else
                                     unset($old_list[$k]);
                             }
-                            
+
                             if(is_array($row[$field->field])) {
                                 $new_list = $row[$field->field];
                             } elseif(is_integer($row[$field->field])) {
@@ -312,7 +305,7 @@ class RouteController extends Controller
                                             $old_values[] = $v['name'];
                                     }
                                 }
-                                
+
                                 $history_text = $field->title.': '.implode(', ', $old_values).' -> '.implode(', ', $file_values);
                             } else {
                                 $history_text = $field->title.': '.$objects[$row['id']][$field->field].' -> '.implode(', ', array_values($row[$field->field]));
@@ -332,7 +325,7 @@ class RouteController extends Controller
                             }
                             $history_text = $field->title.': '.$old_value.' -> '.$row[$field->field];
                         }
-                        
+
                     }
                     if($history_text) {
                         $module = $field->module;
@@ -343,12 +336,11 @@ class RouteController extends Controller
                         $history->save();
 
                         $history_items[] = $history;
-                        
+
                     }
                 }
             }
-            
-            
+
         }
         if(count($history_items)) {
             $data = \App\Models\History::getDataList($history_items);
@@ -380,7 +372,6 @@ class RouteController extends Controller
         }
 
         cache()->flush();
-        
 
         return response()->json(['success' => true]);
     }
@@ -397,11 +388,6 @@ class RouteController extends Controller
             \App\Events\ObjectUpdated::dispatch('ObjectDeleted', $id);
         }
 
-        // Сброс кэша настроек обязателен: list_values (опции relation-полей)
-        // строятся по живым записям и кэшируются в memcached. Без сброса
-        // удалённый маршрут продолжал отображаться в связях задач логистики
-        // до естественного устаревания кэша (CrudService::delete кэш чистит,
-        // а этот эндпоинт — не чистил).
         \App\Models\Settings::clear_cache();
 
         return response()->json(['success' => true]);
@@ -409,9 +395,7 @@ class RouteController extends Controller
 
     public function tasks($id, Request $request)
     {
-        // Маршрут мог быть удалён (soft delete) — Route::find вернёт null.
-        // Не падаем 500: отдаём пустой набор задач, фронт спокойно покажет
-        // пустые «Задачи в машине» и карту.
+
         $route = Route::find($id);
         if(!$route) {
             return response()->json([
@@ -420,8 +404,7 @@ class RouteController extends Controller
                 'data' => [],
             ]);
         }
-        // Подгружаем связь status (point_status → FieldValue), чтобы отдать цвет
-        // статуса точки на карту (квадратик статуса у маркера маршрута).
+
         $tasks = $route->tasks()->with('status')->get();
         $settings = get_settings();
         $tenant = tenant('id');
@@ -436,11 +419,7 @@ class RouteController extends Controller
             );
         }
         $entity_class = $entity->model_name;
-        // Берём поля из свежего get_settings (как EntityObject::list во внешней
-        // ссылке), а не из отдельно кэшируемого getFields — иначе после
-        // добавления поля (например «Оплата, руб») его не было в выдаче, пока
-        // не сброшен кэш getFields, и у админа поле выводилось пустым, хотя во
-        // внешней ссылке значение было (8579).
+
         $model_fields = !empty($settings['logistic_tasks']['fields'])
             ? collect($settings['logistic_tasks']['fields'])->values()
             : $entity_class::getFields();
@@ -486,7 +465,6 @@ class RouteController extends Controller
                 }
             }
 
-            // Цвет статуса точки (для квадратика статуса на карте).
             $data['statusColor'] = $item->status->color ?? '#ccc';
 
             $objects[] = $data;
@@ -1056,12 +1034,6 @@ class RouteController extends Controller
         return response()->json($route->getTaskFilters());
     }
 
-    /**
-     * Настройки полей вкладки «Маршрут списком» (RouteTasksView): какие колонки
-     * задачи показывать и в каком порядке. Хранятся ОДНИМ общим конфигом на
-     * портал (user_id=null), чтобы внешняя ссылка (анонимный зритель) показывала
-     * ровно то же, что настроено внутри (8579).
-     */
     public function tasks_view_fields()
     {
         return response()->json(['fields' => self::getTasksViewFields()]);
@@ -1108,17 +1080,6 @@ class RouteController extends Controller
         return response()->json(['success' => true]);
     }
 
-    /**
-     * Создать задачу логистики из адреса «Справочника адресов» и (опционально)
-     * прикрепить её к маршруту.
-     *
-     * Адрес-источник НЕ изменяется и НЕ удаляется — у него нет привязки к
-     * маршруту. Создаётся новая запись logistic_tasks, поля которой
-     * заполняются из адреса. Используется при drag&drop адреса в «Задачи в
-     * машине» или на строку маршрута в таблице «Маршруты».
-     *
-     * Body: { address_id, route_id? }
-     */
     public function task_from_address(Request $request)
     {
         $address = \App\Models\Address::find($request->address_id);
@@ -1128,9 +1089,6 @@ class RouteController extends Controller
 
         $routeId = $request->route_id ? (int) $request->route_id : null;
 
-        // Скалярные/JSON-поля копируем через CrudService (история + field_values).
-        // client_id (плюральная связь) обрабатываем отдельно ниже, чтобы не
-        // зависеть от формата хранения у адреса.
         $companyId = $address->company_id;
         if (is_string($companyId) && is_array($decodedCompany = json_decode($companyId, true))) {
             $companyId = $decodedCompany[0] ?? null;
@@ -1148,7 +1106,7 @@ class RouteController extends Controller
         $row = [
             'id'                    => 0,
             'name'                  => $address->name,
-            'address'               => $address->address,           // JSON-строка координат — пишется как есть
+            'address'               => $address->address,
             'phone'                 => $address->phone,
             'time'                  => $address->time,
             'car_requirements'      => $address->car_requirements,
@@ -1165,6 +1123,9 @@ class RouteController extends Controller
         ];
         if ($shipmentCompanyId) {
             $row['shipment_company_id'] = (int) $shipmentCompanyId;
+        }
+        if (!empty($address->action_type)) {
+            $row['action_type'] = $address->action_type;
         }
 
         $result = $crud->batch('logistic_tasks', [$row]);
@@ -1185,8 +1146,6 @@ class RouteController extends Controller
             }
         }
 
-        // Прикрепление к маршруту — переиспользуем update_tasks (sort + пересчёт
-        // километража/времени/веса маршрута). Добавляем задачу в конец списка.
         if ($routeId) {
             $ids = Task::where('route_id', $routeId)->orderBy('sort')->pluck('id')->toArray();
             $ids[] = $newId;
@@ -1196,12 +1155,6 @@ class RouteController extends Controller
         return response()->json(['success' => true, 'id' => $newId]);
     }
 
-    /**
-     * Создаёт задачу логистики из записи «Быстрые задачи» (warehouses) и при
-     * наличии route_id прикрепляет к маршруту. Полный аналог task_from_address.
-     *
-     * Body: { warehouse_id, route_id? }
-     */
     public function task_from_warehouse(Request $request)
     {
         $warehouse = \App\Models\Warehouse::find($request->warehouse_id);
@@ -1246,6 +1199,9 @@ class RouteController extends Controller
         ];
         if ($shipmentCompanyId) {
             $row['shipment_company_id'] = (int) $shipmentCompanyId;
+        }
+        if (!empty($warehouse->action_type)) {
+            $row['action_type'] = $warehouse->action_type;
         }
 
         $result = $crud->batch('logistic_tasks', [$row]);

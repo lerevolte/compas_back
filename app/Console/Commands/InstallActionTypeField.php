@@ -10,11 +10,12 @@ class InstallActionTypeField extends Command
     protected $signature = 'logistic:install-action-type
         {target=all-tenants : seeds | all-tenants | <tenant_id>}';
 
-    protected $description = 'Установить поле-статус «Тип действия» (action_type) у задач логистики: Выгрузка (по умолчанию) / Загрузка';
+    protected $description = 'Установить поле-статус «Тип действия» (action_type) у задач логистики (Выгрузка по умолчанию / Загрузка) и зеркальное поле у заказов покупателей, библиотеки задач и быстрых задач с сопоставлением значений';
 
     public const FIELD = 'action_type';
     public const TITLE = 'Тип действия';
     public const ENTITIES = ['logistic_tasks'];
+    public const MIRROR_ENTITIES = ['deals', 'addresses', 'warehouses'];
     public const VALUES = [
         ['value' => 'Выгрузка', 'color' => '#34C759'],
         ['value' => 'Загрузка', 'color' => '#007AFF'],
@@ -208,12 +209,130 @@ class InstallActionTypeField extends Command
             }
         }
 
+        $this->installMirrors($db, $label);
+
         if ($inTenant) {
             try {
                 \App\Models\Settings::clear_cache();
             } catch (\Throwable $e) {
             }
+        }
+    }
 
+    private function installMirrors($db, string $label): void
+    {
+        $sb = $db->getSchemaBuilder();
+        $taskTypeId = $db->table('data_types')->where('slug', 'logistic_tasks')->value('id');
+        $taskField = $taskTypeId
+            ? $db->table('data_rows')->where('data_type_id', $taskTypeId)->where('field', self::FIELD)->first()
+            : null;
+        if (!$taskField) {
+            $this->line("    [{$label}] у задач логистики нет поля " . self::FIELD . ', зеркала не ставятся');
+            return;
+        }
+        $taskDetails = json_decode((string) $taskField->details, true);
+        $taskDetails = is_array($taskDetails) ? $taskDetails : [];
+        $taskValues = $db->table('field_values')->where('field_id', $taskField->id)->orderBy('sort')->orderBy('id')->get();
+        $unloadingId = (int) ($taskDetails['unloading_value_id'] ?? 0);
+
+        foreach (self::MIRROR_ENTITIES as $slug) {
+            $typeId = $db->table('data_types')->where('slug', $slug)->value('id');
+            if (!$typeId || !$sb->hasTable($slug)) {
+                $this->line("    [{$label}] {$slug}: сущности нет, пропуск");
+                continue;
+            }
+            if (!$sb->hasColumn($slug, self::FIELD)) {
+                $db->statement("ALTER TABLE `{$slug}` ADD COLUMN `" . self::FIELD . '` TEXT NULL');
+            }
+
+            $attrs = [
+                'type' => 'status',
+                'title' => $taskField->title,
+                'required' => 0,
+                'only_read' => 0,
+                'is_program' => 0,
+                'is_default' => 1,
+                'is_permanent' => 1,
+                'is_remove' => 0,
+                'hide' => 0,
+            ];
+            $row = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', self::FIELD)->first();
+            if ($row) {
+                $db->table('data_rows')->where('id', $row->id)->update($attrs);
+                $fieldId = (int) $row->id;
+                $details = json_decode((string) $row->details, true);
+                $details = is_array($details) ? $details : [];
+            } else {
+                $sectionId = $db->table('field_sections')
+                    ->where('page', $slug)
+                    ->where(fn ($q) => $q->whereNull('module')->orWhere('module', ''))
+                    ->orderBy('sort')
+                    ->value('id');
+                $maxSort = (int) $db->table('data_rows')->where('data_type_id', $typeId)->max('sort');
+                $fieldId = (int) $db->table('data_rows')->insertGetId($attrs + [
+                    'data_type_id' => $typeId,
+                    'field' => self::FIELD,
+                    'visible_always' => 1,
+                    'section_id' => $sectionId,
+                    'sort' => $maxSort + 1,
+                    'is_plural' => 0,
+                ]);
+                $details = [];
+                $this->line("    [{$label}] {$slug}: создано поле " . self::FIELD . " (id {$fieldId})");
+            }
+
+            $map = [];
+            $existingMap = is_array($details['task_value_map'] ?? null) ? $details['task_value_map'] : [];
+            $byTask = [];
+            foreach ($existingMap as $ownId => $taskId) {
+                if ($db->table('field_values')->where('field_id', $fieldId)->where('id', (int) $ownId)->exists()) {
+                    $byTask[(int) $taskId] = (int) $ownId;
+                }
+            }
+            foreach ($taskValues as $taskValue) {
+                $ownId = $byTask[(int) $taskValue->id] ?? null;
+                if (!$ownId) {
+                    $ownId = $db->table('field_values')->where('field_id', $fieldId)->where('value', $taskValue->value)->value('id');
+                }
+                if ($ownId) {
+                    $db->table('field_values')->where('id', $ownId)->update([
+                        'value' => $taskValue->value,
+                        'color' => $taskValue->color,
+                        'sort' => $taskValue->sort,
+                        'is_hidden' => $taskValue->is_hidden,
+                    ]);
+                } else {
+                    $ownId = $db->table('field_values')->insertGetId([
+                        'field_id' => $fieldId,
+                        'value' => $taskValue->value,
+                        'color' => $taskValue->color,
+                        'sort' => $taskValue->sort,
+                        'is_hidden' => $taskValue->is_hidden,
+                    ]);
+                }
+                $map[(string) $ownId] = (int) $taskValue->id;
+            }
+
+            $details['task_value_map'] = $map;
+            $db->table('data_rows')->where('id', $fieldId)->update(['details' => json_encode($details, JSON_UNESCAPED_UNICODE)]);
+
+            $defaultOwn = array_search($unloadingId, $map, true);
+            if ($defaultOwn !== false) {
+                $filled = $db->table($slug)
+                    ->where(fn ($q) => $q->whereNull(self::FIELD)->orWhere(self::FIELD, ''))
+                    ->update([self::FIELD => (string) $defaultOwn]);
+                if ($filled) {
+                    $this->line("    [{$label}] {$slug}: значение выгрузки проставлено {$filled} строкам");
+                }
+            }
+            $this->line("    [{$label}] {$slug}: значений сопоставлено с задачами: " . count($map));
+
+            try {
+                if ($sb->hasTable('local_cache')) {
+                    $db->table('local_cache')->where('url', "fields/{$slug}")->update(['updated_at' => now()]);
+                }
+            } catch (\Throwable $e) {
+            }
         }
     }
 }

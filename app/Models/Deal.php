@@ -106,6 +106,10 @@ class Deal extends Model
         if ($formatted === null || (string) $this->delivery_price === $formatted) {
             return;
         }
+        try {
+            History::saveForObject($this->getTable(), [['id' => $this->id, 'delivery_price' => $formatted]]);
+        } catch (\Throwable $e) {
+        }
         $this->delivery_price = $formatted;
         $this->timestamps = false;
         $this->saveQuietly();

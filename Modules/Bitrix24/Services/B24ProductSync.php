@@ -435,7 +435,7 @@ class B24ProductSync
             $model->name = $linkUrl
                 ? json_encode(['value' => $nameText, 'external_link' => $linkUrl], JSON_UNESCAPED_UNICODE)
                 : $nameText;
-            if (array_key_exists('PRICE', $row)) {
+            if (array_key_exists('PRICE', $row) && ($isNew || $model->price === null || $model->price === '' || (float) $model->price == 0.0)) {
                 $model->price = (float) $row['PRICE'];
             }
             if (array_key_exists(self::WEIGHT_PROPERTY, $row)) {

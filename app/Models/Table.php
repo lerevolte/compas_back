@@ -12,7 +12,7 @@ class Table
 {
     public static function get($slug)
     {
-        $start_time = microtime(true);  // Время окончания
+        $start_time = microtime(true);
         if($slug == 'documents' && tenant('id')) {
             $table_columns = array(
                 [
@@ -39,7 +39,7 @@ class Table
                     'is_hidden' => 0,
                     'visible_always' => 1,
                     'options' => []
-                ],                
+                ],
                 [
                     'id' => 798,
                     'title' => 'Итоговая сумма',
@@ -152,17 +152,17 @@ class Table
             'write' => array(),
         );
 
-        $user = \Auth::user(); 
+        $user = \Auth::user();
         if(!$user)
-            $user = \App\Models\User::find(1);      
+            $user = \App\Models\User::find(1);
         $tables = $user->tables;
         if($tables)
             $tables = json_decode($tables, true);
         else
             $tables = array();
-        $end_time = microtime(true);  // Время окончания
+        $end_time = microtime(true);
 
-        $execution_time = $end_time - $start_time;  // Время выполнения
+        $execution_time = $end_time - $start_time;
 
         info("table1: " . $execution_time . " секунд.");
         if(!isset($tables[$slug])) {
@@ -192,14 +192,14 @@ class Table
                 }
             }
         }
-        $start_time = microtime(true);  // Время окончания
+        $start_time = microtime(true);
         $settings = app('settings');
-        $end_time = microtime(true);  // Время окончания
+        $end_time = microtime(true);
 
-        $execution_time = $end_time - $start_time;  // Время выполнения
+        $execution_time = $end_time - $start_time;
 
         info("table2: " . $execution_time . " секунд.");
-        $start_time = microtime(true);  // Время окончания
+        $start_time = microtime(true);
         $entity = \DB::table('data_types')->where('slug', $slug)->first();
         if(!$entity || !$entity->enable) {
             return [
@@ -244,13 +244,13 @@ class Table
             }
         }
         $permissions_all = \Auth::user()->role->permissions->keyBy('entity_id')->toArray();
-        $end_time = microtime(true);  // Время окончания
+        $end_time = microtime(true);
 
-        $execution_time = $end_time - $start_time;  // Время выполнения
+        $execution_time = $end_time - $start_time;
 
         info("table3: " . $execution_time . " секунд.");
-        //\App\Models\Settings::clear_cache();
-        $model_fields = $settings[$slug]['fields'];//$entity_class::getFields();
+
+        $model_fields = $settings[$slug]['fields'];
         $tariff = Tariff::current();
         $restrictions = [];
         if($tariff->restrictions) {
@@ -342,16 +342,15 @@ class Table
                     "mask" => ""
                 );
             }
-            
-            $start_time = microtime(true);  // Время окончания
+
+            $start_time = microtime(true);
             foreach ($model_fields as $field) {
                 $field_values = array();
                 $field_colors[$field->field] = $field->label_color ? $field->label_color : null;
                 if(isset($settings['list_values'][$field->id])) {
                     if($field->type == 'relation') {
-                        $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true); 
-                        // if($item->{$field->field})
-                        //     $field_values[$item->{$field->field}] = $settings['list_values'][$field->id][$item->{$field->field}];
+                        $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true);
+
                     } else {
                         if(isset($settings[$slug]['options'][$field->field]))
                             $field_values = $settings[$slug]['options'][$field->field];
@@ -404,9 +403,7 @@ class Table
 
                     if($field->type == 'relation') {
                         $table_columns[$field->field]['related_table'] = json_decode($field->details, true)['table'];
-                        // if($field->field == 'category_id')
-                        //     $table_columns[$field->field]['can_create'] = 0;
-                        // else
+
                         $table_columns[$field->field]['can_create'] = 1;
                         if($field->relation_table && isset($settings['models'][$field->relation_table]) && isset($permissions_all[$settings['models'][$field->relation_table]->id]['create_p']) && !\Auth::user()->is_admin)
                             $table_columns[$field->field]['can_create'] = $permissions_all[$settings['models'][$field->relation_table]->id]['create_p'] == 'N' ? 0 : 1;
@@ -438,7 +435,6 @@ class Table
 
                     $table_columns[$field->field]['read_only'] = $field->only_read || (isset($settings[$slug]['perms'][$field->field]['write']) && !$settings[$slug]['perms'][$field->field]['write']) || (isset($permissions['update_p']) && $permissions['update_p'] == 'N')? 1 : 0;
 
-
                     if(\Auth::user()->is_admin && !$field->only_read)
                         $table_columns[$field->field]['read_only'] = 0;
                     $table_columns[$field->field]['can_read'] = !isset($settings[$slug]['perms'][$field->field]['read']) || $settings[$slug]['perms'][$field->field]['read'] || \Auth::user()->is_admin ? 1 : 0;
@@ -469,17 +465,16 @@ class Table
 
                     }
                 }
-                
-                
-            }
-            $end_time = microtime(true);  // Время окончания
 
-            $execution_time = $end_time - $start_time;  // Время выполнения
+            }
+            $end_time = microtime(true);
+
+            $execution_time = $end_time - $start_time;
 
             info("table4: " . $execution_time . " секунд.");
         } else {
-            
-            $model_fields = $settings[$slug]['fields'];//$entity_class::getFields();
+
+            $model_fields = $settings[$slug]['fields'];
             $table_columns = array();
             if(!isset($table_columns['isChoose'])) {
                 $table_columns['isChoose'] = array(
@@ -518,9 +513,8 @@ class Table
                 $field_colors[$field->field] = $field->label_color ? $field->label_color : null;
                 if(isset($settings['list_values'][$field->id])) {
                     if($field->type == 'relation') {
-                        $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true); 
-                        // if($item->{$field->field})
-                        //     $field_values[$item->{$field->field}] = $settings['list_values'][$field->id][$item->{$field->field}];
+                        $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true);
+
                     } else {
                         $field_values = $settings['list_values'][$field->id];
                     }
@@ -575,27 +569,24 @@ class Table
                         if($field->relation_table && isset($settings['models'][$field->relation_table]) && isset($permissions_all[$settings['models'][$field->relation_table]->id]['create_p']) && !\Auth::user()->is_admin)
                             $table_columns[$field->field]['can_create'] = $permissions_all[$settings['models'][$field->relation_table]->id]['create_p'] == 'N' ? 0 : 1;
 
-
                         if($field->relation_table && isset($restrictions_tariff['objects'][$field->relation_table]['count'])) {
                             if($restrictions_tariff['objects'][$field->relation_table]['count'] <= \DB::table($field->relation_table)->whereNull('deleted_at')->count()) {
                                 $table_columns[$field->field]['can_create'] = 0;
                             };
                         }
 
-
                     }
                 }
-                
+
             }
-            
+
         }
 
         if($slug == 'balance_operations') {
             unset($table_columns['isChoose']);
             unset($table_columns['actions']);
         }
-        
-        
+
         $table_columns = array_values($table_columns);
 
         return $table_columns;
@@ -659,6 +650,7 @@ class Table
         return array('value' => $values, 'localOptions' => $localOptions);
     }
     public const SHIPPED_TITLE = 'Фактическое кол-во';
+    public const SALE_PRICE_TITLE = 'Цена продажи';
 
     private static function shippedColumn(int $index): array
     {
@@ -683,11 +675,11 @@ class Table
     {
         $user = \Auth::user();
         if(!$user)
-            $user = \App\Models\User::find(1); 
+            $user = \App\Models\User::find(1);
         $tables = $user->tables;
         if($tables)
             $tables = json_decode($tables, true);
-        $settings = app('settings');//get_settings();
+        $settings = app('settings');
         $options = array();
         $items = Product::orderBy('choosed_at', 'DESC')->orderBy('name', 'ASC')->whereNull('deleted_at')->limit(10)->get();
         foreach($items as $item) {
@@ -728,7 +720,7 @@ class Table
             $options[] = $option;
         }
         if(isset($tables['order_products'])) {
-            //$entity = \DB::table('data_types')->where('slug', 'remnants')->first();
+
             $entity = \DB::table('data_types')->where('slug', 'products')->first();
             $entity_class = $entity->model_name;
             $model_fields = collect($settings['products']['fields']);
@@ -752,7 +744,7 @@ class Table
                         'fixed' => '',
                         'index' => count($table_columns) + 1,
                         'fixTarget' => '0px',
-                        'read_only' => 1,//$field->only_read,
+                        'read_only' => 1,
                         'unit' => $field->unit,
                         "mask" => "",
                         'is_another_title' => 0
@@ -788,27 +780,11 @@ class Table
                 $table_columns['product_id']['related_table'] = 'products';
                 $table_columns['product_id']['options'] = $options;
             }
-            // if(!isset($table_columns['product_name']))
-            //     $table_columns['product_name'] = array(
-            //         'id' => null,
-            //         'title' => 'Наименование товара',
-            //         'key' => 'product_name',
-            //         'width' => '200px',
-            //         'enabled' => 1,
-            //         'sort_order' => '',
-            //         'type' => 'relation',
-            //         'fixed' => '',
-            //         'index' => 0,
-            //         'fixTarget' => '0px',
-            //         'read_only' => 0,
-            //         'related_table' => 'products',
-            //         'options' => [],
-            //         "mask" => ""
-            //     );
+
             if(!isset($table_columns['product_price']))
                 $table_columns['product_price'] = array(
                     'id' => null,
-                    'title' => 'Цена',
+                    'title' => self::SALE_PRICE_TITLE,
                     'key' => 'product_price',
                     'width' => '200px',
                     'enabled' => 1,
@@ -895,36 +871,7 @@ class Table
                 $table_columns['product_nds'] = self::ndsColumn('product_nds', 'НДС', 'select_dropdown', count($table_columns));
             if(!isset($table_columns['product_nds_included']))
                 $table_columns['product_nds_included'] = self::ndsColumn('product_nds_included', 'Включать НДС', 'checkbox', count($table_columns));
-            // if(!isset($table_columns['isChoose'])) {
-            //     $table_columns['isChoose'] = array(
-            //         "id" => 0,
-            //         "title" => "Выделение",
-            //         "key" => "isChoose",
-            //         "width" => "40.00px",
-            //         "enabled" => true,
-            //         "hover" => false,
-            //         "sort_order" => null,
-            //         "type" => "checkbox",
-            //         "fixed" => true,
-            //         "fixTarget" => "0px",
-            //         "index" => 0
-            //     );
-            // }
-            // if(!isset($table_columns['actions'])) {
-            //     $table_columns['actions'] = array(
-            //         "id" => 2,
-            //         "title" => "Действие",
-            //         "key" => "actions",
-            //         "width" => "40.00px",
-            //         "enabled" => true,
-            //         "hover" => false,
-            //         "sort_order" => null,
-            //         "type" => "actions",
-            //         "fixed" => true,
-            //         "index" => 1,
-            //         "fixTarget" => "40px"
-            //     );
-            // }
+
             if(!isset($table_columns['iconDrag'])) {
                 $table_columns['iconDrag'] = array(
                     "id" => null,
@@ -942,8 +889,7 @@ class Table
                     'is_another_title' => 0
                 );
             }
-            // Старая колонка iconDelete заменена на полноценную колонку «Действие» (actions)
-            // с двумя пунктами — Посмотреть и Удалить, как в остальных таблицах.
+
             unset($table_columns['iconDelete']);
             $savedActions = isset($table_columns['actions']) && is_array($table_columns['actions']) ? $table_columns['actions'] : null;
             $table_columns['actions'] = array(
@@ -964,25 +910,12 @@ class Table
             );
             $table_columns = array_values($table_columns);
 
-            
         } else {
             $entity = \DB::table('data_types')->where('slug', 'products')->first();
             $entity_class = $entity->model_name;
             $model_fields = collect($settings['products']['fields']);
             $table_columns = array();
-            // $table_columns['remnant_name'] = array(
-            //     'id' => null,
-            //     'title' => 'Наименование единицы',
-            //     'key' => 'remnant_name',
-            //     'width' => '200px',
-            //     'enabled' => 1,
-            //     'sort_order' => '',
-            //     'type' => 'text',
-            //     'fixed' => '',
-            //     'index' => 0,
-            //     'fixTarget' => '0px',
-            //     'read_only' => 0
-            // );
+
             $table_columns['product_id'] = array(
                 'id' => null,
                 'title' => 'Наименование товара',
@@ -1002,7 +935,7 @@ class Table
             );
             $table_columns['product_price'] = array(
                 'id' => null,
-                'title' => 'Цена',
+                'title' => self::SALE_PRICE_TITLE,
                 'key' => 'product_price',
                 'width' => '200px',
                 'enabled' => 1,
@@ -1119,7 +1052,7 @@ class Table
                 $field_colors[$field->field] = $field->label_color ? $field->label_color : null;
                 if(isset($settings['list_values'][$field->id])) {
                     if($field->type == 'relation') {
-                        $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true); 
+                        $field_values = array_slice($settings['list_values'][$field->id], 0, 19, true);
                     } else {
                         $field_values = $settings['list_values'][$field->id];
                     }
@@ -1141,7 +1074,7 @@ class Table
                         'fixed' => '',
                         'index' => count($table_columns) + 1,
                         'fixTarget' => '0px',
-                        'read_only' => 1,//$field->only_read || !$settings['products']['perms'][$field->field]['write'] ? 1 : 0,
+                        'read_only' => 1,
                         'unit' => $field->unit,
                         'mask' => $field->mask,
                         'is_another_title' => 0
@@ -1151,7 +1084,7 @@ class Table
                     $table_columns[$field->field]['can_read'] = 1;
                     $table_columns[$field->field]['can_edit'] = $field->only_read ? 0 : 1;
                     $table_columns[$field->field]['set_color'] = $field->set_color;
-                    $table_columns[$field->field]['color'] = $field->label_color;//$field_colors[$field->field];
+                    $table_columns[$field->field]['color'] = $field->label_color;
                     $table_columns[$field->field]['is_plural'] = $field->is_plural;
                     $table_columns[$field->field]['is_hidden'] = $field->hide;
                     $table_columns[$field->field]['visible_always'] = $field->visible_always;
@@ -1164,27 +1097,24 @@ class Table
                     }
                     if($field->type == 'relation') {
                         $table_columns[$field->field]['related_table'] = json_decode($field->details, true)['table'];
-                        // if($field->field == 'category_id')
-                        //     $table_columns[$field->field]['can_create'] = 0;
-                        // else
+
                         $table_columns[$field->field]['can_create'] = 1;
                         if($field->relation_table && isset($settings['models'][$field->relation_table]) && isset($permissions_all[$settings['models'][$field->relation_table]->id]['create_p']) && !\Auth::user()->is_admin)
                             $table_columns[$field->field]['can_create'] = $permissions_all[$settings['models'][$field->relation_table]->id]['create_p'] == 'N' ? 0 : 1;
 
-
                     }
                 }
-                
+
             }
 
-            
-
-            //return array_values($table_columns);
         }
 
-        
-
         $table_columns = array_values($table_columns);
+
+        foreach($table_columns as $i => $column) {
+            if(($column['key'] ?? null) == 'product_price' && empty($column['is_another_title']))
+                $table_columns[$i]['title'] = self::SALE_PRICE_TITLE;
+        }
 
         if(in_array((string) $parentSlug, [\App\Services\ShipmentService::DOCUMENT, \App\Services\ShipmentService::RETURN_DOC], true)) {
             foreach($table_columns as $i => $column) {
@@ -1307,11 +1237,7 @@ class Table
                         'color' => '#ad0b0a',
                         'sort' => 0
                     ],
-                    // [
-                    //     'value' => 'Y',
-                    //     'label' => 'Только свои',
-                    //     'sort' => 1
-                    // ],
+
                     [
                         'value' => 'A',
                         'label' => 'Полный доступ',
@@ -1444,11 +1370,7 @@ class Table
                         'color' => '#ad0b0a',
                         'sort' => 0
                     ],
-                    // [
-                    //     'value' => 'Y',
-                    //     'label' => 'Только свои',
-                    //     'sort' => 1
-                    // ],
+
                     [
                         'value' => 'A',
                         'label' => 'Полный доступ',
@@ -1456,53 +1378,8 @@ class Table
                         'sort' => 2
                     ]
                 ]
-            ]/*,
-            [
-                'id' => 2149,
-                'title' => 'Импорт',
-                'key' => 'import_p',
-                'width' => '200px',
-                'enabled' => true,
-                'sort_order' => null,
-                'type' => 'select_dropdown',
-                'is_plural' => 0,
-                'external_link' => '',
-                'is_external_link' => 0,
-                'is_link' => 0,
-                'required' => 0,
-                'fixed' => null,
-                'index' => 6,
-                'fixTarget' => '0px',
-                'read_only' => 0,
-                'unit' => '',
-                'mask' => null,
-                'can_edit' => 0,
-                'color' => '#000',
-                'is_hidden' => 0,
-                'visible_always' => 0,
-                'options' => [
-                    [
-                        'value' => 'N',
-                        'label' => 'Нет доступа',
-                        'color' => '#ad0b0a',
-                        'sort' => 0
-                    ],
-                    [
-                        'value' => 'Y',
-                        'label' => 'Только свои',
-                        'color' => '#000',
-                        'sort' => 1
-                    ],
-                    [
-                        'value' => 'A',
-                        'label' => 'Полный доступ',
-                        'color' => '#3C7C2B',
-                        'sort' => 2
-                    ]
-                ]
-            ]*/
+            ]
         );
-        
 
         return $table_columns;
     }
@@ -1573,7 +1450,6 @@ class Table
                 ]
             ]
         ];
-        
 
         return $table_columns;
     }
@@ -1707,7 +1583,6 @@ class Table
                 'options' => []
             ]
         );
-        
 
         return $table_columns;
     }

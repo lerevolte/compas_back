@@ -64,11 +64,12 @@ class Pickup extends Model
                 } catch (\Throwable $e) {
                 }
             }
-            if (array_key_exists('products', $model->getChanges())) {
+            if (array_key_exists('products', $model->getChanges()) || ($model->wasRecentlyCreated && $model->products)) {
                 try {
                     \App\Services\ShipmentService::recalcForSource('pickups', (int) $model->id);
                 } catch (\Throwable $e) {
                 }
+                \App\Services\ProductPriceService::recalcFromChange($model->products, $model->wasRecentlyCreated ? null : $model->getOriginal('products'));
             }
         });
     }

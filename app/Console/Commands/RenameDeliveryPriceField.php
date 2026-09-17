@@ -10,7 +10,7 @@ class RenameDeliveryPriceField extends Command
     protected $signature = 'logistic:rename-delivery-price
         {target=all-tenants : seeds | all-tenants | <tenant_id>}';
 
-    protected $description = 'Переименовать поле «Цена доставки» (delivery_price) в «Цена услуг» у задач логистики и заказов покупателей';
+    protected $description = 'Поле «Цена услуг» (delivery_price) у задач логистики и заказов покупателей: переименовать из «Цена доставки» и сделать только для чтения (считается из услуг состава)';
 
     public const OLD_TITLE = 'Цена доставки';
     public const NEW_TITLE = 'Цена услуг';
@@ -70,6 +70,11 @@ class RenameDeliveryPriceField extends Command
                 ->where('field', 'delivery_price')
                 ->where('title', self::OLD_TITLE)
                 ->update(['title' => self::NEW_TITLE]);
+            $updated += $db->table('data_rows')
+                ->where('data_type_id', $typeId)
+                ->where('field', 'delivery_price')
+                ->where(fn ($q) => $q->whereNull('only_read')->orWhere('only_read', 0))
+                ->update(['only_read' => 1]);
             $total += $updated;
 
             if ($updated) {
@@ -89,6 +94,6 @@ class RenameDeliveryPriceField extends Command
             }
         }
 
-        $this->line("    [{$label}] переименовано строк: {$total}");
+        $this->line("    [{$label}] обновлено полей: {$total}");
     }
 }

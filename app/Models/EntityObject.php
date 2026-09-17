@@ -463,7 +463,6 @@ class EntityObject
                     );
                 }
 
-
                 if($field->type == 'relation' && $field->field != 'role_id') {
 
                     $fields_data[$field->field]['can_create'] = 1;
@@ -764,7 +763,7 @@ class EntityObject
 
     public static function detail_module($slug, $id, $module, Request $request)
     {
-        $settings = app('settings');//\App\Models\Settings::get();
+        $settings = app('settings');
         $guides = Settings::getGuidesWithCache();
         $show_hints = Settings::hints();
 
@@ -780,7 +779,6 @@ class EntityObject
             'read' => array(),
             'write' => array(),
         );
-
 
         $entity = $settings['models'][$slug];
         if(!$entity || !$entity->enable) {
@@ -886,7 +884,7 @@ class EntityObject
                     $field_value = $current->tasks()->get()->pluck('id')->toArray();
                 }
 
-                $fields_data[$field->field] = $settings[$slug]['field_data'][$field->field];//Field::getData($field);
+                $fields_data[$field->field] = $settings[$slug]['field_data'][$field->field];
                 $fields_data[$field->field]['can_read'] = $settings[$slug]['perms'][$field->field]['read'] || \Auth::user()->is_admin ? 1 : 0;
                 $fields_data[$field->field]['can_edit'] = isset($data['deleted_at']) || $field->only_read || !$settings[$slug]['perms'][$field->field]['write'] && !\Auth::user()->is_admin ? 0 : 1;
                 if(!$id && $permissions['create_p'] == 'Y' && $field->field == 'user_id' && !\Auth::user()->is_admin) {
@@ -960,8 +958,6 @@ class EntityObject
                         'localOptions' => array()
                     );
                 }
-
-
 
                 if($field->type == 'relation' && $field->field != 'role_id') {
 
@@ -1131,7 +1127,6 @@ class EntityObject
             }
         }
 
-
         $hidden_fields = \App\Models\Field::getHiddenFields($slug);
         $sections_1 = \App\Models\FieldSection::get($slug, 1, $module);
         $sections_2 = \App\Models\FieldSection::get($slug, 2, $module);
@@ -1161,7 +1156,6 @@ class EntityObject
                 foreach($module_fields as $k => $field) {
                     if(isset($settings[$slug]['perms'][$field->field]) && $settings[$slug]['perms'][$field->field]['read'] == 'disabled' && !\Auth::user()->isAdmin() && isset($fields_data[$field->field]) || !isset($fields_data[$field->field]))
                         continue;
-
 
                     $fields[$field->id] = $fields_data[$field->field];
                 }
@@ -1222,7 +1216,7 @@ class EntityObject
 
     public static function list($slug, Request $request)
     {
-        $settings = app('settings');//\App\Models\Settings::get();
+        $settings = app('settings');
         $guides = Settings::getGuidesWithCache();
         $show_hints = Settings::hints();
 
@@ -1284,7 +1278,6 @@ class EntityObject
         if ($sort_order === 'null' || !in_array($sort_order, ['asc','desc'], true)) {
             $sort_order = 'desc';
         }
-
 
         if(!$request->filter && $request->is_slug) {
             return [
@@ -1430,19 +1423,12 @@ class EntityObject
                         $objects = $objects->onlyTrashed();
                     $sorted_ids = $objects->get()->sortBy(function($item) use($sort_field) {
 
-
-
                         $value = $item->{$sort_field};
-
-
 
                         if(ValueHelper::isJson($item->{$sort_field})) {
 
-
-
                             $value = is_array($item->{$sort_field}) ? $item->{$sort_field} : json_decode($item->{$sort_field}, true);
                             if($count = count($value)) {
-
 
                                 $value = $count.''.json_encode($value);
                             } else {
@@ -1494,7 +1480,6 @@ class EntityObject
             $paginator = $entity_class::orderBy('id', 'desc');
             $sort_field = 'id';
         }
-
 
         $tabs = array();
         if($request->trashed) {
@@ -1751,8 +1736,6 @@ class EntityObject
                 });
             }
 
-
-
         }
 
         if($request->order_id && $slug == 'products') {
@@ -1922,7 +1905,6 @@ class EntityObject
                 }
             });
 
-
         };
 
         if ($slug == 'logistic_tasks' && $request->filter && isset($request->filter['route_id']) && $request->filter['route_id'] != 'null') {
@@ -2068,12 +2050,10 @@ class EntityObject
                     if($field->type == 'file' && $field->is_link && $item->{$field->field}) {
                         $file = json_decode($item->{$field->field}, true);
                         $data[$field->field] = array(
-                            'value' => $file['name'] != 'invoice.pdf' ? $file['name'] : $item->name,//$file['name'],
+                            'value' => $file['name'] != 'invoice.pdf' ? $file['name'] : $item->name,
                             'external_link' => $file['file']
                         );
                     }
-
-
 
                 }
             }
@@ -2090,7 +2070,6 @@ class EntityObject
             $objects[$item->id] = $data;
 
         }
-
 
         if(isset($order) && $order && $slug == 'products') {
             $products_objects = array();
@@ -2368,9 +2347,41 @@ class EntityObject
         return false;
     }
 
+    public static function copyParentRelations(string $slug, int $sourceId, int $newId): void
+    {
+        if (!\App\Models\ObjectRelation::ready() || !$sourceId || !$newId) {
+            return;
+        }
+        try {
+            $parents = \App\Models\ObjectRelation::where('target_slug', $slug)
+                ->where('target_id', $sourceId)
+                ->get(['source_slug', 'source_id']);
+            foreach ($parents as $parent) {
+                \App\Models\ObjectRelation::link((string) $parent->source_slug, (int) $parent->source_id, $slug, $newId);
+            }
+            if (!count($parents)) {
+                return;
+            }
+            foreach ($parents as $parent) {
+                if ($parent->source_slug === 'deals' && \App\Services\ShipmentService::isSource($slug)) {
+                    \App\Services\ShipmentService::setDealColumn($slug, $newId, (int) $parent->source_id);
+                    \App\Services\ShipmentService::recalcDealShipped((int) $parent->source_id);
+                }
+            }
+            if ($slug === \App\Services\ShipmentService::DOCUMENT) {
+                \App\Services\ShipmentService::recalcForDocument($newId);
+            }
+            if ($slug === \App\Services\ShipmentService::RETURN_DOC && method_exists(\App\Models\ProductReturn::class, 'recalcParentShipments')) {
+                \App\Models\ProductReturn::recalcParentShipments($newId);
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('EntityObject::copy relations failed: ' . $e->getMessage());
+        }
+    }
+
     public static function copy($slug, $source, $fields)
     {
-        $settings = app('settings');//\App\Models\Settings::get();
+        $settings = app('settings');
 
         $model_fields = $settings[$slug]['fields'];
         $history_response_events = $history_response_fields = $history_items = $history_events = $history_fields = $old_relations = $new_relations = array();
@@ -2394,7 +2405,6 @@ class EntityObject
         if(isset($fields['name'])) {
             $object->name = is_array($fields['name']) ? json_encode($fields['name'], JSON_UNESCAPED_UNICODE) : $fields['name'];
         }
-
 
         $history = new \App\Models\History(['entity' => $slug, 'entity_id' => $source->id, 'user_id' => \Auth::user()->id, 'event' => 'OBJECT_COPIED', 'text' => "Создана копия: <span data-slug='$slug' data-id='$object->id'>$object->name</span>", 'old_value' => $source->id, 'new_value' => $object->id]);
 
@@ -2461,7 +2471,6 @@ class EntityObject
             }
         }
 
-
         if(isset($fields['password'])) {
             $fields['password'] = Hash::make($fields['password']);
         }
@@ -2505,9 +2514,7 @@ class EntityObject
 
                 $h = \App\Models\History::saveForObject($relation_table, $related_rows);
 
-
                 $object->load($relation_table);
-
 
             } elseif ($model_fields[$field]->type == 'relation' && $model_fields[$field]->field != 'user_id') {
                 $related_rows = array();
@@ -2537,7 +2544,6 @@ class EntityObject
                 $h = \App\Models\History::saveForObject($relation_table, $related_rows);
             }
 
-
             if(!is_array($value) && is_array(json_decode($value, true))) {
                 $object->{$field} = $value;
             } else {
@@ -2553,6 +2559,8 @@ class EntityObject
         }
 
         $object->save();
+
+        self::copyParentRelations($slug, (int) $source->id, (int) $object->id);
 
         if($slug == 'logistic_tasks' && $route_id) {
             $route_task_ids = \App\Models\Task::where('route_id', $route_id)
@@ -2590,7 +2598,6 @@ class EntityObject
         }
 
         $data = ['id' =>$object->id, 'title'=>$title, 'details' => $data['viewDetail'], 'success' => true, 'history_events' => $history_response_events, 'history_fields' => $history_response_fields];
-
 
         return $data;
     }

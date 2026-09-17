@@ -68,6 +68,36 @@ class ShipmentService
         return $result;
     }
 
+    public static function taskActionValue($raw)
+    {
+        $decoded = is_string($raw) ? json_decode($raw, true) : $raw;
+        $value = is_array($decoded) ? ($decoded[0] ?? null) : $raw;
+        if ($value === null || $value === '' || !is_numeric($value)) {
+            return $raw;
+        }
+        try {
+            $typeId = DB::table('data_types')->where('slug', 'logistic_tasks')->value('id');
+            $taskFieldId = $typeId
+                ? DB::table('data_rows')->where('data_type_id', $typeId)->where('field', self::ACTION_FIELD)->value('id')
+                : null;
+            if (!$taskFieldId) {
+                return $raw;
+            }
+            $source = DB::table('field_values')->where('id', (int) $value)->first(['id', 'field_id']);
+            if (!$source || (int) $source->field_id === (int) $taskFieldId) {
+                return $raw;
+            }
+            $details = json_decode((string) DB::table('data_rows')->where('id', $source->field_id)->value('details'), true);
+            $mapped = is_array($details) ? ($details['task_value_map'][(string) $source->id] ?? null) : null;
+            if ($mapped && DB::table('field_values')->where('field_id', $taskFieldId)->where('id', (int) $mapped)->exists()) {
+                return (string) $mapped;
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return $raw;
+    }
+
     public static function actionKind(string $slug, int $id): ?string
     {
         if ($slug !== 'logistic_tasks' || !$id) {
