@@ -9,9 +9,9 @@ use Illuminate\Console\Command;
 class InstallSupplierOrdersEntity extends Command
 {
     protected $signature = 'entity:install-supplier-orders
-        {target=all-tenants : seeds | all-tenants | <tenant_id>}';
+        {target=avixo : seeds | all-tenants | <tenant_id>}';
 
-    protected $description = 'Установить сущность «Заказы поставщикам» (supplier_orders) и поле «Заказы поставщикам» с вкладкой у товаров';
+    protected $description = 'Модуль «Заказы поставщикам»: сущность supplier_orders и поле «Заказы поставщикам» с вкладкой у товаров. Ставится точечно (по умолчанию avixo), не на все порталы. После установки — relations:install-module <tenant>';
 
     public const SLUG = 'supplier_orders';
     public const MODEL = 'App\\Models\\SupplierOrder';
