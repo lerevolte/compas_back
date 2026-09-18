@@ -7,11 +7,11 @@ use App\Traits\FieldValue, App\Traits\ModelActions, App\Traits\ColorGenerator, A
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Auth;
 
-class ProductReturn extends Model
+class ReceiptInvoice extends Model
 {
     use FieldValue, ModelActions, ColorGenerator, SoftDeletes, HasRelationFields;
 
-    protected $table = 'product_returns';
+    protected $table = 'receipt_invoices';
 
     protected $guarded = ['id'];
 
@@ -23,6 +23,14 @@ class ProductReturn extends Model
             $user = Auth::user();
             if (!$model->user_id && $user) {
                 $model->user_id = $user->id;
+            }
+        });
+
+        static::saving(function ($model) {
+            foreach (['contact_id', 'company_id'] as $col) {
+                if (is_array($model->{$col})) {
+                    $model->{$col} = json_encode(array_values(array_filter($model->{$col}, 'is_numeric')));
+                }
             }
         });
 
@@ -44,7 +52,7 @@ class ProductReturn extends Model
     public static function recalcParentShipments(int $id): void
     {
         try {
-            $parent = \App\Services\ShipmentService::parentOf('product_returns', $id);
+            $parent = \App\Services\ShipmentService::parentOf('receipt_invoices', $id);
             if ($parent && \App\Services\ShipmentService::isSource($parent[0])) {
                 \App\Services\ShipmentService::recalcForSource($parent[0], (int) $parent[1]);
             }
@@ -85,5 +93,4 @@ class ProductReturn extends Model
 
         return $html;
     }
-
 }

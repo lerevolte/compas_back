@@ -494,6 +494,11 @@ Route::middleware([
         );
 
         Route::put(
+            'receipt_invoices/{id}/set_products',
+            [App\Http\Controllers\Api\TaskController::class, 'set_receipt_invoice_products']
+        );
+
+        Route::put(
             'pickups/{id}/set_products',
             [App\Http\Controllers\Api\TaskController::class, 'set_pickup_products']
         );

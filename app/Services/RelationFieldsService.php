@@ -13,25 +13,26 @@ class RelationFieldsService
 
     public const ENTITIES = [
         'deals', 'supplier_orders', 'logistic_tasks', 'pickups',
-        'payment_invoices', 'expense_invoices', 'product_returns', 'addresses', 'warehouses',
+        'payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices', 'addresses', 'warehouses',
     ];
 
     public const RANK = [
         'deals' => 0, 'supplier_orders' => 0, 'addresses' => 0, 'warehouses' => 0,
         'logistic_tasks' => 1, 'pickups' => 1, 'payment_invoices' => 1,
-        'expense_invoices' => 2, 'product_returns' => 2,
+        'expense_invoices' => 2, 'product_returns' => 2, 'receipt_invoices' => 2,
     ];
 
     public const PLURAL = [
-        'deals' => ['supplier_orders', 'logistic_tasks', 'pickups', 'payment_invoices', 'expense_invoices', 'product_returns'],
-        'supplier_orders' => ['deals', 'logistic_tasks', 'pickups', 'expense_invoices', 'product_returns'],
-        'logistic_tasks' => ['expense_invoices', 'product_returns'],
-        'pickups' => ['expense_invoices', 'product_returns'],
-        'payment_invoices' => ['expense_invoices', 'product_returns'],
+        'deals' => ['supplier_orders', 'logistic_tasks', 'pickups', 'payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices'],
+        'supplier_orders' => ['deals', 'logistic_tasks', 'pickups', 'expense_invoices', 'product_returns', 'receipt_invoices'],
+        'logistic_tasks' => ['expense_invoices', 'product_returns', 'receipt_invoices'],
+        'pickups' => ['expense_invoices', 'product_returns', 'receipt_invoices'],
+        'payment_invoices' => ['expense_invoices', 'product_returns', 'receipt_invoices'],
         'addresses' => ['logistic_tasks', 'pickups'],
         'warehouses' => ['logistic_tasks', 'pickups'],
         'expense_invoices' => [],
         'product_returns' => [],
+        'receipt_invoices' => [],
     ];
 
     public const LEGACY = [

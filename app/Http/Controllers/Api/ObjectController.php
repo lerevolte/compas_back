@@ -401,11 +401,22 @@ class ObjectController extends Controller
             }
         }
 
+        if ($slug === 'logistic_tasks') {
+            $actionValues = \App\Services\ShipmentService::actionValueIds();
+            if (count($actionValues)) {
+                if (is_array($permissions)) {
+                    $permissions['based_action'] = $actionValues;
+                } elseif (is_object($permissions)) {
+                    $permissions->based_action = $actionValues;
+                }
+            }
+        }
+
         // 4. Дополнительные данные (продукты, история)
         $products = [];
         $tableKeys = [];
 
-        if (in_array($slug, ['logistic_tasks', 'pickups', 'deals', 'supplier_orders', 'payment_invoices', 'expense_invoices', 'product_returns', 'addresses'], true)) {
+        if (in_array($slug, ['logistic_tasks', 'pickups', 'deals', 'supplier_orders', 'payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices', 'addresses'], true)) {
             $productsPerms = $this->getProductsFieldPerms($user, $entity->id, $isExternalAccess, $slug);
             if ($productsPerms['read']) {
                 $tableKeys = Table::get_order_products($slug);
@@ -857,8 +868,8 @@ class ObjectController extends Controller
     {
         $targets = [
             'deals' => ['logistic_tasks', 'pickups', 'payment_invoices'],
-            'supplier_orders' => ['product_returns'],
-            'logistic_tasks' => ['expense_invoices', 'product_returns'],
+            'supplier_orders' => ['receipt_invoices'],
+            'logistic_tasks' => ['expense_invoices', 'product_returns', 'receipt_invoices'],
             'pickups' => ['expense_invoices', 'product_returns'],
             'addresses' => ['logistic_tasks'],
         ][$slug] ?? null;

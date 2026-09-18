@@ -1745,6 +1745,7 @@ class EntityObject
                 'payment_invoices' => \App\Models\PaymentInvoice::class,
                 'expense_invoices' => \App\Models\ExpenseInvoice::class,
                 'product_returns' => \App\Models\ProductReturn::class,
+                'receipt_invoices' => \App\Models\ReceiptInvoice::class,
                 'pickups' => \App\Models\Pickup::class,
                 'supplier_orders' => \App\Models\SupplierOrder::class,
                 'addresses' => \App\Models\Address::class,
@@ -2373,6 +2374,9 @@ class EntityObject
             }
             if ($slug === \App\Services\ShipmentService::RETURN_DOC && method_exists(\App\Models\ProductReturn::class, 'recalcParentShipments')) {
                 \App\Models\ProductReturn::recalcParentShipments($newId);
+            }
+            if ($slug === \App\Services\ShipmentService::RECEIPT_DOC && method_exists(\App\Models\ReceiptInvoice::class, 'recalcParentShipments')) {
+                \App\Models\ReceiptInvoice::recalcParentShipments($newId);
             }
         } catch (\Throwable $e) {
             \Log::warning('EntityObject::copy relations failed: ' . $e->getMessage());

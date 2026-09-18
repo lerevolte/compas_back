@@ -1116,7 +1116,7 @@ class Table
                 $table_columns[$i]['title'] = self::SALE_PRICE_TITLE;
         }
 
-        if(in_array((string) $parentSlug, [\App\Services\ShipmentService::DOCUMENT, \App\Services\ShipmentService::RETURN_DOC], true)) {
+        if(in_array((string) $parentSlug, [\App\Services\ShipmentService::DOCUMENT, \App\Services\ShipmentService::RETURN_DOC, \App\Services\ShipmentService::RECEIPT_DOC], true)) {
             foreach($table_columns as $i => $column) {
                 if(($column['key'] ?? null) == 'product_count' && empty($column['is_another_title']))
                     $table_columns[$i]['title'] = self::SHIPPED_TITLE;

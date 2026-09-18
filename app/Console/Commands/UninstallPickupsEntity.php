@@ -11,7 +11,7 @@ class UninstallPickupsEntity extends Command
         {target=avixo : seeds | all-tenants | <tenant_id>}
         {--purge : удалить и данные (DROP таблицы pickups, история, связи)}';
 
-    protected $description = 'Удалить сущность «Самовывозы» (pickups): метаданные; с --purge — и данные';
+    protected $description = 'Удалить сущность «Записи на самовывоз» (pickups): метаданные; с --purge — и данные';
 
     public function handle(): int
     {

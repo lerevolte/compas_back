@@ -12,6 +12,7 @@ class ShipmentService
     public const SOURCES = ['logistic_tasks', 'pickups'];
     public const DOCUMENT = 'expense_invoices';
     public const RETURN_DOC = 'product_returns';
+    public const RECEIPT_DOC = 'receipt_invoices';
     public const SUPPLIER = 'supplier_orders';
 
     public static function ready(): bool
@@ -462,7 +463,7 @@ class ShipmentService
     public static function shippedBySource(string $slug, int $id): array
     {
         if (self::isLoading($slug, $id)) {
-            return self::returnsUsage($slug, $id);
+            return self::receiptsUsage($slug, $id);
         }
         $shipped = self::invoicesUsage($slug, $id);
         $returned = self::returnsUsage($slug, $id);
@@ -496,14 +497,24 @@ class ShipmentService
 
     public static function returnsUsage(string $slug, int $id, ?int $exceptId = null): array
     {
+        return self::documentUsage(self::RETURN_DOC, $slug, $id, $exceptId);
+    }
+
+    public static function receiptsUsage(string $slug, int $id, ?int $exceptId = null): array
+    {
+        return self::documentUsage(self::RECEIPT_DOC, $slug, $id, $exceptId);
+    }
+
+    private static function documentUsage(string $docSlug, string $slug, int $id, ?int $exceptId = null): array
+    {
         $result = ['id' => [], 'name' => [], 'price_id' => [], 'price_name' => []];
-        if (!Schema::hasTable(self::RETURN_DOC)) {
+        if (!Schema::hasTable($docSlug)) {
             return $result;
         }
 
         $documentIds = ObjectRelation::where('source_slug', $slug)
             ->where('source_id', $id)
-            ->where('target_slug', self::RETURN_DOC)
+            ->where('target_slug', $docSlug)
             ->pluck('target_id')
             ->map(fn ($v) => (int) $v)
             ->all();
@@ -514,8 +525,8 @@ class ShipmentService
             return $result;
         }
 
-        $query = DB::table(self::RETURN_DOC)->whereIn('id', $documentIds);
-        if (Schema::hasColumn(self::RETURN_DOC, 'deleted_at')) {
+        $query = DB::table($docSlug)->whereIn('id', $documentIds);
+        if (Schema::hasColumn($docSlug, 'deleted_at')) {
             $query->whereNull('deleted_at');
         }
         foreach ($query->pluck('products') as $products) {
@@ -575,9 +586,15 @@ class ShipmentService
         if (!ObjectRelation::ready()) {
             return null;
         }
-        $parentSlugs = self::isSource($slug)
-            ? ['deals']
-            : ($slug === self::DOCUMENT ? self::SOURCES : ($slug === self::RETURN_DOC ? array_merge(self::SOURCES, [self::SUPPLIER]) : []));
+        if (self::isSource($slug)) {
+            $parentSlugs = ['deals'];
+        } elseif ($slug === self::DOCUMENT || $slug === self::RETURN_DOC) {
+            $parentSlugs = self::SOURCES;
+        } elseif ($slug === self::RECEIPT_DOC) {
+            $parentSlugs = array_merge(self::SOURCES, [self::SUPPLIER]);
+        } else {
+            $parentSlugs = [];
+        }
         if (!count($parentSlugs)) {
             return null;
         }
@@ -596,13 +613,13 @@ class ShipmentService
             return self::SOURCES;
         }
         if ($slug === self::SUPPLIER) {
-            return [self::RETURN_DOC];
+            return [self::RECEIPT_DOC];
         }
         if (self::isSource($slug)) {
             if ($id && self::isNeutralAction($slug, $id)) {
                 return [];
             }
-            return $id && self::isLoading($slug, $id) ? [self::RETURN_DOC] : [self::DOCUMENT];
+            return $id && self::isLoading($slug, $id) ? [self::RECEIPT_DOC] : [self::DOCUMENT];
         }
 
         return [];
@@ -697,7 +714,7 @@ class ShipmentService
                 return self::validateReturn($parentSlug, $parentId, $exceptChildId, $products);
             }
             $allowed = in_array($childSlug, self::childSlugsOf($parentSlug, $parentId), true)
-                || (self::isSource($parentSlug) && in_array($childSlug, [self::DOCUMENT, self::RETURN_DOC], true));
+                || (self::isSource($parentSlug) && in_array($childSlug, [self::DOCUMENT, self::RETURN_DOC, self::RECEIPT_DOC], true));
             if (!$allowed) {
                 return [];
             }
@@ -787,11 +804,13 @@ class ShipmentService
             if ($slug === 'deals') {
                 $lines = self::childLines($slug, $id, self::SOURCES);
             } elseif ($slug === self::SUPPLIER) {
-                $lines = self::childLines($slug, $id, [self::RETURN_DOC]);
+                $lines = self::childLines($slug, $id, [self::RECEIPT_DOC]);
+            } elseif (self::isSource($slug) && self::isLoading($slug, $id)) {
+                $lines = self::childLines($slug, $id, [self::RECEIPT_DOC]);
             } elseif (self::isSource($slug)) {
                 $docs = self::childLines($slug, $id, [self::DOCUMENT]);
                 $returns = self::childLines($slug, $id, [self::RETURN_DOC]);
-                if (self::isLoading($slug, $id) || (!count($docs) && count($returns))) {
+                if (!count($docs) && count($returns)) {
                     $lines = $returns;
                 } else {
                     $lines = $docs;
@@ -961,7 +980,7 @@ class ShipmentService
             return array_values($products);
         }
         if (self::isLoading($parentSlug, $parentId)) {
-            return self::residualProducts($parentSlug, $parentId, $products, $exceptChildId ? [self::RETURN_DOC, $exceptChildId] : null);
+            return self::residualProducts($parentSlug, $parentId, $products, $exceptChildId ? [self::RECEIPT_DOC, $exceptChildId] : null);
         }
         $available = self::subtractUsage(
             self::invoicesUsage($parentSlug, $parentId),

@@ -144,9 +144,8 @@ SQL);
         }
         $fields += [
             'products' => ['type' => 'json', 'title' => 'Состав', 'only_read' => 1],
-            'sum' => ['type' => 'number', 'title' => 'Сумма', 'unit' => 'руб.'],
-            'payment' => ['type' => 'text', 'title' => 'Оплата, руб'],
-            'comment' => ['type' => 'text', 'title' => 'Примечание'],
+            'sum' => ['type' => 'number', 'title' => 'Сумма', 'unit' => 'руб.', 'only_read' => 1],
+            'comment' => ['type' => 'text', 'title' => 'Примечание', 'is_plural' => 1],
             'photo' => ['type' => 'file', 'title' => 'Файлы', 'show_file_name' => 1],
             'user_id' => ['type' => 'relation', 'title' => 'Ответственный', 'details' => '{"table":"users"}', 'is_link' => 1, 'required' => 1, 'relation_table' => 'users', 'is_inactive' => 1],
             'weight' => ['type' => 'number', 'title' => 'Вес', 'hide' => 1],
@@ -154,6 +153,8 @@ SQL);
             'created_at' => ['type' => 'date', 'title' => 'Дата создания', 'only_read' => 1, 'is_default' => 1, 'hide' => 1, 'mobile_pages' => '0'],
             'updated_at' => ['type' => 'date', 'title' => 'Дата изменения', 'only_read' => 1, 'is_default' => 1, 'hide' => 1, 'mobile_pages' => '0'],
         ];
+
+        $this->removePaymentField($db, $typeId, $label);
 
         $sort = 0;
         $added = 0;
@@ -223,6 +224,17 @@ SQL);
             } catch (\Throwable $e) {
             }
         }
+    }
+
+    private function removePaymentField($db, int $typeId, string $label): void
+    {
+        $ids = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', 'payment')->pluck('id');
+        if ($ids->isEmpty()) {
+            return;
+        }
+        $db->table('section_fields_sort')->whereIn('field_id', $ids)->delete();
+        $db->table('data_rows')->whereIn('id', $ids)->delete();
+        $this->line("    [{$label}] " . self::SLUG . ': поле «Оплата, руб» удалено');
     }
 
     private function installProductField($db, string $label): void

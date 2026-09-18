@@ -65,6 +65,9 @@ class ObjectRelation extends Model
             if ($targetSlug === \App\Services\ShipmentService::RETURN_DOC) {
                 ProductReturn::recalcParentShipments($targetId);
             }
+            if ($targetSlug === \App\Services\ShipmentService::RECEIPT_DOC) {
+                ReceiptInvoice::recalcParentShipments($targetId);
+            }
         } catch (\Throwable $e) {
         }
     }

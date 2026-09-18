@@ -15,7 +15,7 @@ class NormalizeProductsNumbers extends Command
 
     protected $description = 'Привести price/count/weight/volume/sum в JSON «Состав» к числам (строки вида "225.0000" из Bitrix24 → 225)';
 
-    private const TABLES = ['payment_invoices', 'expense_invoices', 'product_returns', 'deals', 'logistic_tasks'];
+    private const TABLES = ['payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices', 'deals', 'logistic_tasks'];
     private const KEYS = ['price', 'count', 'weight', 'volume', 'sum', 'shipped'];
 
     public function handle(): int

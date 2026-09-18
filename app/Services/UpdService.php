@@ -15,25 +15,67 @@ class UpdService
         7 => 'июля', 8 => 'августа', 9 => 'сентября', 10 => 'октября', 11 => 'ноября', 12 => 'декабря',
     ];
 
-    public static function output(string $slug, array $ids, bool $withDocs = false): ?string
+    public static function output(string $slug, array $ids, bool $withDocs = false, ?array $docKeys = null, bool $includeUpd = true): ?string
     {
-        $pdf = self::pdf($slug, $ids);
-        if (!$pdf) {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (!count($ids)) {
             return null;
         }
-        $bytes = $pdf->output();
+
         if (!$withDocs) {
-            return $bytes;
-        }
-        $files = self::linkedDocumentFiles($slug, $ids);
-        if (!count($files)) {
-            return $bytes;
+            $pdf = self::pdf($slug, $ids);
+
+            return $pdf ? $pdf->output() : null;
         }
 
-        return self::merge($bytes, $files) ?? $bytes;
+        $parts = [];
+        $temp = [];
+        foreach ($ids as $id) {
+            foreach (self::linkedDocumentFiles($slug, [$id], $docKeys) as $file) {
+                $parts[] = $file;
+            }
+            if (!$includeUpd) {
+                continue;
+            }
+            $pdf = self::pdf($slug, [$id]);
+            if (!$pdf) {
+                continue;
+            }
+            $path = self::writeTemp($pdf->output());
+            if ($path === null) {
+                continue;
+            }
+            $temp[] = $path;
+            $parts[] = $path;
+            $parts[] = $path;
+        }
+
+        try {
+            if (!count($parts)) {
+                return $includeUpd ? self::fallbackUpd($slug, $ids) : null;
+            }
+            if (count($parts) === 1) {
+                $bytes = @file_get_contents($parts[0]);
+
+                return $bytes === false ? self::fallbackUpd($slug, $ids) : $bytes;
+            }
+
+            return self::mergeFiles($parts) ?? ($includeUpd ? self::fallbackUpd($slug, $ids) : null);
+        } finally {
+            foreach ($temp as $path) {
+                @unlink($path);
+            }
+        }
     }
 
-    public static function linkedDocumentFiles(string $slug, array $ids): array
+    private static function fallbackUpd(string $slug, array $ids): ?string
+    {
+        $pdf = self::pdf($slug, $ids);
+
+        return $pdf ? $pdf->output() : null;
+    }
+
+    public static function linkedDocumentFiles(string $slug, array $ids, ?array $docKeys = null): array
     {
         $ids = array_values(array_filter(array_map('intval', $ids)));
         if (!count($ids) || !\App\Models\ObjectRelation::ready()) {
@@ -41,6 +83,17 @@ class UpdService
         }
         $targets = array_keys(SaleDocumentService::TARGETS);
         $docs = [];
+        if ($docKeys !== null) {
+            foreach ($docKeys as $key) {
+                $parts = explode('#', (string) $key);
+                if (count($parts) !== 2 || !in_array($parts[0], $targets, true) || !ctype_digit($parts[1])) {
+                    continue;
+                }
+                $docs[$parts[0] . '#' . (int) $parts[1]] = [$parts[0], (int) $parts[1]];
+            }
+
+            return self::filesOf($docs, null);
+        }
         $own = \App\Models\ObjectRelation::where('source_slug', $slug)
             ->whereIn('source_id', $ids)
             ->whereIn('target_slug', $targets)
@@ -68,6 +121,18 @@ class UpdService
             }
         }
 
+        return self::filesOf($docs, null);
+    }
+
+    private static function filesOf(array $docs, ?array $docKeys): array
+    {
+        $order = array_flip(array_keys(SaleDocumentService::TARGETS));
+        uasort($docs, function ($a, $b) use ($order) {
+            $byType = ($order[$a[0]] ?? 99) <=> ($order[$b[0]] ?? 99);
+
+            return $byType !== 0 ? $byType : ($a[1] <=> $b[1]);
+        });
+
         $bySlug = [];
         foreach ($docs as [$docSlug, $docId]) {
             $bySlug[$docSlug][] = $docId;
@@ -85,6 +150,9 @@ class UpdService
         $disk = \Storage::disk('public');
         $files = [];
         foreach ($docs as $key => [$docSlug, $docId]) {
+            if ($docKeys !== null && !in_array($key, $docKeys, true)) {
+                continue;
+            }
             $row = $rows[$key] ?? null;
             if (!$row || (property_exists($row, 'deleted_at') && $row->deleted_at)) {
                 continue;
@@ -105,32 +173,38 @@ class UpdService
         return $files;
     }
 
-    private static function merge(string $bytes, array $files): ?string
+    private static function tmpDir(): string
+    {
+        $dir = storage_path('app/tmp');
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
+
+        return is_dir($dir) && is_writable($dir) ? $dir : sys_get_temp_dir();
+    }
+
+    private static function writeTemp(string $bytes): ?string
+    {
+        $path = self::tmpDir() . '/upd_' . uniqid('', true) . '.pdf';
+        if (@file_put_contents($path, $bytes) === false) {
+            \Log::warning('upd merge: не удалось записать временный файл', ['dir' => self::tmpDir()]);
+            return null;
+        }
+
+        return $path;
+    }
+
+    private static function mergeFiles(array $inputs): ?string
     {
         $gs = trim((string) @shell_exec('command -v gs 2>/dev/null'));
         if ($gs === '') {
             return null;
         }
-        $dir = storage_path('app/tmp');
-        if (!is_dir($dir)) {
-            @mkdir($dir, 0775, true);
-        }
-        if (!is_dir($dir) || !is_writable($dir)) {
-            $dir = sys_get_temp_dir();
-        }
-        $token = uniqid('', true);
-        $main = $dir . '/upd_' . $token . '.pdf';
-        $out = $dir . '/print_' . $token . '.pdf';
-        if (@file_put_contents($main, $bytes) === false) {
-            \Log::warning('upd merge: не удалось записать временный файл', ['dir' => $dir]);
-            return null;
-        }
-        $inputs = array_merge([$main], $files);
+        $out = self::tmpDir() . '/print_' . uniqid('', true) . '.pdf';
         $cmd = escapeshellarg($gs) . ' -q -dNOPAUSE -dBATCH -dSAFER -sDEVICE=pdfwrite -sOutputFile=' . escapeshellarg($out)
             . ' ' . implode(' ', array_map('escapeshellarg', $inputs)) . ' 2>&1';
         @exec($cmd, $log, $code);
         $result = $code === 0 && is_file($out) && filesize($out) > 0 ? file_get_contents($out) : null;
-        @unlink($main);
         @unlink($out);
         if ($result === null) {
             \Log::warning('upd merge failed', ['code' => $code, 'log' => array_slice((array) $log, 0, 5)]);

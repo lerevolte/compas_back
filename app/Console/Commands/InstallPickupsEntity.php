@@ -11,12 +11,12 @@ class InstallPickupsEntity extends Command
     protected $signature = 'entity:install-pickups
         {target=avixo : seeds | all-tenants | <tenant_id>}';
 
-    protected $description = 'Установить сущность «Самовывозы» (pickups): клон задач логистики без полей доставки, вкладки «Товары и услуги», «Связанные документы», «Печать документов»';
+    protected $description = 'Установить сущность «Записи на самовывоз» (pickups): клон задач логистики без полей доставки, вкладки «Товары и услуги», «Связанные документы», «Печать документов»';
 
     public const SLUG = 'pickups';
     public const MODEL = 'App\\Models\\Pickup';
-    public const TITLE_SINGULAR = 'Самовывоз';
-    public const TITLE_PLURAL = 'Самовывозы';
+    public const TITLE_SINGULAR = 'Запись на самовывоз';
+    public const TITLE_PLURAL = 'Записи на самовывоз';
 
     public const EXCLUDE_FIELDS = [
         'route_id', 'employee_id', 'address', 'plan_time', 'service_time', 'car_type',

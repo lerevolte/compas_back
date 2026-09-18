@@ -26,8 +26,8 @@ class InstallSaleDocsEntities extends Command
             ],
         ],
         'expense_invoices' => [
-            'title_singular' => 'Отгрузка',
-            'title_plural' => 'Отгрузки',
+            'title_singular' => 'Расходная накладная',
+            'title_plural' => 'Расходные накладные',
             'model' => 'App\\Models\\ExpenseInvoice',
             'slug_singular' => 'expense_invoice',
             'color' => '#8E5AA8',
@@ -39,8 +39,8 @@ class InstallSaleDocsEntities extends Command
             ],
         ],
         'product_returns' => [
-            'title_singular' => 'Оприходование',
-            'title_plural' => 'Оприходования',
+            'title_singular' => 'Возврат от покупателя',
+            'title_plural' => 'Возвраты от покупателя',
             'model' => 'App\\Models\\ProductReturn',
             'slug_singular' => 'product_return',
             'color' => '#C0392B',
@@ -53,9 +53,22 @@ class InstallSaleDocsEntities extends Command
                 'reason' => ['type' => 'text', 'title' => 'Причина возврата', 'is_plural' => 1],
             ],
         ],
+        'receipt_invoices' => [
+            'title_singular' => 'Приходная накладная',
+            'title_plural' => 'Приходные накладные',
+            'model' => 'App\\Models\\ReceiptInvoice',
+            'slug_singular' => 'receipt_invoice',
+            'color' => '#2E8B57',
+            'columns' => [
+                'contact_id' => 'TEXT NULL',
+            ],
+            'fields' => [
+                'contact_id' => ['type' => 'relation', 'title' => 'Контакт', 'details' => '{"table":"contacts"}', 'is_link' => 1, 'is_plural' => 1, 'relation_table' => 'contacts', 'after' => 'company_id'],
+            ],
+        ],
     ];
 
-    public const PRODUCTS_TAB_ENTITIES = ['payment_invoices', 'expense_invoices', 'product_returns'];
+    public const PRODUCTS_TAB_ENTITIES = ['payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices'];
 
     public const PRINT_TAB = 'print_docs';
     public const PRINT_TAB_TITLE = 'Печать документов';
@@ -88,7 +101,7 @@ class InstallSaleDocsEntities extends Command
     protected $signature = 'entity:install-sale-docs
         {target=avixo : seeds | all-tenants | <tenant_id>}';
 
-    protected $description = 'Установить сущности «Счета на оплату», «Отгрузки» и «Оприходования», переименовать deals в «Заказы покупателей», добавить вкладку «Печать документов», поле «Банковские реквизиты» у счетов и заказов и поле «Компания отгрузки» у заказов/счетов/накладных';
+    protected $description = 'Установить сущности «Счета на оплату», «Расходные накладные», «Возвраты от покупателя» и «Приходные накладные», переименовать deals в «Заказы покупателей», добавить вкладку «Печать документов», поле «Банковские реквизиты» у счетов и заказов и поле «Компания отгрузки» у заказов/счетов/накладных';
 
     public function handle(): int
     {
@@ -268,7 +281,7 @@ SQL);
             'photo' => ['type' => 'file', 'title' => 'Фото', 'show_file_name' => 1, 'is_default' => 1],
             'user_id' => ['type' => 'relation', 'title' => 'Ответственный', 'details' => '{"table":"users"}', 'is_link' => 1, 'required' => 1, 'relation_table' => 'users', 'is_inactive' => 1],
             'company_id' => ['type' => 'relation', 'title' => 'Компания', 'details' => '{"table":"companies"}', 'is_link' => 1, 'is_plural' => 1, 'relation_table' => 'companies'],
-            'sum' => ['type' => 'number', 'title' => 'Сумма', 'unit' => 'руб.'],
+            'sum' => ['type' => 'number', 'title' => 'Сумма', 'unit' => 'руб.', 'only_read' => 1],
         ];
         foreach ($meta['fields'] ?? [] as $field => $attrs) {
             $after = $attrs['after'] ?? null;
@@ -592,7 +605,7 @@ SQL);
             $db->statement("ALTER TABLE `deals` ADD COLUMN `" . self::DEAL_SUM_FIELD . "` VARCHAR(64) NULL");
         }
 
-        $attrs = ['type' => 'number', 'title' => self::DEAL_SUM_TITLE, 'unit' => 'руб.', 'is_remove' => 0, 'hide' => 0];
+        $attrs = ['type' => 'number', 'title' => self::DEAL_SUM_TITLE, 'unit' => 'руб.', 'is_remove' => 0, 'hide' => 0, 'only_read' => 1];
         $existing = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', self::DEAL_SUM_FIELD)->first();
         if ($existing) {
             $db->table('data_rows')->where('id', $existing->id)->update($attrs);

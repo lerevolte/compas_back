@@ -39,6 +39,11 @@ class TaskController extends Controller
         return $this->saveProductsFor('product_returns', \App\Models\ProductReturn::class, $id, $request);
     }
 
+    public function set_receipt_invoice_products($id, Request $request)
+    {
+        return $this->saveProductsFor('receipt_invoices', \App\Models\ReceiptInvoice::class, $id, $request);
+    }
+
     public function set_pickup_products($id, Request $request)
     {
         return $this->saveProductsFor('pickups', \App\Models\Pickup::class, $id, $request);
