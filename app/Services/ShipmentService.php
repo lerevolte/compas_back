@@ -695,6 +695,75 @@ class ShipmentService
         return array_values($result);
     }
 
+    public static function productsOf(string $slug, int $id): array
+    {
+        try {
+            if (!$id || !Schema::hasTable($slug) || !Schema::hasColumn($slug, 'products')) {
+                return [];
+            }
+
+            return array_values(array_filter(self::decode(DB::table($slug)->where('id', $id)->value('products')), 'is_array'));
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    public static function copyErrors(string $slug, $source, array $row): array
+    {
+        if (!self::isSource($slug)) {
+            return [];
+        }
+        $dealId = array_key_exists('deal_id', $row) ? self::normalizeDealId($row['deal_id']) : null;
+        if (!array_key_exists('deal_id', $row)) {
+            $parent = self::parentOf($slug, (int) $source->id);
+            $dealId = $parent && $parent[0] === 'deals' ? (int) $parent[1] : self::normalizeDealId($source->deal_id ?? null);
+        }
+        if (!$dealId) {
+            return [];
+        }
+        $products = array_key_exists('products', $row) ? self::decode($row['products']) : self::decode($source->products ?? null);
+        $products = array_values(array_filter($products, 'is_array'));
+        if (!count($products)) {
+            return [];
+        }
+
+        return self::withFamilyLock('deals', $dealId, fn () => self::validateAgainstPair('deals', $dealId, $slug, null, $products));
+    }
+
+    public static function relationChangeErrors(string $slug, int $id, array $row): array
+    {
+        $errors = [];
+        try {
+            if (!$id) {
+                return [];
+            }
+            if (self::isSource($slug) && array_key_exists('deal_id', $row) && Schema::hasColumn($slug, 'deal_id')) {
+                $new = self::normalizeDealId($row['deal_id']);
+                $old = self::normalizeDealId(DB::table($slug)->where('id', $id)->value('deal_id'));
+                if ($new && $new !== $old) {
+                    $errors = array_merge($errors, self::validateAgainstPair('deals', $new, $slug, $id, self::productsOf($slug, $id)));
+                }
+            }
+            $rank = RelationFieldsService::RANK;
+            foreach (RelationFieldsService::managedFieldsFor($slug) as $target => $field) {
+                if (!array_key_exists($field, $row) || !isset($rank[$slug], $rank[$target]) || $rank[$slug] === $rank[$target]) {
+                    continue;
+                }
+                $current = RelationFieldsService::ids(DB::table($slug)->where('id', $id)->value($field));
+                $added = array_diff(RelationFieldsService::ids($row[$field]), $current);
+                foreach ($added as $otherId) {
+                    $errors = array_merge($errors, $rank[$slug] < $rank[$target]
+                        ? self::validateAgainstPair($slug, $id, $target, (int) $otherId, self::productsOf($target, (int) $otherId))
+                        : self::validateAgainstPair($target, (int) $otherId, $slug, $id, self::productsOf($slug, $id)));
+                }
+            }
+        } catch (\Throwable $e) {
+            return $errors;
+        }
+
+        return array_values(array_unique($errors));
+    }
+
     public static function validateAgainstParent(string $slug, int $id, array $products): array
     {
         try {

@@ -94,6 +94,50 @@ class Field extends Model
     	return $fields;
     }
 
+    private static array $createdAtCache = [];
+
+    public static function relationIds($field, $object, bool $withTrashed = false): array
+    {
+        $relation = $object->{$field->relation_table}();
+        $related = $relation->getRelated();
+        if ($withTrashed && in_array(\Illuminate\Database\Eloquent\SoftDeletes::class, class_uses_recursive($related))) {
+            $relation = $relation->withTrashed();
+        }
+        if ($relation instanceof \Illuminate\Database\Eloquent\Relations\HasMany && !count($relation->getQuery()->getQuery()->orders ?? [])) {
+            $table = $related->getTable();
+            if (!array_key_exists($table, self::$createdAtCache)) {
+                try {
+                    self::$createdAtCache[$table] = \Schema::hasColumn($table, 'created_at');
+                } catch (\Throwable $e) {
+                    self::$createdAtCache[$table] = false;
+                }
+            }
+            if (self::$createdAtCache[$table]) {
+                $relation = $relation->orderByDesc($table . '.created_at');
+            }
+            $relation = $relation->orderByDesc($table . '.id');
+        }
+
+        return $relation->get()->pluck('id')->toArray();
+    }
+
+    public static function orderLinkIds($field, $ids)
+    {
+        if (!is_array($ids) || count($ids) < 2 || $field->type != 'relation' || !$field->is_plural) {
+            return $ids;
+        }
+        if (!$field->only_read && !str_starts_with((string) $field->field, 'related_')) {
+            return $ids;
+        }
+        $numeric = array_values(array_filter($ids, 'is_numeric'));
+        if (count($numeric) !== count($ids)) {
+            return $ids;
+        }
+        rsort($numeric, SORT_NUMERIC);
+
+        return $numeric;
+    }
+
     public static function getHiddenFields(string $model)
     {
         $row_type = \DB::table('data_types')->where('name', $model)->first();
@@ -300,7 +344,7 @@ class Field extends Model
                 $list_values += \App\Models\Settings::resolve_list_values($settings, $field->id, $data);
         }
         if($field->type == 'relation' && $field->is_plural) {
-            $values = $data;
+            $values = self::orderLinkIds($field, $data);
             $data = array();
             if(is_array($values)) {
                 foreach($values as $val) {
@@ -350,9 +394,11 @@ class Field extends Model
             $relation_table = $field->relation_table;
 
             if(method_exists($current, $relation_table)) {
-                $field_value = $current->{$relation_table}->pluck('id')->toArray();
+                $field_value = self::relationIds($field, $current);
             } elseif(!is_array($field_value)) {
                 $field_value = $field_value === null || $field_value === '' ? [] : [$field_value];
+            } else {
+                $field_value = self::orderLinkIds($field, $field_value);
             }
         }
 

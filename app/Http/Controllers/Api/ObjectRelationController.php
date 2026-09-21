@@ -29,6 +29,16 @@ class ObjectRelationController extends Controller
 
     private function storeLinked(array $data)
     {
+        $targetProducts = \App\Services\ShipmentService::productsOf($data['target_slug'], (int) $data['target_id']);
+        if (count($targetProducts)) {
+            $linkErrors = \App\Services\ShipmentService::validateAgainstPair($data['source_slug'], (int) $data['source_id'], $data['target_slug'], (int) $data['target_id'], $targetProducts);
+            if (count($linkErrors)) {
+                return response()->json([
+                    'title' => 'Расхождение по составу со связанным документом — связь не создана',
+                    'errors' => $linkErrors,
+                ], 422);
+            }
+        }
         ObjectRelation::link($data['source_slug'], $data['source_id'], $data['target_slug'], $data['target_id']);
         if ($data['source_slug'] === 'deals' && \App\Services\ShipmentService::isSource($data['target_slug'])) {
             \App\Services\ShipmentService::setDealColumn($data['target_slug'], (int) $data['target_id'], (int) $data['source_id']);

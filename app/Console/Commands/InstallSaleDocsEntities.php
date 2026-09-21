@@ -147,6 +147,7 @@ class InstallSaleDocsEntities extends Command
 
         foreach (self::ENTITIES as $slug => $meta) {
             $this->installEntity($db, $label, $slug, $meta);
+            InstallCommentField::install($db, [$slug]);
         }
 
         $this->ensurePrintTab($db, $label);

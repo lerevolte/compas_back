@@ -10,12 +10,13 @@ class InstallActionTypeField extends Command
     protected $signature = 'logistic:install-action-type
         {target=all-tenants : seeds | all-tenants | <tenant_id>}';
 
-    protected $description = 'Установить поле-статус «Тип действия» (action_type) у задач логистики (Выгрузка по умолчанию / Загрузка / Приход от поставщика) и зеркальное поле у заказов покупателей, библиотеки задач и быстрых задач с сопоставлением значений';
+    protected $description = 'Установить поле-статус «Тип действия» (action_type) у задач логистики (Выгрузка по умолчанию / Загрузка / Приход от поставщика) и зеркальное поле у библиотеки задач и быстрых задач с сопоставлением значений; у заказов покупателей поле снимается';
 
     public const FIELD = 'action_type';
     public const TITLE = 'Тип действия';
     public const ENTITIES = ['logistic_tasks'];
-    public const MIRROR_ENTITIES = ['deals', 'addresses', 'warehouses'];
+    public const MIRROR_ENTITIES = ['addresses', 'warehouses'];
+    public const REMOVED_MIRRORS = ['deals'];
     public const VALUES = [
         ['value' => 'Выгрузка', 'color' => '#34C759', 'key' => 'unloading_value_id'],
         ['value' => 'Загрузка', 'color' => '#007AFF', 'key' => 'loading_value_id'],
@@ -213,12 +214,40 @@ class InstallActionTypeField extends Command
         }
 
         $this->installMirrors($db, $label);
+        $this->removeMirrors($db, $label);
 
         if ($inTenant) {
             try {
                 \App\Models\Settings::clear_cache();
             } catch (\Throwable $e) {
             }
+        }
+    }
+
+    private function removeMirrors($db, string $label): void
+    {
+        $sb = $db->getSchemaBuilder();
+        foreach (self::REMOVED_MIRRORS as $slug) {
+            $typeId = $db->table('data_types')->where('slug', $slug)->value('id');
+            if (!$typeId) {
+                continue;
+            }
+            $ids = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', self::FIELD)->pluck('id');
+            if (!$ids->count()) {
+                continue;
+            }
+            if ($sb->hasTable('section_fields_sort')) {
+                $db->table('section_fields_sort')->whereIn('field_id', $ids)->delete();
+            }
+            $db->table('field_values')->whereIn('field_id', $ids)->delete();
+            $db->table('data_rows')->whereIn('id', $ids)->delete();
+            try {
+                if ($sb->hasTable('local_cache')) {
+                    $db->table('local_cache')->where('url', "fields/{$slug}")->update(['updated_at' => now()]);
+                }
+            } catch (\Throwable $e) {
+            }
+            $this->line("    [{$label}] {$slug}: поле " . self::FIELD . ' снято');
         }
     }
 

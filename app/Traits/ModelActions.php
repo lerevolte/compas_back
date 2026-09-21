@@ -309,8 +309,7 @@ trait ModelActions
 
                 if($field->type == 'relation' && $field->is_plural && $field->relation_table) {
                     $relation_table = $field->relation_table;
-                    $relation = method_exists($this, $relation_table) ? $this->{$relation_table} : null;
-                    $field_value = $relation ? $relation->pluck('id')->toArray() : [];
+                    $field_value = method_exists($this, $relation_table) ? \App\Models\Field::relationIds($field, $this) : [];
                 }
                 if($this->getTable() == 'routes' && $field->field == 'task_id' && $field->type == 'relation' && method_exists($this, 'tasks')) {
                     $field_value = $this->tasks()->get()->pluck('id')->toArray();

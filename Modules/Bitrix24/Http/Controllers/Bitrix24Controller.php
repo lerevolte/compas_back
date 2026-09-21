@@ -169,7 +169,7 @@ class Bitrix24Controller extends Controller
                     foreach($response_products['result'] as $product) {
                         if ($product['PRODUCT_ID'] != 113 && $product['PRODUCT_ID'] != 111 && $product['PRODUCT_ID']) {
                             $weight = 0;
-                            $prod = \Modules\Products\Entities\Product::where('id_b24', $product['PRODUCT_ID'])->first();
+                            $prod = \Modules\Bitrix24\Services\B24ProductSync::findExisting($product['PRODUCT_ID'], $product['PRODUCT_NAME'] ?? '', \Modules\Products\Entities\Product::class);
                             if(!$prod) {
                                 $prod = new \Modules\Products\Entities\Product();
                                 $prod->id_b24 =  $product['PRODUCT_ID'];
@@ -789,55 +789,64 @@ class Bitrix24Controller extends Controller
     {
         $pid = $row['PRODUCT_ID'] ?? null;
         $name = trim((string) ($row['PRODUCT_NAME'] ?? ''));
+        $class = \Modules\Products\Entities\Product::class;
+        $sync = \Modules\Bitrix24\Services\B24ProductSync::class;
         try {
-            if ($pid) {
-                $prod = \Modules\Products\Entities\Product::where('id_b24', $pid)->first();
-                if ($prod) {
-                    return $prod;
-                }
-                $svc = \Modules\Bitrix24\Services\B24ProductSync::make();
-                if ($svc) {
-                    $pulled = $svc->pullProductById($pid);
-                    if ($pulled) {
-                        return \Modules\Products\Entities\Product::find($pulled->id);
-                    }
-                    $trashed = \Modules\Products\Entities\Product::onlyTrashed()->where('id_b24', $pid)->first();
-                    if ($trashed) {
-                        return $trashed;
-                    }
-                }
-                $plist = Http::post($base . 'crm.product.list', [
-                    'order'  => ['ID' => 'ASC'],
-                    'filter' => ['ID' => $pid],
-                    'select' => ['*', 'PROPERTY_*'],
-                ])->collect();
-                $prod = new \Modules\Products\Entities\Product();
-                $prod->id_b24 = $pid;
-                $prod->name = $name !== '' ? $name : ('Товар #' . $pid);
-                if (isset($plist['result'][0]['PROPERTY_134']['value'])) {
-                    $prod->weight = $plist['result'][0]['PROPERTY_134']['value'];
-                }
-                $prod->save();
-                if (isset($plist['result'][0]) && \Modules\Bitrix24\Services\B24ProductSync::isInactive($plist['result'][0])) {
-                    $prod->delete();
-                }
-                return $prod;
-            }
-
-            if ($name === '') {
+            if (!$pid && $name === '') {
                 return null;
             }
-            $prod = \Modules\Products\Entities\Product::where(function ($q) use ($name) {
-                    $q->where('name', $name)
-                      ->orWhereRaw('(JSON_VALID(name) AND JSON_UNQUOTE(JSON_EXTRACT(name, "$.value")) = ?)', [$name]);
-                })
-                ->first();
-            if (!$prod) {
-                $prod = new \Modules\Products\Entities\Product();
+            $existing = $sync::findExisting($pid, $pid ? '' : $name, $class);
+            if ($existing) {
+                return $existing;
+            }
+
+            return $sync::withProductLock($pid, $name, function () use ($pid, $name, $class, $sync, $base) {
+                $existing = $sync::findExisting($pid, $pid ? '' : $name, $class);
+                if ($existing) {
+                    return $existing;
+                }
+                if ($pid) {
+                    $svc = $sync::make();
+                    if ($svc) {
+                        $pulled = $svc->pullProductById($pid);
+                        if ($pulled) {
+                            return $class::withTrashed()->find($pulled->id);
+                        }
+                        $trashed = $class::onlyTrashed()->where('id_b24', $pid)->first();
+                        if ($trashed) {
+                            return $trashed;
+                        }
+                    }
+                    $byName = $sync::findExisting(null, $name, $class);
+                    if ($byName) {
+                        return $byName;
+                    }
+                    $plist = Http::post($base . 'crm.product.list', [
+                        'order'  => ['ID' => 'ASC'],
+                        'filter' => ['ID' => $pid],
+                        'select' => ['*', 'PROPERTY_*'],
+                    ])->collect();
+                    $prod = new $class();
+                    $prod->id_b24 = $pid;
+                    $prod->name = $name !== '' ? $name : ('Товар #' . $pid);
+                    if (isset($plist['result'][0]['PROPERTY_134']['value'])) {
+                        $prod->weight = $plist['result'][0]['PROPERTY_134']['value'];
+                    }
+                    $prod->save();
+                    $sync::writeCreatedHistory($prod->id);
+                    if (isset($plist['result'][0]) && $sync::isInactive($plist['result'][0])) {
+                        $prod->delete();
+                    }
+                    return $prod;
+                }
+
+                $prod = new $class();
                 $prod->name = $name;
                 $prod->save();
-            }
-            return $prod;
+                $sync::writeCreatedHistory($prod->id);
+
+                return $prod;
+            });
         } catch (\Throwable $e) {
             Log::channel('bitrix24')->warning('product resolve failed', [
                 'product_id' => $pid,

@@ -349,6 +349,57 @@ class B24ProductSync
         return ['inactive' => count($ids), 'deleted' => count($local)];
     }
 
+    public static function normalizeName($name): string
+    {
+        $text = self::nameText($name);
+        $text = str_replace(["\u{00A0}", "\u{2007}", "\u{202F}"], ' ', $text);
+        $text = preg_replace('/\s+/u', ' ', $text) ?? $text;
+
+        return mb_strtolower(trim($text));
+    }
+
+    public static function findExisting($b24Id, $name, string $class = Product::class)
+    {
+        if ($b24Id !== null && $b24Id !== '') {
+            $model = $class::withTrashed()->where('id_b24', (string) $b24Id)->orderByRaw('deleted_at IS NULL DESC')->orderBy('id')->first();
+            if ($model) {
+                return $model;
+            }
+        }
+        $normalized = self::normalizeName($name);
+        if ($normalized === '') {
+            return null;
+        }
+        $expr = 'LOWER(TRIM(REPLACE(CASE WHEN JSON_VALID(name) AND JSON_EXTRACT(name, "$.value") IS NOT NULL THEN JSON_UNQUOTE(JSON_EXTRACT(name, "$.value")) ELSE name END, CHAR(194, 160), " ")))';
+        $query = $class::withTrashed()->whereRaw($expr . ' = ?', [$normalized]);
+        if ($b24Id !== null && $b24Id !== '') {
+            $query->orderByRaw('(id_b24 IS NULL OR id_b24 = "" OR id_b24 = ?) DESC', [(string) $b24Id]);
+        }
+
+        return $query->orderByRaw('deleted_at IS NULL DESC')->orderBy('id')->first();
+    }
+
+    public static function withProductLock($b24Id, $name, \Closure $callback)
+    {
+        $key = ($b24Id !== null && $b24Id !== '') ? 'id' . $b24Id : md5(self::normalizeName($name));
+        $lockName = substr('b24prod_' . tenant('id') . '_' . $key, 0, 64);
+        $locked = false;
+        try {
+            $locked = (int) (DB::selectOne('SELECT GET_LOCK(?, 15) AS l', [$lockName])->l ?? 0) === 1;
+        } catch (\Throwable $e) {
+        }
+        try {
+            return $callback();
+        } finally {
+            if ($locked) {
+                try {
+                    DB::select('SELECT RELEASE_LOCK(?)', [$lockName]);
+                } catch (\Throwable $e) {
+                }
+            }
+        }
+    }
+
     public static function nameText($name): string
     {
         $decoded = json_decode((string) $name, true);
@@ -405,19 +456,22 @@ class B24ProductSync
 
     public function upsertProductFromB24(array $row): Product
     {
+        return self::withProductLock($row['ID'] ?? null, $row['NAME'] ?? '', fn () => $this->upsertProductLocked($row));
+    }
+
+    private function upsertProductLocked(array $row): Product
+    {
         $b24Id = (string) $row['ID'];
 
         self::$muted = true;
         try {
-            $model = Product::withTrashed()->where('id_b24', $b24Id)->first();
             $name = trim((string) ($row['NAME'] ?? ''));
-            if (!$model && $name !== '') {
-                $model = Product::whereNull('id_b24')
-                    ->where(function ($q) use ($name) {
-                        $q->where('name', $name)
-                          ->orWhereRaw('(JSON_VALID(name) AND JSON_UNQUOTE(JSON_EXTRACT(name, "$.value")) = ?)', [$name]);
-                    })
-                    ->first();
+            $model = self::findExisting($b24Id, $name);
+            if ($model && (string) ($model->id_b24 ?? '') !== '' && (string) $model->id_b24 !== $b24Id) {
+                Log::channel('bitrix24')->info('product-sync: товар с тем же названием уже связан с другим товаром Bitrix24, новый не создаётся', [
+                    'product_id' => $model->id, 'linked_b24_id' => $model->id_b24, 'incoming_b24_id' => $b24Id,
+                ]);
+                return $model;
             }
             if (!$model) {
                 $model = new Product();
@@ -696,6 +750,11 @@ class B24ProductSync
             'category_id' => $category->id, 'b24_id' => $category->id_b24,
             'result' => $resp['result'] ?? null,
         ]);
+    }
+
+    public static function writeCreatedHistory($id): void
+    {
+        (new self())->writeSyncCreatedHistory($id);
     }
 
     private function writeSyncCreatedHistory($id): void

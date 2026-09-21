@@ -122,6 +122,14 @@ class CrudService
             }
             if(isset($row['copy'])) {
                 $obj = $entity_class::findOrFail($row['id']);
+                $copyErrors = \App\Services\ShipmentService::copyErrors($slug, $obj, $row);
+                if(count($copyErrors)) {
+                    return [
+                        'title' => 'Расхождение по составу с заказом покупателя — копирование запрещено',
+                        'errors' => $copyErrors,
+                        'status' => 422
+                    ];
+                }
                 unset($row['id']);
                 unset($row['copy']);
 
@@ -129,6 +137,17 @@ class CrudService
                 $data['status'] = 200;
 
                 return $data;
+            }
+
+            if(!empty($row['id'])) {
+                $relationErrors = \App\Services\ShipmentService::relationChangeErrors($slug, (int) $row['id'], $row);
+                if(count($relationErrors)) {
+                    return [
+                        'title' => 'Расхождение по составу со связанным документом — сохранение запрещено',
+                        'errors' => $relationErrors,
+                        'status' => 422
+                    ];
+                }
             }
 
             

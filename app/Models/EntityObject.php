@@ -358,17 +358,15 @@ class EntityObject
 
                 if ($field->type == 'relation' && $field->is_plural && $field->relation_table && method_exists($current, $field->relation_table)) {
                     $relation_table = $field->relation_table;
-                    $relation_query = $current->{$relation_table}();
-                    if ($isTrashedCurrent && in_array(SoftDeletes::class, class_uses_recursive($relation_query->getRelated()))) {
-                        $relation_query = $relation_query->withTrashed();
-                    }
-                    $field_value = $relation_query->get()->pluck('id')->toArray();
+                    $field_value = \App\Models\Field::relationIds($field, $current, (bool) $isTrashedCurrent);
                     if ($slug == 'employees') {
                         $field_value = array_values(array_unique(array_merge(
                             $field_value,
                             self::employeeReverseIds($field, $current->id, $isTrashedCurrent)
                         )));
                     }
+                } elseif ($field->type == 'relation' && $field->is_plural) {
+                    $field_value = \App\Models\Field::orderLinkIds($field, $field_value);
                 }
                 if ($slug == 'routes' && $field->field == 'task_id' && $field->type == 'relation') {
                     $tasks_query = $current->tasks();
@@ -613,7 +611,7 @@ class EntityObject
                         $field_value = ValueHelper::isJson($val) && $subfield->field != 'products' && is_array(json_decode($val, true)) ? json_decode($val, true) : $val;
                         if($subfield->type == 'relation' && $subfield->is_plural && $subfield->relation_table && method_exists($current, $subfield->relation_table)) {
                             $relation_table = $subfield->relation_table;
-                            $field_value = $current->{$relation_table}->pluck('id')->toArray();
+                            $field_value = \App\Models\Field::relationIds($subfield, $current);
 
                         }
                         $subfield_data['value'] = $field_value;
@@ -872,13 +870,15 @@ class EntityObject
                 $field_value = ValueHelper::isJson($val) && $field->field != 'products' && is_array(json_decode($val, true)) ? json_decode($val, true) : $val;
                 if($field->type == 'relation' && $field->is_plural && $field->relation_table && method_exists($current, $field->relation_table)) {
                     $relation_table = $field->relation_table;
-                    $field_value = $current->{$relation_table}->pluck('id')->toArray();
+                    $field_value = \App\Models\Field::relationIds($field, $current);
                     if($slug == 'employees') {
                         $field_value = array_values(array_unique(array_merge(
                             $field_value,
                             self::employeeReverseIds($field, $current->id)
                         )));
                     }
+                } elseif($field->type == 'relation' && $field->is_plural) {
+                    $field_value = \App\Models\Field::orderLinkIds($field, $field_value);
                 }
                 if($slug == 'routes' && $field->field == 'task_id' && $field->type == 'relation') {
                     $field_value = $current->tasks()->get()->pluck('id')->toArray();
@@ -1095,7 +1095,7 @@ class EntityObject
                         $field_value = ValueHelper::isJson($val) && $subfield->field != 'products' && is_array(json_decode($val, true)) ? json_decode($val, true) : $val;
                         if($subfield->type == 'relation' && $subfield->is_plural && $subfield->relation_table && method_exists($current, $subfield->relation_table)) {
                             $relation_table = $subfield->relation_table;
-                            $field_value = $current->{$relation_table}->pluck('id')->toArray();
+                            $field_value = \App\Models\Field::relationIds($subfield, $current);
                         }
                         $subfield_data['value'] = $field_value;
                         $fields_data[$field->field]['fields'][] = $subfield_data;
@@ -1970,12 +1970,9 @@ class EntityObject
                     }
                     if($field->type == 'relation' && $field->is_plural && $field->relation_table && method_exists($item, $field->relation_table)) {
                         $relation_table = $field->relation_table;
-                        $relation_query = $item->{$relation_table}();
-                        if (isset($item->deleted_at) && $item->deleted_at
-                            && in_array(SoftDeletes::class, class_uses_recursive($relation_query->getRelated()))) {
-                            $relation_query = $relation_query->withTrashed();
-                        }
-                        $field_value = $relation_query->get()->pluck('id')->toArray();
+                        $field_value = \App\Models\Field::relationIds($field, $item, isset($item->deleted_at) && $item->deleted_at);
+                    } elseif($field->type == 'relation' && $field->is_plural) {
+                        $field_value = \App\Models\Field::orderLinkIds($field, $field_value);
                     }
                     $data[$field->field] = $field_value;
                     $list_values = array();
