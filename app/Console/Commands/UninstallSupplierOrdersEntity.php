@@ -93,6 +93,8 @@ class UninstallSupplierOrdersEntity extends Command
             }
         }
 
+        \App\Services\ReverseLinkService::removeField($db, 'companies', InstallSupplierOrdersEntity::COMPANY_FIELD);
+
         $this->removeRelationFields($db, $label);
 
         if ($this->option('purge')) {

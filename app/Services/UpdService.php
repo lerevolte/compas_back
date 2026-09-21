@@ -245,7 +245,7 @@ class UpdService
             return null;
         }
 
-        $number = trim((string) ($object->number ?? '')) !== '' ? trim((string) $object->number) : (string) $object->id;
+        $number = (string) $object->id;
         $date = $object->delivery_date ? strtotime($object->delivery_date) : ($object->created_at ? strtotime($object->created_at) : time());
         $dateHuman = date('j', $date) . ' ' . self::MONTHS[(int) date('n', $date)] . ' ' . date('Y', $date) . ' г.';
 

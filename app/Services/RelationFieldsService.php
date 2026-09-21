@@ -24,7 +24,7 @@ class RelationFieldsService
 
     public const PLURAL = [
         'deals' => ['supplier_orders', 'logistic_tasks', 'pickups', 'payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices'],
-        'supplier_orders' => ['deals', 'logistic_tasks', 'pickups', 'expense_invoices', 'product_returns', 'receipt_invoices'],
+        'supplier_orders' => ['logistic_tasks', 'receipt_invoices'],
         'logistic_tasks' => ['expense_invoices', 'product_returns', 'receipt_invoices'],
         'pickups' => ['expense_invoices', 'product_returns', 'receipt_invoices'],
         'payment_invoices' => ['expense_invoices', 'product_returns', 'receipt_invoices'],
@@ -33,6 +33,10 @@ class RelationFieldsService
         'expense_invoices' => [],
         'product_returns' => [],
         'receipt_invoices' => [],
+    ];
+
+    public const EXCLUDE = [
+        'supplier_orders' => ['deals', 'pickups', 'expense_invoices', 'product_returns'],
     ];
 
     public const LEGACY = [
@@ -45,6 +49,11 @@ class RelationFieldsService
     public static function isEntity(string $slug): bool
     {
         return in_array($slug, self::ENTITIES, true);
+    }
+
+    public static function isExcluded(string $slug, string $target): bool
+    {
+        return in_array($target, self::EXCLUDE[$slug] ?? [], true);
     }
 
     public static function field(string $slug, string $target): string
@@ -83,7 +92,7 @@ class RelationFieldsService
             if (self::isEntity($slug) && $db->getSchemaBuilder()->hasTable($slug)) {
                 $columns = array_map('strtolower', $db->getSchemaBuilder()->getColumnListing($slug));
                 foreach (self::ENTITIES as $target) {
-                    if ($target === $slug) {
+                    if ($target === $slug || self::isExcluded($slug, $target)) {
                         continue;
                     }
                     $field = self::field($slug, $target);

@@ -2135,6 +2135,7 @@ class EntityObject
                         $data['product_name'] = isset($product['name']) && !is_array($product['name']) ? $product['name'] : $item->name;
 
                         $data['product_price'] = $product['price'];
+                        $data['product_purchase_price'] = $product['purchase_price'] ?? null;
                         $data['product_count'] = $product['count'];
                         $data['product_weight'] = $product['weight'];
                         $data['product_volume'] = $product['volume'] ?? 0;
@@ -2174,6 +2175,7 @@ class EntityObject
                             ),
                             'product_name' => $custom_name,
                             'product_price' => $product['price'] ?? null,
+                            'product_purchase_price' => $product['purchase_price'] ?? null,
                             'product_count' => $product['count'] ?? null,
                             'product_weight' => $product['weight'] ?? null,
                             'product_volume' => $product['volume'] ?? 0,

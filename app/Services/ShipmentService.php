@@ -38,6 +38,7 @@ class ShipmentService
     public const ACTION_FIELD = 'action_type';
     public const ACTION_LOADING = 'Загрузка';
     public const ACTION_UNLOADING = 'Выгрузка';
+    public const ACTION_SUPPLY = 'Приход от поставщика';
 
     private static array $actionCache = [];
     private static ?array $actionIdsCache = null;
@@ -59,6 +60,10 @@ class ShipmentService
                 $unloading = $decoded['unloading_value_id'] ?? null;
                 if (is_numeric($loading) && is_numeric($unloading)) {
                     $result = ['loading' => (int) $loading, 'unloading' => (int) $unloading];
+                    $supply = $decoded['supply_value_id'] ?? null;
+                    if (is_numeric($supply)) {
+                        $result['supply'] = (int) $supply;
+                    }
                 }
             }
         } catch (\Throwable $e) {
@@ -120,11 +125,12 @@ class ShipmentService
                     $valueId = (int) $raw;
                     $ids = self::actionValueIds();
                     if (count($ids)) {
-                        $result = $valueId === $ids['loading'] ? 'loading' : ($valueId === $ids['unloading'] ? 'unloading' : 'other');
+                        $isLoading = $valueId === $ids['loading'] || (isset($ids['supply']) && $valueId === $ids['supply']);
+                        $result = $isLoading ? 'loading' : ($valueId === $ids['unloading'] ? 'unloading' : 'other');
                     } else {
                         $label = mb_strtolower(trim((string) DB::table('field_values')->where('id', $valueId)->value('value')));
                         if ($label !== '') {
-                            $result = $label === mb_strtolower(self::ACTION_LOADING)
+                            $result = in_array($label, [mb_strtolower(self::ACTION_LOADING), mb_strtolower(self::ACTION_SUPPLY)], true)
                                 ? 'loading'
                                 : ($label === mb_strtolower(self::ACTION_UNLOADING) ? 'unloading' : 'other');
                         }

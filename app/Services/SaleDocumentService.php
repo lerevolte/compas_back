@@ -25,6 +25,7 @@ class SaleDocumentService
             'view' => 'pdf.expense_invoice',
             'title' => 'Расходная накладная',
             'file' => 'nakladnaya',
+            'pdf' => false,
         ],
     ];
 
@@ -418,68 +419,70 @@ class SaleDocumentService
         }
         $grandTotal = $total + $vatOnTop;
 
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView($meta['view'], [
-            'number' => $number,
-            'date' => $date,
-            'org' => $org,
-            'bank' => $bank,
-            'company' => $company,
-            'companyName' => $company ? ($this->plain($company->full_name ?? '') ?: $this->plainName($company->name ?? '')) : '',
-            'companyPhone' => $company ? $this->companyPhone($company) : '',
-            'products' => $products,
-            'total' => $total,
-            'grandTotal' => $grandTotal,
-            'vatTotal' => $vatTotal,
-            'vatRate' => $vatRate,
-            'vatOnTop' => $vatOnTop,
-            'totalWords' => $this->amountInWords($grandTotal),
-            'buyer' => $buyer,
-            'dealName' => $dealName,
-            'dealId' => $dealId ?? '',
-            'logo' => $supplier ? $this->imageDataUri($supplier->photo ?? null) : null,
-            'directorSignature' => $bank ? $this->imageDataUri($bank->director_signature ?? null) : null,
-            'accountantSignature' => $bank ? $this->imageDataUri($bank->accountant_signature ?? null) : null,
-            'stamp' => $bank ? $this->imageDataUri($bank->stamp ?? null) : null,
-        ]);
+        if ($meta['pdf'] ?? true) {
+            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView($meta['view'], [
+                'number' => $number,
+                'date' => $date,
+                'org' => $org,
+                'bank' => $bank,
+                'company' => $company,
+                'companyName' => $company ? ($this->plain($company->full_name ?? '') ?: $this->plainName($company->name ?? '')) : '',
+                'companyPhone' => $company ? $this->companyPhone($company) : '',
+                'products' => $products,
+                'total' => $total,
+                'grandTotal' => $grandTotal,
+                'vatTotal' => $vatTotal,
+                'vatRate' => $vatRate,
+                'vatOnTop' => $vatOnTop,
+                'totalWords' => $this->amountInWords($grandTotal),
+                'buyer' => $buyer,
+                'dealName' => $dealName,
+                'dealId' => $dealId ?? '',
+                'logo' => $supplier ? $this->imageDataUri($supplier->photo ?? null) : null,
+                'directorSignature' => $bank ? $this->imageDataUri($bank->director_signature ?? null) : null,
+                'accountantSignature' => $bank ? $this->imageDataUri($bank->accountant_signature ?? null) : null,
+                'stamp' => $bank ? $this->imageDataUri($bank->stamp ?? null) : null,
+            ]);
 
-        $disk = \Storage::disk('public');
-        $dir = 'sale_docs/' . $slug . '/' . $id;
-        if (!\File::isDirectory($disk->path($dir))) {
-            \File::makeDirectory($disk->path($dir), 0775, true);
-        }
-        $filename = $meta['file'] . '_' . $id . '.pdf';
-        $path = $dir . '/' . $filename;
-        $pdf->save($disk->path($path));
-        $this->fixOwnership($disk, ['sale_docs', 'sale_docs/' . $slug, $dir, $path]);
-
-        $tenant = tenant('id');
-        $url = $tenant
-            ? 'https://' . $tenant . '.compas.pro/storage/tenant' . $tenant . '/app/public/' . $path
-            : 'https://compas.pro/storage/app/public/' . $path;
-
-        $file = new File();
-        $file->name = $filename;
-        $file->path = $path;
-        $file->save();
-
-        $generated = [
-            'id' => $file->id,
-            'name' => $meta['title'] . ' № ' . $number . ' от ' . $date . '.pdf',
-            'url' => '/files/pdfSmall.svg',
-            'file' => $url . '?v=' . time(),
-            'extension' => 'pdf',
-            'sort' => 0,
-            'ext' => 'pdf',
-        ];
-        $photos = [$generated];
-        $existing = json_decode((string) $doc->photo, true);
-        foreach (is_array($existing) ? $existing : [] as $item) {
-            if (is_array($item) && !str_contains((string) ($item['file'] ?? ''), '/sale_docs/')) {
-                $item['sort'] = count($photos);
-                $photos[] = $item;
+            $disk = \Storage::disk('public');
+            $dir = 'sale_docs/' . $slug . '/' . $id;
+            if (!\File::isDirectory($disk->path($dir))) {
+                \File::makeDirectory($disk->path($dir), 0775, true);
             }
+            $filename = $meta['file'] . '_' . $id . '.pdf';
+            $path = $dir . '/' . $filename;
+            $pdf->save($disk->path($path));
+            $this->fixOwnership($disk, ['sale_docs', 'sale_docs/' . $slug, $dir, $path]);
+
+            $tenant = tenant('id');
+            $url = $tenant
+                ? 'https://' . $tenant . '.compas.pro/storage/tenant' . $tenant . '/app/public/' . $path
+                : 'https://compas.pro/storage/app/public/' . $path;
+
+            $file = new File();
+            $file->name = $filename;
+            $file->path = $path;
+            $file->save();
+
+            $generated = [
+                'id' => $file->id,
+                'name' => $meta['title'] . ' № ' . $number . ' от ' . $date . '.pdf',
+                'url' => '/files/pdfSmall.svg',
+                'file' => $url . '?v=' . time(),
+                'extension' => 'pdf',
+                'sort' => 0,
+                'ext' => 'pdf',
+            ];
+            $photos = [$generated];
+            $existing = json_decode((string) $doc->photo, true);
+            foreach (is_array($existing) ? $existing : [] as $item) {
+                if (is_array($item) && !str_contains((string) ($item['file'] ?? ''), '/sale_docs/')) {
+                    $item['sort'] = count($photos);
+                    $photos[] = $item;
+                }
+            }
+            $doc->photo = json_encode($photos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }
-        $doc->photo = json_encode($photos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         if ($total > 0 && !(float) ($doc->sum ?? 0)) {
             $doc->sum = rtrim(rtrim(number_format($total, 2, '.', ''), '0'), '.');

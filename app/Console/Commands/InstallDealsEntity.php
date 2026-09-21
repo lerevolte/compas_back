@@ -147,6 +147,7 @@ class InstallDealsEntity extends Command
         $this->cloneDataRows($db, $typeId, $infoSecId);
         $this->insertOwnRows($db, $typeId, $infoSecId);
         $this->patchRelatedEntities($db, $label);
+        InstallDealProductLinks::install($db);
 
         $db->table('settings')->insert([
             'key' => 'menu', 'display_name' => null,

@@ -401,7 +401,7 @@ class ObjectController extends Controller
             }
         }
 
-        if ($slug === 'logistic_tasks') {
+        if (in_array($slug, ['logistic_tasks', 'supplier_orders'], true)) {
             $actionValues = \App\Services\ShipmentService::actionValueIds();
             if (count($actionValues)) {
                 if (is_array($permissions)) {
@@ -868,7 +868,7 @@ class ObjectController extends Controller
     {
         $targets = [
             'deals' => ['logistic_tasks', 'pickups', 'payment_invoices'],
-            'supplier_orders' => ['receipt_invoices'],
+            'supplier_orders' => ['receipt_invoices', 'logistic_tasks'],
             'logistic_tasks' => ['expense_invoices', 'product_returns', 'receipt_invoices'],
             'pickups' => ['expense_invoices', 'product_returns'],
             'addresses' => ['logistic_tasks'],

@@ -410,22 +410,36 @@ class SabyWaybillService
         foreach ($xpOurs->query('/Файл/Документ/СодИнфГО/СвГруз/ОпГруз') as $node) {
             $ourCargo[mb_strtolower(trim($node->getAttribute('НаимГруз')))] = $node;
         }
+        $theirCargoBlock = $xpTheirs->query('СвГруз', $theirBody)->item(0);
+        $matched = [];
         foreach ($xpTheirs->query('СвГруз/ОпГруз', $theirBody) as $theirItem) {
-            $ourItem = $ourCargo[mb_strtolower(trim($theirItem->getAttribute('НаимГруз')))] ?? null;
+            $key = mb_strtolower(trim($theirItem->getAttribute('НаимГруз')));
+            $ourItem = $ourCargo[$key] ?? null;
             if (!$ourItem) {
                 continue;
             }
-            if ($ourItem->hasAttribute('Объем') && !$theirItem->hasAttribute('Объем')) {
-                $theirItem->setAttribute('Объем', $ourItem->getAttribute('Объем'));
+            $matched[$key] = true;
+            foreach (['КолМестГр', 'СостГруз', 'СпУпак', 'ВидТар', 'Объем'] as $attr) {
+                if ($ourItem->hasAttribute($attr)) {
+                    $theirItem->setAttribute($attr, $ourItem->getAttribute($attr));
+                }
             }
             $ourMass = $xpOurs->query('ПлМасГруз', $ourItem)->item(0);
             $theirMass = $xpTheirs->query('ПлМасГруз', $theirItem)->item(0);
             if ($ourMass && $ourMass->hasAttribute('МасБрутЗнач')) {
                 if (!$theirMass) {
                     $theirItem->appendChild($theirs->importNode($ourMass, true));
-                } elseif (!$theirMass->hasAttribute('МасБрутЗнач')) {
+                } else {
                     $theirMass->setAttribute('МасБрутЗнач', $ourMass->getAttribute('МасБрутЗнач'));
                 }
+            }
+        }
+        if ($theirCargoBlock) {
+            foreach ($ourCargo as $key => $ourItem) {
+                if (isset($matched[$key])) {
+                    continue;
+                }
+                $theirCargoBlock->appendChild($theirs->importNode($ourItem, true));
             }
         }
 

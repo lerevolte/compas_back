@@ -10,7 +10,7 @@ return new class extends Migration
         $db = DB::connection();
         \App\Console\Commands\InstallContactsEntity::ensureTables($db);
         \App\Console\Commands\InstallSabyModule::ensureTables($db);
-        \App\Console\Commands\InstallTaskNumbers::ensureTable($db);
+        \App\Services\DocumentNumber::ensureTable($db);
     }
 
     public function down(): void

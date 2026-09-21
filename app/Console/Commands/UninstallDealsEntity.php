@@ -75,6 +75,8 @@ class UninstallDealsEntity extends Command
         $db->table('sidebar_items')->where('slug', 'deals')->delete();
         $db->table('settings')->where('entity', 'deals')->delete();
 
+        \App\Services\ReverseLinkService::removeField($db, 'products', InstallDealProductLinks::FIELD);
+
         $patchedTypeIds = $db->table('data_types')
             ->whereIn('slug', ['contacts', 'companies'])
             ->pluck('id');

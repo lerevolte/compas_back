@@ -97,11 +97,17 @@ class Field extends Model
     public static function getHiddenFields(string $model)
     {
         $row_type = \DB::table('data_types')->where('name', $model)->first();
-        $fields = \DB::table('data_rows')->where(['hide' => 1, 'data_type_id' => $row_type->id, 'is_remove' => 0])->whereNull('group_id');
+        $fields = \DB::table('data_rows')
+            ->where(['data_type_id' => $row_type->id, 'is_remove' => 0])
+            ->whereNull('group_id')
+            ->where(function ($query) {
+                $query->where('hide', 1)
+                    ->orWhere(function ($q) {
+                        $q->whereNull('section_id')->whereNotNull('module');
+                    });
+            });
 
-        $fields = $fields->get();
-
-        return $fields;
+        return $fields->get();
     }
 
     public static function getByGroup(int $id)

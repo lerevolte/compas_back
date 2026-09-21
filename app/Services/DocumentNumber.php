@@ -10,6 +10,17 @@ class DocumentNumber
     public const COUNTER = 'shipment_task';
     public const PREFIX = 'cmps-';
 
+    public static function ensureTable($db): void
+    {
+        $db->statement(<<<'SQL'
+CREATE TABLE IF NOT EXISTS `document_counters` (
+  `name` varchar(64) NOT NULL,
+  `value` bigint(20) UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL);
+    }
+
     public static function ready(): bool
     {
         try {

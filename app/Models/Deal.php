@@ -13,6 +13,8 @@ class Deal extends Model
     protected $table = 'deals';
     protected $guarded = ['id'];
 
+    public const PRODUCT_FIELD = 'deal_id';
+
     public const B24_PUSH_FIELDS = [
         'address', 'time', 'phone', 'delivery_price', 'comment',
         'pallets_count', 'delivery_date', 'contact', 'contact_id', 'company_id', 'bank_requisite_id',
@@ -47,6 +49,15 @@ class Deal extends Model
                 \App\Models\Company::addType($model->company_id, 'Клиент');
             }
             if (in_array('products', $changedKeys, true) || ($model->wasRecentlyCreated && $model->products)) {
+                \App\Services\ReverseLinkService::sync(
+                    'products',
+                    self::PRODUCT_FIELD,
+                    (int) $model->id,
+                    $model->wasRecentlyCreated ? [] : \App\Models\SupplierOrder::productIds($model->getOriginal('products')),
+                    \App\Models\SupplierOrder::productIds($model->products)
+                );
+            }
+            if (in_array('products', $changedKeys, true) || ($model->wasRecentlyCreated && $model->products)) {
                 try {
                     $model->recalcServicesPrice();
                 } catch (\Throwable $e) {
@@ -79,6 +90,14 @@ class Deal extends Model
             } catch (\Throwable $e) {
                 \Log::channel('bitrix24')->warning('deal push failed', ['deal_id' => $model->id, 'error' => $e->getMessage(), 'at' => $e->getFile() . ':' . $e->getLine(), 'changed' => $changed]);
             }
+        });
+
+        static::deleted(function ($model) {
+            \App\Services\ReverseLinkService::sync('products', self::PRODUCT_FIELD, (int) $model->id, \App\Models\SupplierOrder::productIds($model->products), []);
+        });
+
+        static::restored(function ($model) {
+            \App\Services\ReverseLinkService::sync('products', self::PRODUCT_FIELD, (int) $model->id, [], \App\Models\SupplierOrder::productIds($model->products));
         });
     }
 

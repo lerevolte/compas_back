@@ -16,6 +16,7 @@ class SupplierOrder extends Model
     protected $guarded = ['id'];
 
     public const PRODUCT_FIELD = 'supplier_order_id';
+    public const COMPANY_FIELD = 'supplier_order_id';
     public const COMPANY_TYPE = 'Поставщик';
 
     public static function boot()
@@ -51,6 +52,15 @@ class SupplierOrder extends Model
                 } catch (\Throwable $e) {
                 }
             }
+            if (in_array('company_id', $changes, true) || $model->wasRecentlyCreated) {
+                \App\Services\ReverseLinkService::sync(
+                    'companies',
+                    self::COMPANY_FIELD,
+                    (int) $model->id,
+                    $model->wasRecentlyCreated ? [] : \App\Services\ReverseLinkService::ids($model->getOriginal('company_id')),
+                    \App\Services\ReverseLinkService::ids($model->company_id)
+                );
+            }
             if (in_array('products', $changes, true) || ($model->wasRecentlyCreated && $model->products)) {
                 self::syncProductLinks(
                     (int) $model->id,
@@ -62,10 +72,12 @@ class SupplierOrder extends Model
 
         static::deleted(function ($model) {
             self::syncProductLinks((int) $model->id, $model->products, null);
+            \App\Services\ReverseLinkService::sync('companies', self::COMPANY_FIELD, (int) $model->id, \App\Services\ReverseLinkService::ids($model->company_id), []);
         });
 
         static::restored(function ($model) {
             self::syncProductLinks((int) $model->id, null, $model->products);
+            \App\Services\ReverseLinkService::sync('companies', self::COMPANY_FIELD, (int) $model->id, [], \App\Services\ReverseLinkService::ids($model->company_id));
         });
     }
 

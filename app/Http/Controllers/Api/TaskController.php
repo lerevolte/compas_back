@@ -79,6 +79,7 @@ class TaskController extends Controller
                 'id' => $product['id'] ?? null,
                 'name' => $product['product_name'] ?? ($product['name'] ?? ''),
                 'price' => $product['product_price'] ?? null,
+                'purchase_price' => $product['product_purchase_price'] ?? ($product['purchase_price'] ?? null),
                 'count' => $product['product_count'] ?? null,
                 'weight' => $product['product_weight'] ?? null,
                 'volume' => $product['product_volume'] ?? 0,

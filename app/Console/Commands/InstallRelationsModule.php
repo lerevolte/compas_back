@@ -80,6 +80,10 @@ class InstallRelationsModule extends Command
                     continue;
                 }
                 $field = RelationFieldsService::field($slug, $target);
+                if (RelationFieldsService::isExcluded($slug, $target)) {
+                    $this->removeField($db, $slug, (int) $type->id, $field, $sectionId);
+                    continue;
+                }
                 $single = RelationFieldsService::isSingle($slug, $target);
                 if (!$sb->hasColumn($slug, $field)) {
                     $db->statement("ALTER TABLE `{$slug}` ADD COLUMN `{$field}` " . ($single ? 'INT NULL' : 'TEXT NULL'));
@@ -198,6 +202,26 @@ class InstallRelationsModule extends Command
             $db->table($slug)->where('id', $id)->update([$field => $value]);
         }
         $this->line("    [{$label}] {$slug}.{$field}: колонка переведена в " . ($single ? 'одиночную' : 'множественную') . ', значений ' . count($values));
+    }
+
+    private function removeField($db, string $slug, int $typeId, string $field, int $sectionId): void
+    {
+        $rows = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', $field)->get();
+        foreach ($rows as $row) {
+            ModuleLayoutService::detachField($db, $row, RelationFieldsService::MODULE, $sectionId);
+            $db->table('section_fields_sort')->where('field_id', $row->id)->delete();
+            $db->table('data_rows')->where('id', $row->id)->delete();
+        }
+        foreach ($db->table('settings')->where(['type' => 'menu', 'entity' => $slug])->get(['id', 'value']) as $menu) {
+            $tabs = json_decode($menu->value, true);
+            if (!is_array($tabs)) {
+                continue;
+            }
+            $kept = array_values(array_filter($tabs, fn ($tab) => ($tab['tab'] ?? null) !== $field));
+            if (count($kept) !== count($tabs)) {
+                $db->table('settings')->where('id', $menu->id)->update(['value' => json_encode($kept, JSON_UNESCAPED_SLASHES)]);
+            }
+        }
     }
 
     private function dropSingleTabs($db, string $slug, array $present, string $label): void

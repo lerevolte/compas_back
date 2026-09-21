@@ -64,7 +64,11 @@ class Company extends Model
                 }
                 $current[] = $optionValue;
                 $stored = $row->is_plural ? json_encode(array_values($current)) : (string) $optionValue;
-                \DB::table('companies')->where('id', $company->id)->update([$row->field => $stored]);
+                try {
+                    History::saveForObject('companies', [['id' => $company->id, $row->field => $row->is_plural ? array_values($current) : (string) $optionValue]], true, [], [], true);
+                } catch (\Throwable $e) {
+                }
+                \DB::table('companies')->where('id', $company->id)->update([$row->field => $stored, 'updated_at' => now()]);
                 $updated++;
             }
             return $updated;

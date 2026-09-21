@@ -651,6 +651,27 @@ class Table
     }
     public const SHIPPED_TITLE = 'Фактическое кол-во';
     public const SALE_PRICE_TITLE = 'Цена продажи';
+    public const PURCHASE_PRICE_TITLE = 'Цена закупки';
+    public const PURCHASE_PRICE_KEY = 'product_purchase_price';
+
+    private static function purchasePriceColumn(int $index): array
+    {
+        return array(
+            'id' => null,
+            'title' => self::PURCHASE_PRICE_TITLE,
+            'key' => self::PURCHASE_PRICE_KEY,
+            'width' => '200px',
+            'enabled' => 1,
+            'sort_order' => '',
+            'type' => 'number',
+            'fixed' => '',
+            'index' => $index,
+            'fixTarget' => '0px',
+            'read_only' => 0,
+            "mask" => "",
+            'is_another_title' => 0
+        );
+    }
 
     private static function shippedColumn(int $index): array
     {
@@ -702,7 +723,8 @@ class Table
                     'count' => $item->quantity,
                     'weight' => $item->weight,
                     'volume' => $item->volume ?? null,
-                    'price' => $item->price
+                    'price' => $item->price,
+                    'purchase_price' => $item->purchase_price ?? null
                 ],
                 'value' => $item->id
             );
@@ -727,7 +749,7 @@ class Table
             $table_columns = collect($tables['order_products']['fields']);
             $table_columns = $table_columns->keyBy('key')->toArray();
             foreach($table_columns as $key => $column) {
-                if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'remnant_name' && $key != 'product_name' && $key != 'product_id' && $key != 'product_price' && $key != 'product_count' && $key != 'product_weight' && $key != 'product_volume' && $key != 'product_sum' && $key != 'product_shipped' && $key != 'product_nds' && $key != 'product_nds_included' && $key != 'iconDrag' || $key == 'price' || $key == 'name' || $key == 'weight' || $key == 'volume' || $key == 'price')
+                if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'remnant_name' && $key != 'product_name' && $key != 'product_id' && $key != 'product_price' && $key != 'product_purchase_price' && $key != 'product_count' && $key != 'product_weight' && $key != 'product_volume' && $key != 'product_sum' && $key != 'product_shipped' && $key != 'product_nds' && $key != 'product_nds_included' && $key != 'iconDrag' || $key == 'price' || $key == 'name' || $key == 'weight' || $key == 'volume' || $key == 'price')
                     unset($table_columns[$key]);
             }
             unset($table_columns['iconDelete']);
@@ -1111,9 +1133,38 @@ class Table
 
         $table_columns = array_values($table_columns);
 
+        $hasPurchase = false;
         foreach($table_columns as $i => $column) {
-            if(($column['key'] ?? null) == 'product_price' && empty($column['is_another_title']))
+            if(($column['key'] ?? null) == self::PURCHASE_PRICE_KEY)
+                $hasPurchase = true;
+        }
+        if(!$hasPurchase) {
+            $inserted = [];
+            foreach($table_columns as $column) {
+                $inserted[] = $column;
+                if(($column['key'] ?? null) == 'product_price')
+                    $inserted[] = self::purchasePriceColumn(count($inserted));
+            }
+            if(count($inserted) == count($table_columns))
+                $inserted[] = self::purchasePriceColumn(count($inserted));
+            $table_columns = $inserted;
+            foreach($table_columns as $i => $column)
+                $table_columns[$i]['index'] = $i;
+        }
+
+        $isSupplierOrder = (string) $parentSlug === 'supplier_orders';
+        foreach($table_columns as $i => $column) {
+            $key = $column['key'] ?? null;
+            if($key == 'product_price' && empty($column['is_another_title']))
                 $table_columns[$i]['title'] = self::SALE_PRICE_TITLE;
+            if($key == self::PURCHASE_PRICE_KEY && empty($column['is_another_title']))
+                $table_columns[$i]['title'] = self::PURCHASE_PRICE_TITLE;
+            if($key == self::PURCHASE_PRICE_KEY) {
+                $table_columns[$i]['type'] = 'number';
+                $table_columns[$i]['read_only'] = 0;
+            }
+            if($key == 'product_price')
+                $table_columns[$i]['read_only'] = $isSupplierOrder ? 1 : 0;
         }
 
         if(in_array((string) $parentSlug, [\App\Services\ShipmentService::DOCUMENT, \App\Services\ShipmentService::RETURN_DOC, \App\Services\ShipmentService::RECEIPT_DOC], true)) {

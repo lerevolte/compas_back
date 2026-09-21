@@ -36,6 +36,7 @@ class InstallSaleDocsEntities extends Command
             ],
             'fields' => [
                 'contact_id' => ['type' => 'relation', 'title' => 'Контакт', 'details' => '{"table":"contacts"}', 'is_link' => 1, 'is_plural' => 1, 'relation_table' => 'contacts', 'after' => 'company_id'],
+                'photo' => ['type' => 'file', 'title' => 'Фото', 'show_file_name' => 1, 'is_default' => 1, 'hide' => 1],
             ],
         ],
         'product_returns' => [
@@ -307,7 +308,7 @@ SQL);
                 ->where('field', $field)
                 ->first();
             if ($existing) {
-                $patch = array_intersect_key($attrs, array_flip(['title', 'details', 'relation_table', 'is_plural', 'only_read', 'unit']));
+                $patch = array_intersect_key($attrs, array_flip(['title', 'details', 'relation_table', 'is_plural', 'only_read', 'unit', 'hide']));
                 $patch['is_remove'] = 0;
                 $db->table('data_rows')->where('id', $existing->id)->update($patch);
                 continue;

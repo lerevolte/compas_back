@@ -20,6 +20,8 @@ class InstallSupplierOrdersEntity extends Command
     public const COLOR = '#3F7FBF';
 
     public const PRODUCT_FIELD = 'supplier_order_id';
+    public const COMPANY_FIELD = 'supplier_order_id';
+    public const COMPANY_FIELD_TITLE = 'Заказы поставщикам';
     public const PRODUCT_FIELD_TITLE = 'Заказы поставщикам';
 
     public function handle(): int
@@ -211,10 +213,11 @@ SQL);
         $this->line("    [{$label}] {$slug}: data_type={$typeId}, полей добавлено {$added}");
 
         $this->installProductField($db, $label);
+        $this->installCompanyField($db, $label);
 
         try {
             if ($sb->hasTable('local_cache')) {
-                $db->table('local_cache')->whereIn('url', ['fields/' . $slug, 'fields/products'])->update(['updated_at' => $now]);
+                $db->table('local_cache')->whereIn('url', ['fields/' . $slug, 'fields/products', 'fields/companies'])->update(['updated_at' => $now]);
             }
         } catch (\Throwable $e) {
         }
@@ -235,6 +238,28 @@ SQL);
         $db->table('section_fields_sort')->whereIn('field_id', $ids)->delete();
         $db->table('data_rows')->whereIn('id', $ids)->delete();
         $this->line("    [{$label}] " . self::SLUG . ': поле «Оплата, руб» удалено');
+    }
+
+    private function installCompanyField($db, string $label): void
+    {
+        $result = \App\Services\ReverseLinkService::installField($db, 'companies', self::COMPANY_FIELD, self::COMPANY_FIELD_TITLE, self::SLUG);
+        if ($result === null) {
+            $this->line("    [{$label}] companies: сущности нет, поле «" . self::COMPANY_FIELD_TITLE . "» не добавлено");
+            return;
+        }
+        if ($result === 'created') {
+            $this->line("    [{$label}] companies: добавлено поле «" . self::COMPANY_FIELD_TITLE . "»");
+        }
+        $map = [];
+        foreach ($db->table(self::SLUG)->whereNull('deleted_at')->get(['id', 'company_id']) as $order) {
+            foreach (\App\Services\ReverseLinkService::ids($order->company_id) as $cid) {
+                $map[$cid][] = (int) $order->id;
+            }
+        }
+        $filled = \App\Services\ReverseLinkService::backfill($db, 'companies', self::COMPANY_FIELD, $map);
+        if ($filled) {
+            $this->line("    [{$label}] companies: связи с заказами поставщикам заполнены у {$filled} компаний");
+        }
     }
 
     private function installProductField($db, string $label): void

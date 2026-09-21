@@ -10,15 +10,16 @@ class InstallActionTypeField extends Command
     protected $signature = 'logistic:install-action-type
         {target=all-tenants : seeds | all-tenants | <tenant_id>}';
 
-    protected $description = 'Установить поле-статус «Тип действия» (action_type) у задач логистики (Выгрузка по умолчанию / Загрузка) и зеркальное поле у заказов покупателей, библиотеки задач и быстрых задач с сопоставлением значений';
+    protected $description = 'Установить поле-статус «Тип действия» (action_type) у задач логистики (Выгрузка по умолчанию / Загрузка / Приход от поставщика) и зеркальное поле у заказов покупателей, библиотеки задач и быстрых задач с сопоставлением значений';
 
     public const FIELD = 'action_type';
     public const TITLE = 'Тип действия';
     public const ENTITIES = ['logistic_tasks'];
     public const MIRROR_ENTITIES = ['deals', 'addresses', 'warehouses'];
     public const VALUES = [
-        ['value' => 'Выгрузка', 'color' => '#34C759'],
-        ['value' => 'Загрузка', 'color' => '#007AFF'],
+        ['value' => 'Выгрузка', 'color' => '#34C759', 'key' => 'unloading_value_id'],
+        ['value' => 'Загрузка', 'color' => '#007AFF', 'key' => 'loading_value_id'],
+        ['value' => 'Приход от поставщика', 'color' => '#AF52DE', 'key' => 'supply_value_id'],
     ];
 
     public function handle(): int
@@ -130,16 +131,17 @@ class InstallActionTypeField extends Command
             $details = json_decode((string) ($row->details ?? ($db->table('data_rows')->where('id', $fieldId)->value('details') ?? '')), true);
             $details = is_array($details) ? $details : [];
             $programIds = [];
-            foreach (['unloading_value_id', 'loading_value_id'] as $detailsKey) {
+            $keyByText = array_column(self::VALUES, 'key', 'value');
+            $detailsKeys = array_values($keyByText);
+            foreach ($detailsKeys as $detailsKey) {
                 $candidate = $details[$detailsKey] ?? null;
                 if (is_numeric($candidate) && $db->table('field_values')->where('field_id', $fieldId)->where('id', (int) $candidate)->exists()) {
                     $programIds[$detailsKey] = (int) $candidate;
                 }
             }
 
-            $keyByText = ['Выгрузка' => 'unloading_value_id', 'Загрузка' => 'loading_value_id'];
             foreach (self::VALUES as $def) {
-                $detailsKey = $keyByText[$def['value']];
+                $detailsKey = $def['key'];
                 if (isset($programIds[$detailsKey])) {
                     continue;
                 }
@@ -152,7 +154,7 @@ class InstallActionTypeField extends Command
                 }
             }
 
-            if (count($programIds) < 2) {
+            if (count(array_intersect_key($programIds, array_flip(['unloading_value_id', 'loading_value_id']))) < 2) {
                 $taken = array_values($programIds);
                 $existing = $db->table('field_values')
                     ->where('field_id', $fieldId)
@@ -170,7 +172,7 @@ class InstallActionTypeField extends Command
             }
 
             foreach (self::VALUES as $sort => $def) {
-                $detailsKey = $keyByText[$def['value']];
+                $detailsKey = $def['key'];
                 if (isset($programIds[$detailsKey])) {
                     $db->table('field_values')->where('id', $programIds[$detailsKey])->update(['is_hidden' => 0]);
                     continue;
@@ -184,12 +186,13 @@ class InstallActionTypeField extends Command
                 ]);
             }
 
-            $details['unloading_value_id'] = $programIds['unloading_value_id'];
-            $details['loading_value_id'] = $programIds['loading_value_id'];
+            foreach ($detailsKeys as $detailsKey) {
+                $details[$detailsKey] = $programIds[$detailsKey];
+            }
             $db->table('data_rows')->where('id', $fieldId)->update([
                 'details' => json_encode($details, JSON_UNESCAPED_UNICODE),
             ]);
-            $this->line("    [{$label}] {$slug}: программные значения закреплены — выгрузка id {$programIds['unloading_value_id']}, загрузка id {$programIds['loading_value_id']}");
+            $this->line("    [{$label}] {$slug}: программные значения закреплены — выгрузка id {$programIds['unloading_value_id']}, загрузка id {$programIds['loading_value_id']}, приход от поставщика id {$programIds['supply_value_id']}");
 
             $defaultId = $programIds['unloading_value_id'];
             if ($defaultId) {
@@ -232,7 +235,13 @@ class InstallActionTypeField extends Command
         }
         $taskDetails = json_decode((string) $taskField->details, true);
         $taskDetails = is_array($taskDetails) ? $taskDetails : [];
-        $taskValues = $db->table('field_values')->where('field_id', $taskField->id)->orderBy('sort')->orderBy('id')->get();
+        $supplyId = (int) ($taskDetails['supply_value_id'] ?? 0);
+        $taskValues = $db->table('field_values')
+            ->where('field_id', $taskField->id)
+            ->when($supplyId, fn ($q) => $q->where('id', '!=', $supplyId))
+            ->orderBy('sort')
+            ->orderBy('id')
+            ->get();
         $unloadingId = (int) ($taskDetails['unloading_value_id'] ?? 0);
 
         foreach (self::MIRROR_ENTITIES as $slug) {

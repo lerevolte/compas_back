@@ -24,9 +24,6 @@ class Task extends Model
             $user = Auth::user();
             if(!$model->user_id && $user)
                 $model->user_id = $user->id;
-            if (empty($model->number) && \Schema::hasColumn($model->getTable(), 'number')) {
-                $model->number = \App\Services\DocumentNumber::next();
-            }
        });
 
        static::saved(function($model)
