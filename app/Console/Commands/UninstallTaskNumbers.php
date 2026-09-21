@@ -11,10 +11,10 @@ class UninstallTaskNumbers extends Command
         {target=all-tenants : seeds | all-tenants | <tenant_id>}
         {--keep-column : не удалять колонку number из таблиц}';
 
-    protected $description = 'Убрать поле «Номер» и сквозную нумерацию у задач логистики и самовывозов';
+    protected $description = 'Убрать поле «Номер» и сквозную нумерацию у задач логистики, самовывозов и заказов поставщикам';
 
     public const FIELD = 'number';
-    public const ENTITIES = ['logistic_tasks', 'pickups'];
+    public const ENTITIES = ['logistic_tasks', 'pickups', 'supplier_orders'];
 
     public function handle(): int
     {

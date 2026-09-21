@@ -31,9 +31,6 @@ class SupplierOrder extends Model
             if (empty($model->date) && \Schema::hasColumn($model->getTable(), 'date')) {
                 $model->date = date('Y-m-d');
             }
-            if (empty($model->number) && \Schema::hasColumn($model->getTable(), 'number')) {
-                $model->number = \App\Services\DocumentNumber::next();
-            }
         });
 
         static::saving(function ($model) {

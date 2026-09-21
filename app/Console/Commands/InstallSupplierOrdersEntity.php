@@ -76,7 +76,6 @@ CREATE TABLE IF NOT EXISTS `{$slug}` (
   `deleted_at` timestamp NULL DEFAULT NULL,
   `choosed_at` timestamp NULL DEFAULT NULL,
   `name` text DEFAULT NULL,
-  `number` varchar(64) DEFAULT NULL,
   `date` date DEFAULT NULL,
   `photo` text DEFAULT NULL,
   `user_id` int(11) DEFAULT NULL,
@@ -135,7 +134,6 @@ SQL);
         $fields = [
             'id' => ['type' => 'number', 'title' => 'ID', 'only_read' => 1, 'is_default' => 1, 'is_program' => 1],
             'name' => ['type' => 'text', 'title' => 'Название', 'is_default' => 1, 'permanent_name' => 1],
-            'number' => ['type' => 'text', 'title' => 'Номер', 'only_read' => 1],
             'date' => ['type' => 'date', 'title' => 'Дата поставки'],
         ];
         if ($hasCompanies) {
