@@ -92,6 +92,11 @@ CREATE TABLE IF NOT EXISTS `{$slug}` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL);
+        foreach (self::TASK_COLUMNS as $column => $ddl) {
+            if (!$sb->hasColumn($slug, $column)) {
+                $db->statement("ALTER TABLE `{$slug}` ADD COLUMN `{$column}` {$ddl}");
+            }
+        }
 
         $type = $db->table('data_types')->where('slug', $slug)->first();
         $typeAttrs = [
@@ -153,6 +158,7 @@ SQL);
             'created_at' => ['type' => 'date', 'title' => 'Дата создания', 'only_read' => 1, 'is_default' => 1, 'hide' => 1, 'mobile_pages' => '0'],
             'updated_at' => ['type' => 'date', 'title' => 'Дата изменения', 'only_read' => 1, 'is_default' => 1, 'hide' => 1, 'mobile_pages' => '0'],
         ];
+        $fields += $this->taskFields($db, $hasCompanies);
 
         $this->removePaymentField($db, $typeId, $label);
 
@@ -161,7 +167,7 @@ SQL);
         foreach ($fields as $field => $attrs) {
             $existing = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', $field)->first();
             if ($existing) {
-                $patch = array_intersect_key($attrs, array_flip(['type', 'details', 'relation_table', 'is_plural', 'only_read', 'unit']));
+                $patch = array_intersect_key($attrs, array_flip(['type', 'details', 'relation_table', 'is_plural', 'only_read', 'unit', 'mask']));
                 $patch['is_remove'] = 0;
                 $db->table('data_rows')->where('id', $existing->id)->update($patch);
                 $sort++;
@@ -236,6 +242,57 @@ SQL);
         $db->table('section_fields_sort')->whereIn('field_id', $ids)->delete();
         $db->table('data_rows')->whereIn('id', $ids)->delete();
         $this->line("    [{$label}] " . self::SLUG . ': поле «Оплата, руб» удалено');
+    }
+
+    public const TASK_COLUMNS = [
+        'address' => 'LONGTEXT NULL',
+        'phone' => 'TEXT NULL',
+        'time' => 'TEXT NULL',
+        'contact' => 'TEXT NULL',
+        'car_requirements' => 'TEXT NULL',
+        'employee_requirements' => 'TEXT NULL',
+        'service_time' => 'INT NULL',
+        'delivery_price' => 'TEXT NULL',
+        'shipment_company_id' => 'TEXT NULL',
+    ];
+
+    public const TASK_FIELDS = [
+        'address' => ['type' => 'address', 'title' => 'Адрес'],
+        'phone' => ['type' => 'multi_text', 'title' => 'Телефон', 'is_plural' => 1],
+        'time' => ['type' => 'text', 'title' => 'Окно', 'mask' => '##:## - ##:##'],
+        'contact' => ['type' => 'text', 'title' => 'Контактное лицо'],
+        'car_requirements' => ['type' => 'select_dropdown', 'title' => 'Требования к машине', 'is_plural' => 1, 'details' => '{"options":[{"label":"Гидролифт","value":0},{"label":"Манипулятор","value":1},{"label":"Ручная","value":2}]}'],
+        'employee_requirements' => ['type' => 'select_dropdown', 'title' => 'Требования к сотруднику', 'is_plural' => 1, 'details' => '{"options":[{"label":"Гражданство РФ","value":0}]}'],
+        'service_time' => ['type' => 'number', 'title' => 'Время обслуживания'],
+        'delivery_price' => ['type' => 'number', 'title' => 'Цена доставки', 'unit' => 'руб'],
+        'shipment_company_id' => ['type' => 'relation', 'title' => 'Компания отгрузки', 'details' => '{"table":"companies"}', 'is_link' => 1, 'is_plural' => 0, 'relation_table' => 'companies'],
+    ];
+
+    private function taskFields($db, bool $hasCompanies): array
+    {
+        $taskTypeId = $db->table('data_types')->where('slug', 'logistic_tasks')->value('id');
+        $result = [];
+        foreach (self::TASK_FIELDS as $field => $attrs) {
+            if ($field === 'shipment_company_id' && !$hasCompanies) {
+                continue;
+            }
+            $source = $taskTypeId
+                ? $db->table('data_rows')->where('data_type_id', $taskTypeId)->where('field', $field)->where('is_remove', 0)->first()
+                : null;
+            if ($source && $source->type !== 'status') {
+                $attrs = array_merge($attrs, array_filter([
+                    'type' => $source->type,
+                    'title' => $source->title,
+                    'details' => $source->details,
+                    'mask' => $source->mask,
+                    'unit' => $source->unit,
+                    'relation_table' => $source->relation_table,
+                ], fn ($v) => $v !== null && $v !== ''), ['is_plural' => (int) $source->is_plural, 'is_link' => (int) $source->is_link]);
+            }
+            $result[$field] = $attrs;
+        }
+
+        return $result;
     }
 
     private function installCompanyField($db, string $label): void

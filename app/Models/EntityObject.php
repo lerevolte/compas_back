@@ -244,7 +244,14 @@ class EntityObject
                 $current->route_id = $request->route_id;
             }
             foreach ($model_fields as $mf) {
-                if (in_array($mf->type, ['relation', 'file', 'text_group', 'status', 'select_dropdown', 'redactor'])) continue;
+                if ($mf->type === 'status') {
+                    $explicit = \App\Models\Field::explicitStatusDefault($mf);
+                    if ($explicit && ($current->{$mf->field} === null || $current->{$mf->field} === '')) {
+                        $current->{$mf->field} = $explicit;
+                    }
+                    continue;
+                }
+                if (in_array($mf->type, ['relation', 'file', 'text_group', 'select_dropdown', 'redactor'])) continue;
                 if (empty($mf->set_default)) continue;
                 if (!isset($mf->default_value) || $mf->default_value === null || $mf->default_value === '') continue;
                 if ($current->{$mf->field} !== null && $current->{$mf->field} !== '') continue;

@@ -32,7 +32,55 @@ class ShipmentService
 
     public static function hasShippedColumn(string $slug): bool
     {
-        return self::isSource($slug) || $slug === 'deals';
+        return self::isSource($slug) || $slug === 'deals' || $slug === self::SUPPLIER;
+    }
+
+    public static function recalcSupplierReceived(int $orderId): bool
+    {
+        if (!ObjectRelation::ready() || !Schema::hasTable(self::SUPPLIER) || !Schema::hasColumn(self::SUPPLIER, 'products')) {
+            return false;
+        }
+        try {
+            $class = self::modelClass(self::SUPPLIER);
+            $order = $class ? $class::withTrashed()->find($orderId) : null;
+            if (!$order) {
+                return false;
+            }
+            $products = self::decode($order->products);
+            if (!count($products)) {
+                return false;
+            }
+            $received = self::receiptsUsage(self::SUPPLIER, $orderId);
+            $changed = false;
+            foreach ($products as $i => $product) {
+                if (!is_array($product)) {
+                    continue;
+                }
+                $value = self::lookup($received, $product);
+                if (!array_key_exists('shipped', $product) && $value == 0) {
+                    continue;
+                }
+                if (!array_key_exists('shipped', $product) || abs((float) ($product['shipped'] ?? 0) - $value) > 0.0001) {
+                    $products[$i]['shipped'] = $value == (int) $value ? (int) $value : $value;
+                    $changed = true;
+                }
+            }
+            if (!$changed) {
+                return false;
+            }
+            $order->products = json_encode($products, JSON_UNESCAPED_UNICODE);
+            $order->timestamps = false;
+            $order->saveQuietly();
+            $order->timestamps = true;
+            try {
+                \App\Events\ObjectUpdated::dispatch('ObjectUpdated', $order->getData(['products']));
+            } catch (\Throwable $e) {
+            }
+
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     public const ACTION_FIELD = 'action_type';

@@ -749,12 +749,12 @@ class Table
             $table_columns = collect($tables['order_products']['fields']);
             $table_columns = $table_columns->keyBy('key')->toArray();
             foreach($table_columns as $key => $column) {
-                if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'remnant_name' && $key != 'product_name' && $key != 'product_id' && $key != 'product_price' && $key != 'product_purchase_price' && $key != 'product_count' && $key != 'product_weight' && $key != 'product_volume' && $key != 'product_sum' && $key != 'product_shipped' && $key != 'product_nds' && $key != 'product_nds_included' && $key != 'iconDrag' || $key == 'price' || $key == 'name' || $key == 'weight' || $key == 'volume' || $key == 'price')
+                if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'remnant_name' && $key != 'product_name' && $key != 'product_id' && $key != 'product_price' && $key != 'product_purchase_price' && $key != 'product_count' && $key != 'product_weight' && $key != 'product_volume' && $key != 'product_sum' && $key != 'product_shipped' && $key != 'product_nds' && $key != 'product_nds_included' && $key != 'iconDrag' || $key == 'price' || $key == 'name' || $key == 'weight' || $key == 'volume' || $key == 'purchase_price')
                     unset($table_columns[$key]);
             }
             unset($table_columns['iconDelete']);
             foreach ($model_fields as $field) {
-                if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->field != 'price' && $field->field != 'name' && $field->field != 'weight' && $field->field != 'volume' && $field->field != 'price') {
+                if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->field != 'price' && $field->field != 'name' && $field->field != 'weight' && $field->field != 'volume' && $field->field != 'purchase_price') {
                     $table_columns[$field->field] = array(
                         'id' => $field->id,
                         'title' => $field->display_parent_name ? $field->display_parent_name.', '.$field->title : $field->title,
@@ -1079,7 +1079,7 @@ class Table
                         $field_values = $settings['list_values'][$field->id];
                     }
                 };
-                if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->type != 'password' && $field->field != 'name' &&  $field->field != 'weight' && $field->field != 'volume' && $field->field != 'price') {
+                if(!array_key_exists($field->field, $table_columns) && $field->type != 'text_group' && $field->type != 'password' && $field->field != 'name' &&  $field->field != 'weight' && $field->field != 'volume' && $field->field != 'price' && $field->field != 'purchase_price') {
                     $table_columns[$field->field] = array(
                         'id' => $field->id,
                         'title' => $field->display_parent_name ? $field->display_parent_name.', '.$field->title : $field->title,

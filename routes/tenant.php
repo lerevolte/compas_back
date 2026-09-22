@@ -457,6 +457,7 @@ Route::middleware([
         Route::post('logistic_tasks/{id}/saby-orders', [App\Http\Controllers\Api\SabyOrderController::class, 'store'])->name('saby.orders.store');
         Route::get('logistic_tasks/{id}/saby-orders/check', [App\Http\Controllers\Api\SabyOrderController::class, 'check'])->name('saby.orders.check');
         Route::post('saby-orders/{id}/refresh', [App\Http\Controllers\Api\SabyOrderController::class, 'refresh'])->name('saby.orders.refresh');
+        Route::post('saby-orders/{id}/update-data', [App\Http\Controllers\Api\SabyOrderController::class, 'updateData'])->name('saby.orders.update_data');
         Route::delete('saby-orders/{id}', [App\Http\Controllers\Api\SabyOrderController::class, 'destroy'])->name('saby.orders.destroy');
         Route::post('saby-orders/{id}/waybill', [App\Http\Controllers\Api\SabyOrderController::class, 'waybill'])->name('saby.orders.waybill');
         Route::get('saby/settings', [App\Http\Controllers\Api\SabyConfigController::class, 'show'])->name('saby.settings');

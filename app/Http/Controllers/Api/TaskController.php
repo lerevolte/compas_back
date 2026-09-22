@@ -107,6 +107,9 @@ class TaskController extends Controller
             if ($slug === 'deals') {
                 \App\Services\ShipmentService::recalcDealShipped((int) $id);
             }
+            if ($slug === \App\Services\ShipmentService::SUPPLIER) {
+                \App\Services\ShipmentService::recalcSupplierReceived((int) $id);
+            }
 
             return [];
         });

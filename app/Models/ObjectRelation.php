@@ -80,6 +80,8 @@ class ObjectRelation extends Model
                     \App\Services\ShipmentService::recalcForSource($slug, $id);
                 } elseif ($slug === 'deals') {
                     \App\Services\ShipmentService::recalcDealShipped($id);
+                } elseif ($slug === \App\Services\ShipmentService::SUPPLIER) {
+                    \App\Services\ShipmentService::recalcSupplierReceived($id);
                 }
             }
         } catch (\Throwable $e) {

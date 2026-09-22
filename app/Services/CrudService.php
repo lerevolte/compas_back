@@ -516,7 +516,7 @@ class CrudService
                     }
                 }
                 if($mf->type == 'status' && ($ob->{$mf->field} === null || $ob->{$mf->field} === '')) {
-                    $default_status = \App\Models\Field::getDefaultStatusValue($mf->id);
+                    $default_status = \App\Models\Field::explicitStatusDefault($mf) ?: \App\Models\Field::getDefaultStatusValue($mf->id);
                     if($default_status)
                         $ob->{$mf->field} = $default_status;
                 }

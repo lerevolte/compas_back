@@ -138,6 +138,21 @@ class Field extends Model
         return $numeric;
     }
 
+    public static function explicitStatusDefault($field): ?int
+    {
+        if (empty($field->set_default) || $field->default_value === null || $field->default_value === '' || !is_numeric($field->default_value)) {
+            return null;
+        }
+        $id = (int) $field->default_value;
+        foreach (self::getStatusesVisible($field->id) as $status) {
+            if ((int) $status->id === $id) {
+                return $id;
+            }
+        }
+
+        return null;
+    }
+
     public static function getHiddenFields(string $model)
     {
         $row_type = \DB::table('data_types')->where('name', $model)->first();

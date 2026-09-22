@@ -1383,14 +1383,7 @@ class SabyWaybillService
                     ];
                 }
                 $count = $this->number($product['count'] ?? 0);
-                $unitWeight = $this->number($product['weight'] ?? 0);
-                if ($unitWeight <= 0) {
-                    $unitWeight = $this->number($this->productAttr($product['id'] ?? null, 'weight', '0'));
-                }
-                $unitVolume = $this->number($product['volume'] ?? 0);
-                if ($unitVolume <= 0) {
-                    $unitVolume = $this->number($this->productAttr($product['id'] ?? null, 'volume', '0'));
-                }
+                [$unitWeight, $unitVolume] = $this->unitMetrics($product);
                 $items[$key]['count'] += $count;
                 $items[$key]['weight'] += $unitWeight * ($count ?: 1);
                 $items[$key]['volume'] += $unitVolume * ($count ?: 1);
@@ -1427,6 +1420,20 @@ class SabyWaybillService
         }
 
         return $cargo;
+    }
+
+    protected function unitMetrics(array $product): array
+    {
+        $weight = $this->number($product['weight'] ?? 0);
+        if ($weight <= 0) {
+            $weight = $this->number($this->productAttr($product['id'] ?? null, 'weight', '0'));
+        }
+        $volume = $this->number($product['volume'] ?? 0);
+        if ($volume <= 0) {
+            $volume = $this->number($this->productAttr($product['id'] ?? null, 'volume', '0'));
+        }
+
+        return [$weight, $volume];
     }
 
     protected function products($task): array

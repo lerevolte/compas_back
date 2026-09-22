@@ -131,6 +131,29 @@ class SabyOrderController extends Controller
         return response()->json(['data' => $this->present($order)]);
     }
 
+    public function updateData($orderId, Request $request)
+    {
+        $service = SabyOrderService::make();
+        if (!$service) {
+            return response()->json(['message' => 'Модуль Saby не настроен'], 422);
+        }
+        $order = SabyOrder::find($orderId);
+        if (!$order) {
+            return response()->json(['message' => 'Заказ не найден'], 404);
+        }
+        $vehicleType = $request->vehicle_type !== null && trim((string) $request->vehicle_type) !== '' ? (string) $request->vehicle_type : null;
+        $bodyType = $request->body_type !== null && trim((string) $request->body_type) !== '' ? (string) $request->body_type : null;
+        try {
+            $order = $service->updateOrder($order, $vehicleType, $bodyType);
+        } catch (SabyValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 422);
+        } catch (SabyException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json(['data' => $this->present($order)]);
+    }
+
     public function destroy($orderId)
     {
         $order = SabyOrder::find($orderId);

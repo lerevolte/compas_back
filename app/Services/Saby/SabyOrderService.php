@@ -196,6 +196,101 @@ class SabyOrderService extends SabyWaybillService
         return $order;
     }
 
+    public function updateOrder(SabyOrder $order, ?string $vehicleType = null, ?string $bodyType = null): SabyOrder
+    {
+        if (!$order->doc_id) {
+            throw new SabyException('У заказа нет документа в Saby — обновлять нечего');
+        }
+        $task = Task::find($order->task_id);
+        if (!$task) {
+            throw new SabyException('Задача заказа не найдена');
+        }
+        $currentIsLoading = (bool) $order->current_is_loading;
+        $pointId = $currentIsLoading ? $order->unloading_task_id : $order->loading_task_id;
+        $pointTask = $pointId ? Task::find($pointId) : null;
+        $massMethod = $order->mass_method !== null && $order->mass_method !== '' && isset(self::MASS_METHODS[(string) $order->mass_method])
+            ? (string) $order->mass_method
+            : null;
+        $payload = is_array($order->payload) ? $order->payload : [];
+        $vehicleType = $vehicleType ?? ($payload['ПараметрыТС']['Тип'] ?? null);
+        $bodyType = $bodyType ?? ($payload['ПараметрыТС']['ТипКузова'] ?? null);
+
+        $document = $this->client->call('СБИС.ПрочитатьДокумент', [
+            'Документ' => ['Идентификатор' => $order->doc_id, 'ДопПоля' => 'Подстановки'],
+        ]);
+        $this->applyOrderDocument($order, $document);
+        $stateCode = (string) ($document['Состояние']['Код'] ?? '0');
+        if ($stateCode !== '0' && $stateCode !== '') {
+            $order->save();
+            throw new SabyException('Заказ № ' . ($document['Номер'] ?? $order->number) . ' уже отправлен перевозчику (' . ($document['Состояние']['Название'] ?? $stateCode) . ') — изменить данные можно только в Saby');
+        }
+
+        $attachment = null;
+        foreach ((array) ($document['Вложение'] ?? []) as $item) {
+            if (($item['Тип'] ?? '') === 'ЗаказЗаявка' && (string) ($item['Подтип'] ?? '') === (string) self::ORDER_KND && (($item['Удален'] ?? 'Нет') !== 'Да')) {
+                $attachment = $item;
+                break;
+            }
+        }
+
+        $substitutions = $this->buildOrder($task, $pointTask, $massMethod, $currentIsLoading, $vehicleType, $bodyType);
+        if ($order->number) {
+            $substitutions['Документ']['Номер'] = $order->number;
+        }
+        if ($order->date) {
+            $substitutions['Документ']['Дата'] = $order->date;
+        }
+        $config = $this->client->config();
+        $generated = $this->client->call('СБИС.СгенерироватьВложение', [
+            'Документ' => [
+                'Вложение' => [[
+                    'Тип' => 'ЗаказЗаявка',
+                    'Подтип' => self::ORDER_KND,
+                    'ВерсияФормата' => (string) $config->param('order_format_version', self::FORMAT_VERSION),
+                    'ПодверсияФормата' => '',
+                    'Подстановка' => $substitutions,
+                ]],
+            ],
+        ]);
+        $file = $generated['Вложение'][0]['Файл'] ?? null;
+        if (!isset($file['ДвоичныеДанные'])) {
+            throw new SabyException('Saby не вернул сформированный файл заказа на перевозку');
+        }
+        $file['ДвоичныеДанные'] = $this->patchCargoDistribution($file['ДвоичныеДанные']);
+
+        $writePayload = [
+            'Идентификатор' => $order->doc_id,
+            'Тип' => self::ORDER_DOC_TYPE,
+            'Вложение' => [
+                array_filter([
+                    'Идентификатор' => $attachment['Идентификатор'] ?? ($order->attachment_id ?: null),
+                    'Файл' => [
+                        'Имя' => $attachment['Файл']['Имя'] ?? ($file['Имя'] ?? 'order.xml'),
+                        'ДвоичныеДанные' => $file['ДвоичныеДанные'],
+                    ],
+                ]),
+            ],
+        ];
+        $written = $this->client->call('СБИС.ЗаписатьДокумент', ['Документ' => $writePayload]);
+        $writtenAttachment = $written['Вложение'][0] ?? [];
+
+        $this->applyOrderDocument($order, $written);
+        $order->attachment_id = $writtenAttachment['Идентификатор'] ?? ($attachment['Идентификатор'] ?? $order->attachment_id);
+        $order->payload = $substitutions;
+        $order->error = null;
+        $order->synced_at = now();
+        $order->save();
+
+        $this->log('info', 'order data updated', [
+            'task_id' => $task->id,
+            'order_id' => $order->id,
+            'doc_id' => $order->doc_id,
+            'flc_errors' => $writtenAttachment['КоличествоОшибок'] ?? null,
+        ]);
+
+        return $order;
+    }
+
     public function linkPendingWaybills(int $limit = 30): int
     {
         $linked = 0;
@@ -503,8 +598,9 @@ class SabyOrderService extends SabyWaybillService
                 continue;
             }
             $count = $this->number($product['count'] ?? 0) ?: 1;
-            $sumWeight += $this->number($product['weight'] ?? 0) * $count;
-            $sumVolume += $this->number($product['volume'] ?? 0) * $count;
+            [$unitWeight, $unitVolume] = $this->unitMetrics($product);
+            $sumWeight += $unitWeight * $count;
+            $sumVolume += $unitVolume * $count;
         }
 
         return [$weight > 0 ? $weight : $sumWeight, $volume > 0 ? $volume : $sumVolume];
@@ -527,9 +623,10 @@ class SabyOrderService extends SabyWaybillService
                 $items[$key] = ['id' => $product['id'] ?? null, 'name' => $name, 'count' => 0.0, 'weight' => 0.0, 'volume' => 0.0];
             }
             $count = $this->number($product['count'] ?? 0);
+            [$unitWeight, $unitVolume] = $this->unitMetrics($product);
             $items[$key]['count'] += $count;
-            $items[$key]['weight'] += $this->number($product['weight'] ?? 0) * ($count ?: 1);
-            $items[$key]['volume'] += $this->number($product['volume'] ?? 0) * ($count ?: 1);
+            $items[$key]['weight'] += $unitWeight * ($count ?: 1);
+            $items[$key]['volume'] += $unitVolume * ($count ?: 1);
         }
 
         $positions = [];
