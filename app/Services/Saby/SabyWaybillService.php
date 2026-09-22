@@ -82,6 +82,7 @@ class SabyWaybillService
         if (!isset($file['ДвоичныеДанные'])) {
             throw new SabyException('Saby не вернул сформированный файл накладной');
         }
+        $file['ДвоичныеДанные'] = base64_encode($this->injectIndividualReceiver(base64_decode($file['ДвоичныеДанные']), $document));
 
         $payload = [
             'Тип' => self::DOC_TYPE,
@@ -299,7 +300,7 @@ class SabyWaybillService
         if (!isset($ourFile['ДвоичныеДанные'])) {
             throw new SabyException('Saby не вернул сформированный титул с грузополучателем');
         }
-        $merged = $this->mergeReceiver($theirXml, base64_decode($ourFile['ДвоичныеДанные']));
+        $merged = $this->mergeReceiver($theirXml, $this->injectIndividualReceiver(base64_decode($ourFile['ДвоичныеДанные']), $ourDocument));
 
         $payload = [
             'Идентификатор' => $docId,
@@ -378,6 +379,51 @@ class SabyWaybillService
         }
 
         return $response->body();
+    }
+
+    protected function injectIndividualReceiver(string $xml, array $document): string
+    {
+        $individual = $document['СодИнфГО']['СвГП']['РекИдентГП']['ИдСв']['СвФЛУч'] ?? null;
+        if (!is_array($individual) || $xml === '') {
+            return $xml;
+        }
+        $dom = new \DOMDocument();
+        if (!@$dom->loadXML($xml)) {
+            return $xml;
+        }
+        $xp = new \DOMXPath($dom);
+        $idNode = $xp->query('/Файл/Документ/СодИнфГО/СвГП/РекИдентГП/ИдСв')->item(0);
+        if (!$idNode) {
+            return $xml;
+        }
+        foreach (iterator_to_array($idNode->childNodes) as $child) {
+            if ($child instanceof \DOMElement) {
+                return $xml;
+            }
+        }
+        $node = $dom->createElement('СвФЛУч');
+        foreach (['ИННФЛ', 'ИныеСвед'] as $attr) {
+            $value = trim((string) ($individual[$attr] ?? ''));
+            if ($value !== '') {
+                $node->setAttribute($attr, mb_substr($value, 0, 255));
+            }
+        }
+        $fio = is_array($individual['ФИО'] ?? null) ? $individual['ФИО'] : [];
+        $fioNode = $dom->createElement('ФИО');
+        foreach (['Фамилия', 'Имя', 'Отчество'] as $attr) {
+            $value = trim((string) ($fio[$attr] ?? ''));
+            if ($value !== '') {
+                $fioNode->setAttribute($attr, $value);
+            }
+        }
+        if (!$fioNode->hasAttribute('Фамилия') || !$fioNode->hasAttribute('Имя')) {
+            return $xml;
+        }
+        $node->appendChild($fioNode);
+        $idNode->appendChild($node);
+        $result = $dom->saveXML();
+
+        return $result === false ? $xml : $result;
     }
 
     protected function mergeReceiver(string $theirXml, string $ourXml): string
@@ -683,6 +729,7 @@ class SabyWaybillService
         if (!isset($file['ДвоичныеДанные'])) {
             throw new SabyException('Saby не вернул сформированный файл накладной');
         }
+        $file['ДвоичныеДанные'] = base64_encode($this->injectIndividualReceiver(base64_decode($file['ДвоичныеДанные']), $ourDocument));
 
         $writePayload = [
             'Идентификатор' => $waybill->doc_id,
