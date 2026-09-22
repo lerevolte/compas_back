@@ -101,7 +101,16 @@ class SabyWaybillService
             $payload['Грузополучатель'] = $receiverParty;
         }
 
-        $written = $this->writeDocument($payload, ['ТранспортнаяКомпания']);
+        try {
+            $written = $this->writeDocument($payload, ['ТранспортнаяКомпания']);
+        } catch (SabyException $e) {
+            if (!isset($payload['Грузополучатель'])) {
+                throw $e;
+            }
+            $this->log('warning', 'waybill write with receiver failed, retry without receiver header', ['task_id' => $task->id, 'error' => $e->getMessage()]);
+            unset($payload['Грузополучатель']);
+            $written = $this->writeDocument($payload, ['ТранспортнаяКомпания']);
+        }
 
         $attachment = $written['Вложение'][0] ?? [];
 
@@ -305,7 +314,21 @@ class SabyWaybillService
         if (empty($payload['Вложение'][0]['Идентификатор'])) {
             unset($payload['Вложение'][0]['Идентификатор']);
         }
-        $written = $this->client->call('СБИС.ЗаписатьДокумент', ['Документ' => $payload]);
+        [$receiver, $receiverContact] = $this->waybillReceiver($task, $unloadingTask);
+        $receiverParty = $receiver ? $this->counterparty($receiver) : $this->contactCounterparty($receiverContact);
+        if (count($receiverParty)) {
+            $payload['Грузополучатель'] = $receiverParty;
+        }
+        try {
+            $written = $this->client->call('СБИС.ЗаписатьДокумент', ['Документ' => $payload]);
+        } catch (SabyException $e) {
+            if (!isset($payload['Грузополучатель'])) {
+                throw $e;
+            }
+            $this->log('warning', 'adopt: write with receiver failed, retry without receiver header', ['doc_id' => $docId, 'error' => $e->getMessage()]);
+            unset($payload['Грузополучатель']);
+            $written = $this->client->call('СБИС.ЗаписатьДокумент', ['Документ' => $payload]);
+        }
         $writtenAttachment = $written['Вложение'][0] ?? [];
 
         $values = [
@@ -1030,17 +1053,22 @@ class SabyWaybillService
         }
 
         $inn = $this->contactInn($contact);
-        if (strlen($inn) !== 12) {
+        $name = $this->splitName($this->contactName($contact));
+        if (empty($name['Фамилия']) && empty($name['Имя'])) {
             return [];
         }
-        $name = $this->splitName($this->contactName($contact));
-
-        return ['СвФЛ' => array_filter([
-            'ИНН' => $inn,
+        $party = ['СвФЛ' => array_filter([
+            'ИНН' => strlen($inn) === 12 ? $inn : null,
             'Фамилия' => $name['Фамилия'] ?? null,
             'Имя' => $name['Имя'] ?? null,
             'Отчество' => $name['Отчество'] ?? null,
         ])];
+        $info = $this->contactInfo($this->contactPhone($contact), $this->contactEmail($contact), '');
+        if (count($info)) {
+            $party['Контакт'] = $info;
+        }
+
+        return $party;
     }
 
     protected function contactOf(Task $task): ?Contact
