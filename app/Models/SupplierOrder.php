@@ -130,7 +130,7 @@ class SupplierOrder extends Model
             $v = isset($product['volume']) ? (float) $product['volume'] : 0;
             $totalWeight += $count * $w;
             $totalVolume += $count * $v;
-            $total += $count * (isset($product['purchase_price']) ? (float) $product['purchase_price'] : 0);
+            $total += \App\Services\ShipmentService::lineTotal($product, 'purchase_price');
         }
         if (\Schema::hasColumn($this->getTable(), 'weight')) {
             $this->weight = $totalWeight;

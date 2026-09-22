@@ -220,9 +220,9 @@ class SabyOrderService extends SabyWaybillService
         ]);
         $this->applyOrderDocument($order, $document);
         $stateCode = (string) ($document['Состояние']['Код'] ?? '0');
-        if ($stateCode !== '0' && $stateCode !== '') {
+        if (in_array($stateCode, ['7', '9'], true)) {
             $order->save();
-            throw new SabyException('Заказ № ' . ($document['Номер'] ?? $order->number) . ' уже отправлен перевозчику (' . ($document['Состояние']['Название'] ?? $stateCode) . ') — изменить данные можно только в Saby');
+            throw new SabyException('Заказ № ' . ($document['Номер'] ?? $order->number) . ' уже ' . ($stateCode === '7' ? 'утверждён' : 'отклонён') . ' перевозчиком — изменить данные можно только в Saby');
         }
 
         $attachment = null;

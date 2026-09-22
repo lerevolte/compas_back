@@ -36,8 +36,8 @@ class InstallSaleDocsEntities extends Command
             ],
             'fields' => [
                 'contact_id' => ['type' => 'relation', 'title' => 'Контакт', 'details' => '{"table":"contacts"}', 'is_link' => 1, 'is_plural' => 1, 'relation_table' => 'contacts', 'after' => 'company_id'],
-                'photo' => ['type' => 'file', 'title' => 'Фото', 'show_file_name' => 1, 'is_default' => 1, 'hide' => 1],
             ],
+            'remove_fields' => ['photo'],
         ],
         'product_returns' => [
             'title_singular' => 'Возврат от покупателя',
@@ -299,6 +299,18 @@ SQL);
                 $fields = $ordered;
             } else {
                 $fields[$field] = $attrs;
+            }
+        }
+
+        foreach ($meta['remove_fields'] ?? [] as $removed) {
+            unset($fields[$removed]);
+            $removedIds = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', $removed)->pluck('id');
+            if ($removedIds->count()) {
+                if ($db->getSchemaBuilder()->hasTable('section_fields_sort')) {
+                    $db->table('section_fields_sort')->whereIn('field_id', $removedIds)->delete();
+                }
+                $db->table('data_rows')->whereIn('id', $removedIds)->delete();
+                $this->line("    [{$label}] {$slug}: поле {$removed} удалено");
             }
         }
 

@@ -743,6 +743,22 @@ class ShipmentService
         return array_values($result);
     }
 
+    public static function lineTotal(array $line, string $priceKey = 'price'): float
+    {
+        $count = isset($line['count']) && is_numeric($line['count']) ? (float) $line['count'] : 0.0;
+        $price = isset($line[$priceKey]) && is_numeric($line[$priceKey]) ? (float) $line[$priceKey] : 0.0;
+        $total = $count * $price;
+        $rate = $line['nds'] ?? null;
+        $rate = is_array($rate) ? ($rate[0] ?? null) : $rate;
+        $included = $line['nds_included'] ?? null;
+        $included = is_array($included) ? ($included[0] ?? null) : $included;
+        if (is_numeric($rate) && (float) $rate > 0 && $included !== null && $included !== '' && (string) $included === '0') {
+            $total *= 1 + (float) $rate / 100;
+        }
+
+        return $total;
+    }
+
     public static function productsOf(string $slug, int $id): array
     {
         try {
