@@ -57,6 +57,8 @@ class EntityObject
         }
         return $q->exists();
     }
+    public const REVERSE_LINK_LIST_LIMIT = 10;
+
     protected static $list_value_cache = [];
 
     protected static function listValueFromTable($field, $id)
@@ -1499,6 +1501,25 @@ class EntityObject
                     $paginator = $entity_class::orderByRaw("FIELD(id, $sorted_values)");
                 break;
             } elseif($field->field == $sort_field) {
+                $sql_dir = $sort_order == 'asc' ? 'ASC' : 'DESC';
+                if($sort_field == 'id') {
+                    $paginator = $entity_class::orderByRaw("CAST(id AS DECIMAL) $sql_dir");
+                    break;
+                }
+                if(in_array($field->type, ['number', 'status', 'select_dropdown', 'checkbox']) && !$field->is_plural) {
+                    $paginator = $entity_class::orderByRaw("CAST(`$sort_field` AS DECIMAL(20,4)) $sql_dir, id $sql_dir");
+                    break;
+                }
+                if(in_array($field->type, ['date', 'datetime'])) {
+                    $paginator = $entity_class::orderByRaw("`$sort_field` $sql_dir, id $sql_dir");
+                    break;
+                }
+                if($sort_field != 'payment' && preg_match('/^[a-z0-9_]+$/i', $sort_field)) {
+                    $col = "`$sort_field`";
+                    $expr = "COALESCE(CASE WHEN JSON_VALID($col) THEN JSON_UNQUOTE(JSON_EXTRACT($col, '$.value')) END, $col)";
+                    $paginator = $entity_class::orderByRaw("$expr $sql_dir, id $sql_dir");
+                    break;
+                }
                 $arr = ['id', $sort_field];
                 if($sort_field == 'payment') {
                     $arr = array_merge($arr, ['sale_finish', 'discount_sum', 'sum']);
@@ -2057,6 +2078,8 @@ class EntityObject
                         $field_value = \App\Models\Field::relationIds($field, $item, isset($item->deleted_at) && $item->deleted_at);
                     } elseif($field->type == 'relation' && $field->is_plural) {
                         $field_value = \App\Models\Field::orderLinkIds($field, $field_value);
+                        if(\App\Models\Table::isReverseLinkField($field) && is_array($field_value) && count($field_value) > self::REVERSE_LINK_LIST_LIMIT)
+                            $field_value = array_slice($field_value, 0, self::REVERSE_LINK_LIST_LIMIT);
                     }
                     $data[$field->field] = $field_value;
                     $list_values = array();
