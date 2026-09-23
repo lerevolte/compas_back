@@ -335,7 +335,7 @@ class Settings extends Model
     //                 	}
     //                 }
     //                 if(isset($settings[$models[$model_id]]['perms'][$field->field]['read']) && $settings[$models[$model_id]]['perms'][$field->field]['read'] != 'disabled') {
-    //                 	if (\Schema::hasColumn($models[$model_id], $field->field)) {
+    //                 	if (\App\Helpers\SchemaCache::hasColumn($models[$model_id], $field->field)) {
     //                     	$settings[$models[$model_id]]['fields'][$field->field] = $field;
     //                     	$settings[$models[$model_id]]['field_data'][$field->field] = $all_fields_models[$field->id]->getData();
     //                 	}
@@ -501,6 +501,7 @@ class Settings extends Model
 		        $field_values = array();
 
 		        $table_objects = array();
+		        $table_lists = array();
 		        $relation_counts = array();
 		        $user_roles = [$user->role_id];//$user->roles_all()->pluck('id')->toArray();
 		        $permissions = array();
@@ -537,34 +538,31 @@ class Settings extends Model
 		                $field_values[$field->id] = array();
 		                if(isset($details['table'])) {
 		                    $type = isset($models_by_name[$details['table']]) ? $models_by_name[$details['table']] : null;
-	                        if(!\Schema::hasTable($details['table'])) {
-	                            // Центральный домен (admin_compas_main) не содержит
-	                            // тенантских таблиц вроде routes — пустой набор вместо
-	                            // ошибки "Base table or view not found".
-	                            $table_objects = collect();
+	                        if(!\App\Helpers\SchemaCache::hasTable($details['table'])) {
+	                            $list = collect();
 	                        } else {
 	                            if(!array_key_exists($details['table'], $relation_counts)) {
 	                                $count_query = \DB::table($details['table']);
-	                                if(\Schema::hasColumn($details['table'], 'deleted_at'))
+	                                if(\App\Helpers\SchemaCache::hasColumn($details['table'], 'deleted_at'))
 	                                    $count_query->whereNull('deleted_at');
 	                                $relation_counts[$details['table']] = $count_query->count();
 	                            }
 	                            if($relation_counts[$details['table']] > self::LAZY_LIST_THRESHOLD)
 	                                $settings['lazy_relations'][$field->id] = $details['table'];
-	                            if(isset($table_objects[$details['table']])) {
-	                                $table_objects = $table_objects[$details['table']];
+	                            if(isset($table_lists[$details['table']])) {
+	                                $list = $table_lists[$details['table']];
 	                            } else {
 	                                $list_query = $type
 	                                    ? $type->model_name::orderBy('choosed_at', 'DESC')->orderBy('name', 'ASC')->whereNull('deleted_at')
 	                                    : \DB::table($details['table'])->orderBy('choosed_at', 'DESC')->orderBy('name', 'ASC')->whereNull('deleted_at');
 	                                if(isset($settings['lazy_relations'][$field->id]))
 	                                    $list_query->limit(self::LAZY_LIST_PRELOAD);
-	                                $table_objects = $list_query->get();
+	                                $list = $list_query->get();
+	                                $table_lists[$details['table']] = $list;
 	                            }
 	                        }
-		                    $table_objects[$details['table']] = $table_objects;
-		                    $i = 0;
-		                    foreach ($table_objects[$details['table']] as $i => $object) {
+	                        $i = 0;
+	                        foreach ($list as $i => $object) {
 		                    	$avatar = isset($object->avatar) ? $object->avatar : (isset($object->photo) ? $object->photo : '');
 		                    	$avatar = isset($object->icon) ? $object->icon : $avatar;
 		                    	if($avatar) {
@@ -745,7 +743,7 @@ class Settings extends Model
 		                    	}
 		                    }
 		                    if(isset($settings[$models[$model_id]]['perms'][$field->field]['read']) && $settings[$models[$model_id]]['perms'][$field->field]['read'] != 'disabled') {
-		                    	if (\Schema::hasColumn($models[$model_id], $field->field)) {
+		                    	if (\App\Helpers\SchemaCache::hasColumn($models[$model_id], $field->field)) {
 		                        	$settings[$models[$model_id]]['fields'][$field->field] = $field;
 		                        	$settings[$models[$model_id]]['field_data'][$field->field] = $all_fields_models[$field->id]->getData();
 		                    	}
@@ -886,24 +884,24 @@ class Settings extends Model
 
         $cache[$field_id] = null;
         try {
-            $field = \DB::table('data_rows')->where('id', $field_id)->first(['data_type_id', 'field', 'relation_table']);
+            $meta = self::relation_meta();
+            $field = $meta['rows'][$field_id] ?? null;
             if(!$field || !$field->relation_table || $field->field === 'user_id') {
                 return null;
             }
-            $ownSlug = \DB::table('data_types')->where('id', $field->data_type_id)->value('slug');
-            $relatedTypeId = \DB::table('data_types')->where('slug', $field->relation_table)->value('id');
+            $ownSlug = $meta['type_slug'][$field->data_type_id] ?? null;
+            $relatedTypeId = $meta['slug_type'][$field->relation_table] ?? null;
             if(!$ownSlug || !$relatedTypeId) {
                 return null;
             }
-            $mirror = \DB::table('data_rows')
-                ->where('data_type_id', $relatedTypeId)
-                ->where('type', 'relation')
-                ->where('relation_table', $ownSlug)
-                ->where('is_plural', 0)
-                ->where('is_remove', 0)
-                ->where('field', '!=', 'user_id')
-                ->value('field');
-            if($mirror && \Schema::hasColumn($field->relation_table, $mirror)) {
+            $mirror = null;
+            foreach($meta['rows'] as $row) {
+                if($row->data_type_id == $relatedTypeId && $row->type === 'relation' && $row->relation_table === $ownSlug && $row->is_plural !== null && (int) $row->is_plural === 0 && $row->field !== 'user_id') {
+                    $mirror = $row->field;
+                    break;
+                }
+            }
+            if($mirror && \App\Helpers\SchemaCache::hasColumn($field->relation_table, $mirror)) {
                 $cache[$field_id] = array('table' => $field->relation_table, 'column' => $mirror);
             }
         } catch (\Throwable $e) {
@@ -1019,8 +1017,59 @@ class Settings extends Model
 
         return $hints ? $hints->value : 0;
     }
+	protected static $relation_meta = null;
+
+	public static function relation_meta(): array
+	{
+		if(self::$relation_meta === null) {
+			$rows = \DB::table('data_rows')->where('is_remove', 0)->orderBy('id')
+				->get(['id', 'data_type_id', 'field', 'type', 'relation_table', 'is_plural', 'details'])->keyBy('id')->all();
+			$types = \DB::table('data_types')->get(['id', 'slug']);
+			self::$relation_meta = array(
+				'rows' => $rows,
+				'type_slug' => $types->pluck('slug', 'id')->all(),
+				'slug_type' => $types->pluck('id', 'slug')->all(),
+			);
+		}
+		return self::$relation_meta;
+	}
+
+	public static function slug_affects_lists(string $slug): bool
+	{
+		$lazy = false;
+		try {
+			$settings = app('settings');
+			$lazy = is_array($settings) && in_array($slug, $settings['lazy_relations'] ?? array(), true);
+		} catch (\Throwable $e) {
+		}
+		$meta = self::relation_meta();
+		$ownTypeId = $meta['slug_type'][$slug] ?? null;
+		foreach($meta['rows'] as $row) {
+			if($row->type !== 'relation')
+				continue;
+			$details = $row->details ? json_decode($row->details, true) : null;
+			$unique = is_array($details) && isset($details['unique']);
+			if($unique && $ownTypeId && $row->data_type_id == $ownTypeId)
+				return true;
+			$target = is_array($details) && !empty($details['table']) ? $details['table'] : $row->relation_table;
+			if($target !== $slug)
+				continue;
+			if(!$lazy)
+				return true;
+		}
+		return false;
+	}
+
+	public static function clear_cache_for(string $slug): void
+	{
+		if(self::slug_affects_lists($slug))
+			self::clear_cache();
+	}
+
 	public static function clear_cache()
 	{
+		self::$relation_meta = null;
+		\App\Helpers\SchemaCache::reset();
 		// $keys = cache()->getMemcached()->getAllKeys();
         // $regex = tenant('id').':settings-*';
 

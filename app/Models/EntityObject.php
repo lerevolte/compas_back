@@ -33,7 +33,7 @@ class EntityObject
     protected static function tableHasDeletedAt(string $table): bool
     {
         if (!array_key_exists($table, self::$deleted_at_columns_cache)) {
-            self::$deleted_at_columns_cache[$table] = \Schema::hasColumn($table, 'deleted_at');
+            self::$deleted_at_columns_cache[$table] = \App\Helpers\SchemaCache::hasColumn($table, 'deleted_at');
         }
         return self::$deleted_at_columns_cache[$table];
     }
@@ -42,7 +42,7 @@ class EntityObject
     {
         $key = $table . '.' . $column;
         if (!array_key_exists($key, self::$columns_cache)) {
-            self::$columns_cache[$key] = \Schema::hasColumn($table, $column);
+            self::$columns_cache[$key] = \App\Helpers\SchemaCache::hasColumn($table, $column);
         }
         return self::$columns_cache[$key];
     }
@@ -2012,6 +2012,19 @@ class EntityObject
             }
         }
 
+        $eager = array();
+        $first_item = $paginator->items()[0] ?? null;
+        foreach($model_fields as $field) {
+            if($field->type == 'relation' && $field->is_plural && $field->relation_table && $first_item && method_exists($first_item, $field->relation_table))
+                $eager[] = $field->relation_table;
+        }
+        if(count($eager)) {
+            try {
+                $paginator->getCollection()->load(array_values(array_unique($eager)));
+            } catch (\Throwable $e) {
+            }
+        }
+
         foreach($model_fields as $field) {
             if($field->type != 'relation' || $field->is_plural)
                 continue;
@@ -2652,8 +2665,8 @@ class EntityObject
             }
         }
 
-        \App\Models\Settings::clear_cache();
-        $settings = \App\Models\Settings::get(true);
+        \App\Models\Settings::clear_cache_for($slug);
+        $settings = app('settings');
         $object = $entity_class::where('id', $new_id)->first();
         $data = $object->getData($changed_fields, $settings);
         \App\Events\ObjectUpdated::dispatch('ObjectCreated', $data, tenant('id'));

@@ -540,7 +540,7 @@ class CrudService
         if($new_object) {
             $ids[] = $new_object->id;
         }
-        $settings = \App\Models\Settings::get(true);
+        $settings = app('settings');
         $objects_collection = $entity_class::whereIntegerInRaw('id', $ids)->get();
         $objects = $objects_collection->keyBy('id');
         foreach($rows as $k => $row) {
@@ -557,7 +557,7 @@ class CrudService
                 \App\Events\ObjectUpdated::dispatch('ObjectUpdated', $data);
             }
         };
-        \App\Models\Settings::clear_cache();
+        \App\Models\Settings::clear_cache_for($slug);
         if($new_object) {
             if(!$ob['name'])
                 $ob['name'] = $entity->title_singular;
@@ -678,8 +678,7 @@ class CrudService
             \App\Events\ObjectUpdated::dispatch('ObjectRestored', $item->getData());
         }
 
-        \App\Models\Settings::clear_cache();
-        
+        \App\Models\Settings::clear_cache_for($slug);
 
         return ['data' => $items, 'status' => 200];
     }

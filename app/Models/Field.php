@@ -100,6 +100,20 @@ class Field extends Model
     {
         $relation = $object->{$field->relation_table}();
         $related = $relation->getRelated();
+        if (!$withTrashed && $object->relationLoaded($field->relation_table)) {
+            $loaded = $object->getRelation($field->relation_table);
+            if ($relation instanceof \Illuminate\Database\Eloquent\Relations\HasMany && !count($relation->getQuery()->getQuery()->orders ?? [])) {
+                $table = $related->getTable();
+                $hasCreated = \App\Helpers\SchemaCache::hasColumn($table, 'created_at');
+                $loaded = $loaded->sort(function ($a, $b) use ($hasCreated) {
+                    if ($hasCreated && (string) $a->created_at !== (string) $b->created_at) {
+                        return strcmp((string) $b->created_at, (string) $a->created_at);
+                    }
+                    return $b->id <=> $a->id;
+                })->values();
+            }
+            return $loaded->pluck('id')->toArray();
+        }
         if ($withTrashed && in_array(\Illuminate\Database\Eloquent\SoftDeletes::class, class_uses_recursive($related))) {
             $relation = $relation->withTrashed();
         }
