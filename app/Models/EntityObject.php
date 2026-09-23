@@ -68,6 +68,27 @@ class EntityObject
         return $found[(int) $id] ?? null;
     }
 
+    public static function linkedIds(string $slug, int $id, string $fieldKey, $settings = null): array
+    {
+        $settings = $settings ?? app('settings');
+        if(!$id || !isset($settings['models'][$slug]) || !$settings['models'][$slug]->enable || !isset($settings[$slug]['fields'][$fieldKey]))
+            return array();
+        $field = $settings[$slug]['fields'][$fieldKey];
+        $entity_class = $settings['models'][$slug]->model_name;
+        if(!class_exists($entity_class))
+            return array();
+        $query = in_array(SoftDeletes::class, class_uses_recursive($entity_class)) ? $entity_class::withTrashed() : $entity_class::query();
+        $object = $query->find($id);
+        if(!$object)
+            return array();
+        if($field->type == 'relation' && $field->is_plural && $field->relation_table && method_exists($object, $field->relation_table))
+            return \App\Models\Field::relationIds($field, $object, (bool) $object->deleted_at);
+        $raw = $object->{$fieldKey};
+        $ids = is_array($raw) ? $raw : (is_string($raw) && ValueHelper::isJson($raw) ? json_decode($raw, true) : ($raw ? array($raw) : array()));
+        $ids = is_array($ids) ? array_values(array_filter($ids, 'is_numeric')) : array();
+        return array_map('intval', \App\Models\Field::orderLinkIds($field, $ids));
+    }
+
     public static function preloadListValues($field, $values, array $list_values = []): void
     {
         if (!is_array($values)) return;
@@ -1336,6 +1357,17 @@ class EntityObject
         $sort_order = strtolower((string) $sort_order);
         if ($sort_order === 'null' || !in_array($sort_order, ['asc','desc'], true)) {
             $sort_order = 'desc';
+        }
+
+        $filter = is_array($request->filter) ? $request->filter : array();
+        if(!empty($filter['link_slug']) && !empty($filter['link_field'])) {
+            $link_ids = self::linkedIds((string) $filter['link_slug'], (int) ($filter['link_id'] ?? 0), (string) $filter['link_field'], $settings);
+            unset($filter['link_slug'], $filter['link_id'], $filter['link_field']);
+            if(count($link_ids))
+                $filter['id'] = $link_ids;
+            else
+                $filter = array();
+            $request->merge(['filter' => count($filter) ? $filter : null]);
         }
 
         if(!$request->filter && $request->is_slug) {
