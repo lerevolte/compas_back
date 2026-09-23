@@ -57,14 +57,62 @@ class EntityObject
         }
         return $q->exists();
     }
+    protected static $list_value_cache = [];
+
     protected static function listValueFromTable($field, $id)
     {
+        if (!$id || is_array($id)) return null;
+        $found = self::listValuesFromTable($field, [$id]);
+        return $found[(int) $id] ?? null;
+    }
+
+    public static function preloadListValues($field, $values, array $list_values = []): void
+    {
+        if (!is_array($values)) return;
+        $ids = [];
+        foreach ($values as $v) {
+            if ($v && !is_array($v) && !isset($list_values[$v])) $ids[] = $v;
+        }
+        if ($ids) self::listValuesFromTable($field, $ids);
+    }
+
+    protected static function listValuesFromTable($field, array $ids): array
+    {
         $table = self::relationTableOf($field);
-        if (!$table || !$id || is_array($id)) return null;
+        $result = [];
+        if (!$table) return $result;
+        $fieldKey = ($field->id ?? $field->field) . '|' . $table . '|';
+        $clean = [];
+        foreach ($ids as $v) {
+            if (is_numeric($v)) $clean[(int) $v] = true;
+        }
+        $missing = [];
+        foreach (array_keys($clean) as $id) {
+            if (array_key_exists($fieldKey . $id, self::$list_value_cache)) {
+                if (self::$list_value_cache[$fieldKey . $id]) $result[$id] = self::$list_value_cache[$fieldKey . $id];
+            } else {
+                $missing[] = $id;
+            }
+        }
+        foreach (array_chunk($missing, 1000) as $chunk) {
+            $rows = \DB::table($table)->whereIntegerInRaw('id', $chunk)->get()->keyBy('id');
+            $fvIds = [];
+            foreach ($rows as $row) {
+                $c = $row->color ?? '';
+                if ($c !== '' && is_numeric($c)) $fvIds[(int) $c] = true;
+            }
+            $fvColors = $fvIds ? \DB::table('field_values')->whereIntegerInRaw('id', array_keys($fvIds))->pluck('color', 'id')->toArray() : [];
+            foreach ($chunk as $id) {
+                $option = isset($rows[$id]) ? self::buildListValue($field, $table, $rows[$id], $fvColors) : null;
+                self::$list_value_cache[$fieldKey . $id] = $option;
+                if ($option) $result[$id] = $option;
+            }
+        }
+        return $result;
+    }
 
-        $object = \DB::table($table)->where('id', $id)->first();
-        if (!$object) return null;
-
+    protected static function buildListValue($field, string $table, $object, array $fvColors): array
+    {
         $text = $object->title
             ?? $object->display_name
             ?? $object->name
@@ -91,8 +139,7 @@ class EntityObject
             $color = \App\Helpers\ColorPalette::random();
             \DB::table($table)->where('id', $object->id)->update(['color' => $color]);
         } elseif ($color !== '' && is_numeric($color)) {
-            $fv = \DB::table('field_values')->where('id', (int) $color)->first();
-            $color = $fv->color ?? '';
+            $color = $fvColors[(int) $color] ?? '';
         }
 
         return [
@@ -431,6 +478,7 @@ class EntityObject
                         'localOptions' => array()
                     );
                     if(is_array($values)) {
+                        self::preloadListValues($field, $values, $list_values);
                         foreach($values as $val) {
                             if(isset($list_values[$val])) {
                                 $fields_data[$field->field]['value']['value'][] = $list_values[$val]['value'];
@@ -632,6 +680,7 @@ class EntityObject
                                 'localOptions' => array()
                             );
                             if(is_array($values)) {
+                                self::preloadListValues($subfield, $values, $list_values);
                                 foreach($values as $val) {
                                     if(isset($list_values[$val])) {
                                         $subfield_data['value']['value'][] = $list_values[$val]['value'];
@@ -944,6 +993,7 @@ class EntityObject
                         'localOptions' => array()
                     );
                     if(is_array($values)) {
+                        self::preloadListValues($field, $values, $list_values);
                         foreach($values as $val) {
                             if(isset($list_values[$val])) {
                                 $fields_data[$field->field]['value']['value'][] = $list_values[$val]['value'];
@@ -1962,6 +2012,20 @@ class EntityObject
             }
         }
 
+        foreach($model_fields as $field) {
+            if($field->type != 'relation' || $field->is_plural)
+                continue;
+            $lv = $settings['list_values'][$field->id] ?? array();
+            $single_ids = array();
+            foreach ($paginator->items() as $item) {
+                $v = $item->{$field->field};
+                if($v && !is_array($v) && is_numeric($v) && !isset($lv[$v]))
+                    $single_ids[] = $v;
+            }
+            if(count($single_ids))
+                self::listValuesFromTable($field, $single_ids);
+        }
+
         foreach ($paginator->items() as $item) {
             $data = array(
                 'id' => $item->id
@@ -2002,6 +2066,7 @@ class EntityObject
                             'localOptions' => array()
                         );
                         if(is_array($values)) {
+                            self::preloadListValues($field, $values, $list_values);
                             foreach($values as $val) {
                                 if(isset($list_values[$val])) {
                                     $data[$field->field]['value'][] = $list_values[$val]['value'];

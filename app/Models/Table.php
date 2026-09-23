@@ -620,6 +620,11 @@ class Table
         return $column;
     }
 
+    public static function isReverseLinkField($field): bool
+    {
+        return isset($field->type) && $field->type == 'relation' && !empty($field->is_plural) && !empty($field->only_read);
+    }
+
     public static function relationLabelValue(array $settings, $field, $item): array
     {
         if($field->is_plural && method_exists($item, $field->relation_table))
@@ -636,8 +641,12 @@ class Table
         ));
         if(count($localOptions) < count($values) && $field->relation_table) {
             $found = array_map(fn ($opt) => (int) $opt['value'], $localOptions);
-            foreach(array_diff($values, $found) as $missing) {
-                $row = \DB::table($field->relation_table)->where('id', $missing)->first();
+            $missingIds = array_values(array_diff($values, $found));
+            $rows = count($missingIds)
+                ? \DB::table($field->relation_table)->whereIntegerInRaw('id', $missingIds)->get()->keyBy('id')
+                : collect();
+            foreach($missingIds as $missing) {
+                $row = $rows[$missing] ?? null;
                 if($row) {
                     $text = $row->name ?? ($row->title ?? (string) $missing);
                     if(ValueHelper::isJson($text) && isset(json_decode($text, true)['value']))
@@ -729,7 +738,7 @@ class Table
                 'value' => $item->id
             );
             foreach($settings['products']['fields'] as $field) {
-                if($field->field == 'name')
+                if($field->field == 'name' || self::isReverseLinkField($field))
                     continue;
                 if($field->type == 'relation' && $field->relation_table) {
                     $option['label'][$field->field] = self::relationLabelValue($settings, $field, $item);

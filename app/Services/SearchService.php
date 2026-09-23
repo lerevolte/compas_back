@@ -238,6 +238,9 @@ class SearchService
                     
                     foreach($model_fields as $field) {
                         if($field->type != 'text_group' && $field->field != 'name' && $field->field != 'id' && (!isset($settings['products']['perms'][$field->field]['read']) || $settings['products']['perms'][$field->field]['read'])) {
+                            if(\App\Models\Table::isReverseLinkField($field)) {
+                                continue;
+                            }
                             if($field->type == 'relation' && $field->relation_table) {
                                 $data_product['label'][$field->field] = \App\Models\Table::relationLabelValue($settings, $field, $item);
                             } elseif($field->type == 'date') {
