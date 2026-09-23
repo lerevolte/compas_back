@@ -23,6 +23,9 @@ class InstallSupplierOrdersEntity extends Command
     public const COMPANY_FIELD = 'supplier_order_id';
     public const COMPANY_FIELD_TITLE = 'Заказы поставщикам';
     public const PRODUCT_FIELD_TITLE = 'Заказы поставщикам';
+    public const RECEIVER_FIELD = 'shipment_company_id';
+    public const RECEIVER_FIELD_TITLE = 'Компания получатель';
+    public const RECEIVER_FIELD_OLD_TITLES = ['Компания отгрузки'];
 
     public function handle(): int
     {
@@ -161,6 +164,9 @@ SQL);
         $fields += $this->taskFields($db, $hasCompanies);
 
         $this->removePaymentField($db, $typeId, $label);
+        if (self::renameReceiverField($db, $typeId)) {
+            $this->line("    [{$label}] {$slug}: поле «" . self::RECEIVER_FIELD . "» переименовано в «" . self::RECEIVER_FIELD_TITLE . "»");
+        }
 
         $sort = 0;
         $added = 0;
@@ -233,6 +239,15 @@ SQL);
         }
     }
 
+    public static function renameReceiverField($db, int $typeId): int
+    {
+        return $db->table('data_rows')
+            ->where('data_type_id', $typeId)
+            ->where('field', self::RECEIVER_FIELD)
+            ->whereIn('title', self::RECEIVER_FIELD_OLD_TITLES)
+            ->update(['title' => self::RECEIVER_FIELD_TITLE]);
+    }
+
     private function removePaymentField($db, int $typeId, string $label): void
     {
         $ids = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', 'payment')->pluck('id');
@@ -265,7 +280,7 @@ SQL);
         'employee_requirements' => ['type' => 'select_dropdown', 'title' => 'Требования к сотруднику', 'is_plural' => 1, 'details' => '{"options":[{"label":"Гражданство РФ","value":0}]}'],
         'service_time' => ['type' => 'number', 'title' => 'Время обслуживания'],
         'delivery_price' => ['type' => 'number', 'title' => 'Цена доставки', 'unit' => 'руб'],
-        'shipment_company_id' => ['type' => 'relation', 'title' => 'Компания отгрузки', 'details' => '{"table":"companies"}', 'is_link' => 1, 'is_plural' => 0, 'relation_table' => 'companies'],
+        'shipment_company_id' => ['type' => 'relation', 'title' => self::RECEIVER_FIELD_TITLE, 'details' => '{"table":"companies"}', 'is_link' => 1, 'is_plural' => 0, 'relation_table' => 'companies'],
     ];
 
     private function taskFields($db, bool $hasCompanies): array
@@ -282,7 +297,7 @@ SQL);
             if ($source && $source->type !== 'status') {
                 $attrs = array_merge($attrs, array_filter([
                     'type' => $source->type,
-                    'title' => $source->title,
+                    'title' => $field === self::RECEIVER_FIELD ? null : $source->title,
                     'details' => $source->details,
                     'mask' => $source->mask,
                     'unit' => $source->unit,
