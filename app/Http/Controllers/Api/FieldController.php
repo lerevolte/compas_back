@@ -380,16 +380,18 @@ class FieldController extends Controller
             return response()->json(['error' => 'Field not found'], 404);
         }
         
+        if ($field->is_permanent) {
+            return response()->json(['message' => 'Это программное поле, его нельзя удалить'], 403);
+        }
+
         $entity = DB::table('data_types')->where('id', $field->data_type_id)->first();
 
-        // 1. Сначала меняем структуру БД (Это нельзя обернуть в транзакцию в MySQL)
         if (Schema::hasColumn($entity->slug, $field->field)) {
             Schema::table($entity->slug, function ($table) use ($field) {
                 $table->dropColumn($field->field);
             });
         }
 
-        // 2. Затем удаляем метаданные внутри транзакции (для целостности данных)
         DB::transaction(function () use ($field, $id) {
             DB::table('data_rows')->where('id', $id)->delete();
             DB::table('data_rows')->where('group_id', $id)->update(['group_id' => null]);

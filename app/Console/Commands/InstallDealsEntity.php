@@ -281,11 +281,11 @@ class InstallDealsEntity extends Command
             if (!$db->getSchemaBuilder()->hasColumn($slug, 'deal_id')) {
                 $db->statement("ALTER TABLE `{$slug}` ADD COLUMN `deal_id` INT NULL");
             }
-            $exists = $db->table('data_rows')
+            $existing = $db->table('data_rows')
                 ->where('data_type_id', $type->id)
-                ->where('field', 'deal_id')
-                ->exists();
-            if ($exists) {
+                ->where('field', 'deal_id');
+            if ($existing->exists()) {
+                $existing->update(['is_permanent' => 1]);
                 continue;
             }
             $sectionId = (int) ($db->table('field_sections')
@@ -305,7 +305,7 @@ class InstallDealsEntity extends Command
                 'visible_always' => 1, 'label_color' => '', 'section_id' => $sectionId, 'group_id' => null,
                 'sort' => $maxSort + 1, 'button_name' => 'Загрузить', 'show_file_image' => 0, 'hide' => 0,
                 'is_plural' => 1, 'roles_read' => '', 'roles_write' => '', 'is_remove' => 0,
-                'mobile_pages' => '', 'only_read' => 0, 'is_permanent' => 0, 'show_file_name' => 0,
+                'mobile_pages' => '', 'only_read' => 0, 'is_permanent' => 1, 'show_file_name' => 0,
                 'external_link' => '', 'is_external_link' => 0, 'module' => '', 'is_link' => 1,
                 'unit' => '', 'module_section_id' => null, 'is_default' => 0, 'is_inactive' => 0,
                 'blocked_changes' => 0, 'permanent_required' => 0, 'permanent_name' => 0,

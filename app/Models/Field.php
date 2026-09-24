@@ -94,62 +94,17 @@ class Field extends Model
     	return $fields;
     }
 
-    private static array $createdAtCache = [];
-
     public static function relationIds($field, $object, bool $withTrashed = false): array
     {
-        $relation = $object->{$field->relation_table}();
-        $related = $relation->getRelated();
         if (!$withTrashed && $object->relationLoaded($field->relation_table)) {
-            $loaded = $object->getRelation($field->relation_table);
-            if ($relation instanceof \Illuminate\Database\Eloquent\Relations\HasMany && !count($relation->getQuery()->getQuery()->orders ?? [])) {
-                $table = $related->getTable();
-                $hasCreated = \App\Helpers\SchemaCache::hasColumn($table, 'created_at');
-                $loaded = $loaded->sort(function ($a, $b) use ($hasCreated) {
-                    if ($hasCreated && (string) $a->created_at !== (string) $b->created_at) {
-                        return strcmp((string) $b->created_at, (string) $a->created_at);
-                    }
-                    return $b->id <=> $a->id;
-                })->values();
-            }
-            return $loaded->pluck('id')->toArray();
+            return $object->getRelation($field->relation_table)->pluck('id')->toArray();
         }
-        if ($withTrashed && in_array(\Illuminate\Database\Eloquent\SoftDeletes::class, class_uses_recursive($related))) {
+        $relation = $object->{$field->relation_table}();
+        if ($withTrashed && in_array(\Illuminate\Database\Eloquent\SoftDeletes::class, class_uses_recursive($relation->getRelated()))) {
             $relation = $relation->withTrashed();
-        }
-        if ($relation instanceof \Illuminate\Database\Eloquent\Relations\HasMany && !count($relation->getQuery()->getQuery()->orders ?? [])) {
-            $table = $related->getTable();
-            if (!array_key_exists($table, self::$createdAtCache)) {
-                try {
-                    self::$createdAtCache[$table] = \Schema::hasColumn($table, 'created_at');
-                } catch (\Throwable $e) {
-                    self::$createdAtCache[$table] = false;
-                }
-            }
-            if (self::$createdAtCache[$table]) {
-                $relation = $relation->orderByDesc($table . '.created_at');
-            }
-            $relation = $relation->orderByDesc($table . '.id');
         }
 
         return $relation->get()->pluck('id')->toArray();
-    }
-
-    public static function orderLinkIds($field, $ids)
-    {
-        if (!is_array($ids) || count($ids) < 2 || $field->type != 'relation' || !$field->is_plural) {
-            return $ids;
-        }
-        if (!$field->only_read && !str_starts_with((string) $field->field, 'related_')) {
-            return $ids;
-        }
-        $numeric = array_values(array_filter($ids, 'is_numeric'));
-        if (count($numeric) !== count($ids)) {
-            return $ids;
-        }
-        rsort($numeric, SORT_NUMERIC);
-
-        return $numeric;
     }
 
     public static function explicitStatusDefault($field): ?int
@@ -373,7 +328,7 @@ class Field extends Model
                 $list_values += \App\Models\Settings::resolve_list_values($settings, $field->id, $data);
         }
         if($field->type == 'relation' && $field->is_plural) {
-            $values = self::orderLinkIds($field, $data);
+            $values = $data;
             $data = array();
             if(is_array($values)) {
                 foreach($values as $val) {
@@ -426,8 +381,6 @@ class Field extends Model
                 $field_value = self::relationIds($field, $current);
             } elseif(!is_array($field_value)) {
                 $field_value = $field_value === null || $field_value === '' ? [] : [$field_value];
-            } else {
-                $field_value = self::orderLinkIds($field, $field_value);
             }
         }
 
@@ -814,10 +767,13 @@ class Field extends Model
             if($value && !is_int($value) && !is_array($value) && is_array($list = json_decode($value, true)) || is_array($value) && $list = $value) {
                 if($field->type == 'address' && is_array($list)) {
                     $res = $list['text'];
-                } elseif($field->field== 'products' && is_array($list)) {
+                } elseif($field->field == 'products' && is_array($list)) {
                     $res = array();
                     foreach($list as $product) {
-                        $res[] = $product['name'].' <b>'.$product['count'].'шт.</b>';
+                        if(!is_array($product))
+                            continue;
+                        $name = is_array($product['name'] ?? null) ? ($product['name'][0] ?? '') : ($product['name'] ?? '');
+                        $res[] = $name.' <b>'.($product['count'] ?? 0).' шт.</b>';
                     }
                     $res = implode(', ', $res);
                 } elseif($field->type == 'file' && is_array($list)) {

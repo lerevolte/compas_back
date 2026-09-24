@@ -41,7 +41,7 @@ class Address extends Model
         if (\Schema::hasColumn($this->getTable(), 'weight')) {
             $row['weight'] = $this->weight;
         }
-        $objects = History::saveForObject($this->getTable(), array($row));
+        $objects = History::saveForObject($this->getTable(), array($row), true, [], [], true);
         $this->save();
         $data = $this->getData($objects['changed_fields']);
         \App\Events\ObjectUpdated::dispatch('ObjectUpdated', $data);

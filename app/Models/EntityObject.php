@@ -86,7 +86,7 @@ class EntityObject
         $raw = $object->{$fieldKey};
         $ids = is_array($raw) ? $raw : (is_string($raw) && ValueHelper::isJson($raw) ? json_decode($raw, true) : ($raw ? array($raw) : array()));
         $ids = is_array($ids) ? array_values(array_filter($ids, 'is_numeric')) : array();
-        return array_map('intval', \App\Models\Field::orderLinkIds($field, $ids));
+        return array_map('intval', $ids);
     }
 
     public static function preloadListValues($field, $values, array $list_values = []): void
@@ -442,8 +442,6 @@ class EntityObject
                             self::employeeReverseIds($field, $current->id, $isTrashedCurrent)
                         )));
                     }
-                } elseif ($field->type == 'relation' && $field->is_plural) {
-                    $field_value = \App\Models\Field::orderLinkIds($field, $field_value);
                 }
                 if ($slug == 'routes' && $field->field == 'task_id' && $field->type == 'relation') {
                     $tasks_query = $current->tasks();
@@ -956,8 +954,6 @@ class EntityObject
                             self::employeeReverseIds($field, $current->id)
                         )));
                     }
-                } elseif($field->type == 'relation' && $field->is_plural) {
-                    $field_value = \App\Models\Field::orderLinkIds($field, $field_value);
                 }
                 if($slug == 'routes' && $field->field == 'task_id' && $field->type == 'relation') {
                     $field_value = $current->tasks()->get()->pluck('id')->toArray();
@@ -2109,7 +2105,6 @@ class EntityObject
                         $relation_table = $field->relation_table;
                         $field_value = \App\Models\Field::relationIds($field, $item, isset($item->deleted_at) && $item->deleted_at);
                     } elseif($field->type == 'relation' && $field->is_plural) {
-                        $field_value = \App\Models\Field::orderLinkIds($field, $field_value);
                         if(\App\Models\Table::isReverseLinkField($field) && is_array($field_value) && count($field_value) > self::REVERSE_LINK_LIST_LIMIT)
                             $field_value = array_slice($field_value, 0, self::REVERSE_LINK_LIST_LIMIT);
                     }

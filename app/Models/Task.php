@@ -231,7 +231,11 @@ class Task extends Model
                     'weight' => $this->weight,
                     'volume' => $this->volume,
                 )
-            )
+            ),
+            true,
+            [],
+            [],
+            true
         );
         $this->save();
         $data = $this->getData($objects['changed_fields']);

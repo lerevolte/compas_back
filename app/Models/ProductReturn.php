@@ -66,6 +66,18 @@ class ProductReturn extends Model
         } else {
             $this->sum = $total > 0 ? rtrim(rtrim(number_format($total, 2, '.', ''), '0'), '.') : null;
         }
+        History::saveForObject(
+            $this->getTable(),
+            [[
+                'id' => $this->id,
+                'products' => $this->products,
+                'sum' => $this->sum,
+            ]],
+            true,
+            [],
+            [],
+            true
+        );
         $this->saveQuietly();
         self::recalcParentShipments((int) $this->id);
     }

@@ -71,6 +71,18 @@ class ExpenseInvoice extends Model
         } elseif ($total > 0) {
             $this->sum = rtrim(rtrim(number_format($total, 2, '.', ''), '0'), '.');
         }
+        History::saveForObject(
+            $this->getTable(),
+            [[
+                'id' => $this->id,
+                'products' => $this->products,
+                'sum' => $this->sum,
+            ]],
+            true,
+            [],
+            [],
+            true
+        );
         $this->saveQuietly();
         $this->regeneratePdf();
         \App\Services\ShipmentService::recalcForDocument((int) $this->id);

@@ -150,7 +150,11 @@ class SupplierOrder extends Model
                 'id' => $this->id,
                 'products' => $this->products,
                 'sum' => $this->sum,
-            ]]
+            ]],
+            true,
+            [],
+            [],
+            true
         );
         $this->save();
         $data = $this->getData($objects['changed_fields']);
