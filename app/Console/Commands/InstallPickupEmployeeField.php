@@ -62,6 +62,8 @@ class InstallPickupEmployeeField extends Command
             'related_field' => null,
             'is_link' => 1,
             'is_remove' => 0,
+            'hide' => 0,
+            'visible_always' => 1,
         ];
 
         $existing = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', self::FIELD)->first();
