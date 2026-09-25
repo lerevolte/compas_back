@@ -122,7 +122,8 @@ class InstallEmployeeGeolocationStatus extends Command
             $this->line("    [{$label}] employees: создано поле " . self::FIELD . " (id {$fieldId})");
         }
 
-        foreach (self::VALUES as $sort => $def) {
+        $existing = $db->table('field_values')->where('field_id', $fieldId)->where('is_hidden', '!=', 1)->count();
+        foreach ($existing >= count(self::VALUES) ? [] : self::VALUES as $sort => $def) {
             $value = $db->table('field_values')
                 ->where('field_id', $fieldId)
                 ->where('value', $def['value'])
@@ -143,7 +144,8 @@ class InstallEmployeeGeolocationStatus extends Command
         $defaultId = $db->table('field_values')
             ->where('field_id', $fieldId)
             ->where('value', self::VALUES[0]['value'])
-            ->value('id');
+            ->value('id')
+            ?: $db->table('field_values')->where('field_id', $fieldId)->where('is_hidden', '!=', 1)->orderBy('id')->value('id');
         if ($defaultId) {
             $filled = $db->table('employees')
                 ->where(fn ($q) => $q->whereNull(self::FIELD)->orWhere(self::FIELD, ''))

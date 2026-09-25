@@ -32,9 +32,14 @@ class GeolocationStatusService
         if (!$fieldId) {
             return [];
         }
-        $values = DB::table('field_values')->where('field_id', $fieldId)->pluck('id', 'value');
-        $on = $values[self::ON] ?? null;
-        $off = $values[self::OFF] ?? null;
+        $values = DB::table('field_values')->where('field_id', $fieldId)->where('is_hidden', '!=', 1)->orderBy('id')->get(['id', 'value']);
+        $byName = $values->pluck('id', 'value');
+        $on = $byName[self::ON] ?? null;
+        $off = $byName[self::OFF] ?? null;
+        if (!$on || !$off) {
+            $off = $values[0]->id ?? null;
+            $on = $values[1]->id ?? null;
+        }
 
         return $on && $off ? ['on' => (string) $on, 'off' => (string) $off] : [];
     }
