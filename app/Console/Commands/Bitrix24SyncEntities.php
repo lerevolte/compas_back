@@ -40,7 +40,7 @@ class Bitrix24SyncEntities extends Command
 
         foreach ($tenants as $tenant) {
             try {
-                $tenant->run(function () use ($tenant, $chunk) {
+                $tenant->run(fn () => \Modules\Bitrix24\Services\B24EntitySync::asModuleUser(function () use ($tenant, $chunk) {
                     if (!B24EntitySync::ready() && !\Modules\Bitrix24\Services\B24ProductSync::ready()) {
                         return;
                     }
@@ -89,7 +89,7 @@ class Bitrix24SyncEntities extends Command
                             $this->info("  ✓ {$tenant->id}: categories={$result['categories']}, products={$result['products']}{$more}");
                         }
                     }
-                });
+                }));
             } catch (\Throwable $e) {
                 $this->error("  ✗ {$tenant->id}: " . $e->getMessage());
             }

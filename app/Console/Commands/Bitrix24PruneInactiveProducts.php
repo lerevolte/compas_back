@@ -29,7 +29,7 @@ class Bitrix24PruneInactiveProducts extends Command
 
         foreach ($tenants as $tenant) {
             try {
-                $tenant->run(function () use ($tenant, $dryRun) {
+                $tenant->run(fn () => \Modules\Bitrix24\Services\B24EntitySync::asModuleUser(function () use ($tenant, $dryRun) {
                     $svc = \Modules\Bitrix24\Services\B24ProductSync::make();
                     if (!$svc) {
                         $this->line("  − {$tenant->id}: синк товаров не настроен, пропуск");
@@ -38,7 +38,7 @@ class Bitrix24PruneInactiveProducts extends Command
                     $result = $svc->pruneInactive($dryRun);
                     $verb = $dryRun ? 'к удалению' : 'удалено';
                     $this->info("  ✓ {$tenant->id}: неактивных в B24={$result['inactive']}, {$verb} локально={$result['deleted']}");
-                });
+                }));
             } catch (\Throwable $e) {
                 $this->error("  ✗ {$tenant->id}: " . $e->getMessage());
             }

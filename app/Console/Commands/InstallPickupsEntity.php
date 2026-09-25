@@ -19,7 +19,7 @@ class InstallPickupsEntity extends Command
     public const TITLE_PLURAL = 'Записи на самовывоз';
 
     public const EXCLUDE_FIELDS = [
-        'route_id', 'employee_id', 'address', 'plan_time', 'service_time', 'car_type',
+        'route_id', 'address', 'plan_time', 'service_time', 'car_type',
         'car_requirements', 'employee_requirements', 'delivery_price', 'point_status',
         'kommentarii_k_statusu_voditelem_3570', 'saby_waybills', 'na_priemke', 'sort', 'b24_id', 'priority',
     ];

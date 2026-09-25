@@ -47,6 +47,20 @@ class Pickup extends Model
         });
 
         static::saved(function ($model) {
+            if ($model->wasRecentlyCreated) {
+                return;
+            }
+            foreach ([\App\Services\StorehouseService::WRITE_OFF, \App\Services\StorehouseService::RECEIPT] as $storehouseField) {
+                if ($model->wasChanged($storehouseField)) {
+                    try {
+                        \App\Services\StorehouseService::cascadeFromParent($model->getTable(), (int) $model->id, $storehouseField);
+                    } catch (\Throwable $e) {
+                    }
+                }
+            }
+        });
+
+        static::saved(function ($model) {
             $changes = $model->getChanges();
             if (array_key_exists('deal_id', $changes) || ($model->wasRecentlyCreated && $model->deal_id)) {
                 try {

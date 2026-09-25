@@ -49,6 +49,13 @@ class SupplierOrder extends Model
                 } catch (\Throwable $e) {
                 }
             }
+            if ((in_array('contact_id', $changes, true) || $model->wasRecentlyCreated) && $model->contact_id) {
+                $added = array_diff(
+                    \App\Services\TypeTagService::ids($model->contact_id),
+                    $model->wasRecentlyCreated ? [] : \App\Services\TypeTagService::ids($model->getOriginal('contact_id'))
+                );
+                Contact::tagFrom('supplier_orders', $added);
+            }
             if (in_array('company_id', $changes, true) || $model->wasRecentlyCreated) {
                 \App\Services\ReverseLinkService::sync(
                     'companies',

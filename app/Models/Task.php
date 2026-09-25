@@ -127,6 +127,20 @@ class Task extends Model
             }
        });
 
+       static::saved(function ($model) {
+           if ($model->wasRecentlyCreated) {
+               return;
+           }
+           foreach ([\App\Services\StorehouseService::WRITE_OFF, \App\Services\StorehouseService::RECEIPT] as $storehouseField) {
+               if ($model->wasChanged($storehouseField)) {
+                   try {
+                       \App\Services\StorehouseService::cascadeFromParent($model->getTable(), (int) $model->id, $storehouseField);
+                   } catch (\Throwable $e) {
+                   }
+               }
+           }
+       });
+
        static::deleted(function($model) {
            if ($model->route_id) {
                $route = Route::find($model->route_id);

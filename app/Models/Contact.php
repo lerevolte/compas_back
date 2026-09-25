@@ -14,6 +14,32 @@ class Contact extends Model
     protected $guarded = ['id'];
 
     public const B24_PUSH_FIELDS = ['name', 'emails', 'phones', 'contact_type'];
+    public const TYPE_FIELD_TITLE = 'Тип контакта';
+    public const TYPE_BY_ENTITY = ['deals' => 'Клиент', 'supplier_orders' => 'Поставщик'];
+
+    public static function addType($contactIds, string $label): int
+    {
+        return \App\Services\TypeTagService::add('contacts', self::TYPE_FIELD_TITLE, $contactIds, $label, function (int $id, string $field) {
+            if (!class_exists(\Modules\Bitrix24\Services\B24EntitySync::class) || \Modules\Bitrix24\Services\B24EntitySync::$muted) {
+                return;
+            }
+            $contact = self::find($id);
+            if (!$contact || !$contact->b24_id) {
+                return;
+            }
+            try {
+                \Modules\Bitrix24\Services\B24EntitySync::make()?->pushContact($contact, [$field]);
+            } catch (\Throwable $e) {
+                \Log::channel('bitrix24')->warning('contact type push failed', ['contact_id' => $id, 'error' => $e->getMessage()]);
+            }
+        });
+    }
+
+    public static function tagFrom(string $slug, $contactIds): int
+    {
+        $label = self::TYPE_BY_ENTITY[$slug] ?? null;
+        return $label ? self::addType($contactIds, $label) : 0;
+    }
 
     public static function boot()
     {

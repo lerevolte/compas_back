@@ -11,6 +11,27 @@ class History extends Model
 {
     protected $fillable = ['entity', 'entity_id', 'user_id', 'text', 'module', 'old_value', 'new_value', 'event', 'field', 'color', 'is_relation'];
 
+    public static ?int $actingUserId = null;
+
+    public static function currentUserId(): ?int
+    {
+        if (self::$actingUserId) {
+            return self::$actingUserId;
+        }
+        return \Auth::user() ? (\Auth::user()->exists ? \Auth::user()->id : null) : 1;
+    }
+
+    public static function actingAs(?int $userId, callable $callback)
+    {
+        $previous = self::$actingUserId;
+        self::$actingUserId = $userId ?: $previous;
+        try {
+            return $callback();
+        } finally {
+            self::$actingUserId = $previous;
+        }
+    }
+
     public function userId() {
         return $this->belongsToMany(Route::class, 'user_histories', 'history_id', 'user_id');
     }
@@ -589,7 +610,7 @@ class History extends Model
     {
         if(!count($settings))
             $settings = \App\Models\Settings::get();//\App\Models\Settings::get();
-        $user_id = \Auth::user() ? (\Auth::user()->exists ? \Auth::user()->id : null) : 1;
+        $user_id = self::currentUserId();
         $model_fields = $settings[$slug]['fields'];
         $entity = $settings['models'][$slug];
         if(!$entity || !$entity->enable) {
@@ -1025,7 +1046,7 @@ class History extends Model
     public static function createObject($slug, $object)
     {
         $settings = app('settings');//get_settings();
-        $user_id = \Auth::user() ? (\Auth::user()->exists ? \Auth::user()->id : null) : 1;
+        $user_id = self::currentUserId();
         $model_fields = $settings[$slug]['fields'];
         $entity = $settings['models'][$slug];
         if(!$entity || !$entity->enable) {
@@ -1183,7 +1204,7 @@ class History extends Model
 
     public static function deleteObject($slug, $object)
     {
-        $user_id = \Auth::user() ? (\Auth::user()->exists ? \Auth::user()->id : null) : 1;
+        $user_id = self::currentUserId();
         $history_text = 'Удалена запись: '.$object->id;
         $history = new \App\Models\History(['entity' => $slug, 'event' => 'OBJECT_DELETED', 'entity_id' => $object->id, 'user_id' => $user_id, 'text' => $history_text]);
         $history->save();

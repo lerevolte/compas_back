@@ -34,7 +34,7 @@ class SyncTenantEntities implements ShouldQueue
         if (!$tenant) {
             return;
         }
-        $tenant->run(function () {
+        $tenant->run(fn () => B24EntitySync::asModuleUser(function () {
             $svc = B24EntitySync::ready() ? B24EntitySync::make() : null;
             if ($svc) {
                 $result = $svc->runIncremental($this->chunk);
@@ -46,6 +46,6 @@ class SyncTenantEntities implements ShouldQueue
                 $result = $productSvc->runIncremental($this->chunk);
                 Log::channel('bitrix24')->info('product-sync: tenant job done', ['tenant' => $this->tenantId] + $result);
             }
-        });
+        }));
     }
 }

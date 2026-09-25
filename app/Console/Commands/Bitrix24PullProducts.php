@@ -27,7 +27,7 @@ class Bitrix24PullProducts extends Command
 
         foreach ($tenants as $tenant) {
             try {
-                $tenant->run(function () use ($tenant) {
+                $tenant->run(fn () => \Modules\Bitrix24\Services\B24EntitySync::asModuleUser(function () use ($tenant) {
                     $svc = \Modules\Bitrix24\Services\B24ProductSync::make();
                     if (!$svc) {
                         $this->line("  − {$tenant->id}: синк товаров не настроен, пропуск");
@@ -36,7 +36,7 @@ class Bitrix24PullProducts extends Command
                     $categories = $svc->pullCategories();
                     $products = $svc->pullProducts(null);
                     $this->info("  ✓ {$tenant->id}: categories={$categories}, products={$products['count']}");
-                });
+                }));
             } catch (\Throwable $e) {
                 $this->error("  ✗ {$tenant->id}: " . $e->getMessage());
             }

@@ -20,7 +20,7 @@ class BackfillB24DealInvoices extends Command
         if ($target === 'all-tenants') {
             foreach (Tenant::get() as $tenant) {
                 try {
-                    $tenant->run(fn () => $this->applyTo((string) $tenant->id));
+                    $tenant->run(fn () => \Modules\Bitrix24\Services\B24EntitySync::asModuleUser(fn () => $this->applyTo((string) $tenant->id)));
                     $this->info("  ✓ {$tenant->id}");
                 } catch (\Throwable $e) {
                     $this->error("  ✗ {$tenant->id}: " . $e->getMessage());
@@ -40,7 +40,7 @@ class BackfillB24DealInvoices extends Command
             $this->error("Портал '{$target}' не найден");
             return self::FAILURE;
         }
-        $tenant->run(fn () => $this->applyTo((string) $target));
+        $tenant->run(fn () => \Modules\Bitrix24\Services\B24EntitySync::asModuleUser(fn () => $this->applyTo((string) $target)));
         $this->info("Готово: {$target}");
         return self::SUCCESS;
     }

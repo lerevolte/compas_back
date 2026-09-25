@@ -43,6 +43,46 @@ class B24EntitySync
         return $svc;
     }
 
+    public const MODULE_USER_EMAIL = 'bitrix24@module.compas.pro';
+    public const MODULE_USER_NAME = 'Модуль Битрикс24';
+
+    public static function moduleUserId(bool $create = true): ?int
+    {
+        try {
+            if (!Schema::hasTable('users')) {
+                return null;
+            }
+            $id = DB::table('users')->where('email', self::MODULE_USER_EMAIL)->value('id');
+            if ($id || !$create) {
+                return $id ? (int) $id : null;
+            }
+            $row = [
+                'name' => self::MODULE_USER_NAME,
+                'email' => self::MODULE_USER_EMAIL,
+                'password' => bcrypt(\Illuminate\Support\Str::random(40)),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+            if (Schema::hasColumn('users', 'color')) {
+                $row['color'] = '#2FC6F6';
+            }
+            return (int) DB::table('users')->insertGetId($row);
+        } catch (\Throwable $e) {
+            Log::channel('bitrix24')->warning('entity-sync: module user failed', ['error' => $e->getMessage()]);
+            return null;
+        }
+    }
+
+    public static function asModuleUser(callable $callback)
+    {
+        $configured = false;
+        try {
+            $configured = Schema::hasTable((new Config())->getTable()) && (bool) Config::first()?->webhook;
+        } catch (\Throwable $e) {
+        }
+        return History::actingAs($configured ? self::moduleUserId() : null, $callback);
+    }
+
     public static function ready(): bool
     {
         try {
@@ -325,13 +365,81 @@ class B24EntitySync
         $contacts = $this->pullContacts($sinceContacts, $chunk);
         $write('b24_contacts_synced_at', ($contacts['more'] && $contacts['last_modify']) ? $contacts['last_modify'] : $started);
 
+        $invoices = ['count' => 0, 'more' => false];
+        if ($this->paymentInvoicesReady()) {
+            $sinceInvoices = $read('b24_invoices_synced_at');
+            if ($sinceInvoices) {
+                $invoices = $this->pullInvoices($sinceInvoices, $chunk);
+                $write('b24_invoices_synced_at', ($invoices['more'] && $invoices['last_modify']) ? $invoices['last_modify'] : $started);
+            } else {
+                $write('b24_invoices_synced_at', $started);
+            }
+        }
+
         return [
             'init' => false,
             'deals' => $deals['count'],
             'contacts' => $contacts['count'],
             'companies' => $companies['count'],
-            'more' => $deals['more'] || $contacts['more'] || $companies['more'],
+            'invoices' => $invoices['count'],
+            'more' => $deals['more'] || $contacts['more'] || $companies['more'] || $invoices['more'],
         ];
+    }
+
+    public function pullInvoices(?string $since = null, int $limit = 0): array
+    {
+        if (!$this->paymentInvoicesReady()) {
+            return ['count' => 0, 'last_modify' => null, 'more' => false];
+        }
+        $filter = [];
+        if ($since) {
+            $filter['>DATE_UPDATE'] = $since;
+        }
+        $invoices = $this->b24All('crm.invoice.list', [
+            'filter' => $filter,
+            'select' => ['*', 'UF_*'],
+            'order'  => $since ? ['DATE_UPDATE' => 'ASC'] : ['ID' => 'ASC'],
+        ], $limit);
+        $more = $limit > 0 && count($invoices) >= $limit;
+        if ($limit > 0) {
+            $invoices = array_slice($invoices, 0, $limit);
+        }
+
+        $count = 0;
+        $lastModify = null;
+        foreach (array_chunk(array_values(array_filter($invoices, fn ($r) => is_array($r) && !empty($r['ID']))), 20) as $chunkRows) {
+            $cmd = [];
+            foreach ($chunkRows as $row) {
+                $cmd['inv_' . $row['ID']] = 'crm.invoice.get?id=' . $row['ID'];
+                if ($this->bankRequisitesReady()) {
+                    $cmd['link_' . $row['ID']] = 'crm.requisite.link.list?filter[ENTITY_TYPE_ID]=' . self::INVOICE_ENTITY_TYPE . '&filter[ENTITY_ID]=' . $row['ID'];
+                }
+            }
+            $res = $this->b24Batch($cmd);
+            foreach ($chunkRows as $row) {
+                $id = (string) $row['ID'];
+                try {
+                    $deal = null;
+                    if (!empty($row['UF_DEAL_ID'])) {
+                        $localId = $this->localIdByB24('deals', $row['UF_DEAL_ID']);
+                        $deal = $localId ? Deal::find($localId) : $this->pullDealById($row['UF_DEAL_ID']);
+                    }
+                    $full = isset($res['inv_' . $id]) && is_array($res['inv_' . $id]) ? $res['inv_' . $id] : $row;
+                    $link = array_key_exists('link_' . $id, $res) ? $this->firstRow($res['link_' . $id]) : null;
+                    self::$muted = true;
+                    try {
+                        $this->upsertInvoiceFromB24($full, $deal, $link);
+                    } finally {
+                        self::$muted = false;
+                    }
+                    $count++;
+                    $lastModify = $row['DATE_UPDATE'] ?? $lastModify;
+                } catch (\Throwable $e) {
+                    Log::channel('bitrix24')->warning('entity-sync: invoice pull failed', ['invoice_id' => $id, 'error' => $e->getMessage()]);
+                }
+            }
+        }
+        return ['count' => $count, 'last_modify' => $lastModify, 'more' => $more];
     }
 
     public function pullDeals(?string $since = null, int $limit = 0): array
@@ -1450,7 +1558,7 @@ class B24EntitySync
             $history = new History([
                 'entity'    => $slug,
                 'entity_id' => $id,
-                'user_id'   => null,
+                'user_id'   => History::currentUserId(),
                 'event'     => 'OBJECT_CREATED',
                 'text'      => 'Создана запись: ' . $id . ' (синхронизировано из Bitrix24)',
             ]);
@@ -1727,10 +1835,6 @@ class B24EntitySync
             if (!$model) {
                 $model = new Company();
                 $model->name = $title !== '' ? $title : ('Компания #' . $b24Id);
-                $meta = $this->companyTypeMeta();
-                if ($meta) {
-                    $model->{$meta->field} = $meta->is_plural ? json_encode([$meta->value]) : $meta->value;
-                }
             } elseif ($model->trashed()) {
                 $model->deleted_at = null;
             }
@@ -1763,41 +1867,6 @@ class B24EntitySync
         } finally {
             self::$muted = false;
         }
-    }
-
-    private $companyTypeMeta = null;
-
-    private function companyTypeMeta(): ?object
-    {
-        if ($this->companyTypeMeta === null) {
-            $this->companyTypeMeta = false;
-            $typeId = DB::table('data_types')->where('slug', 'companies')->value('id');
-            $row = $typeId ? DB::table('data_rows')
-                ->where('data_type_id', $typeId)
-                ->where('type', 'select_dropdown')
-                ->where('title', 'Тип компании')
-                ->where('is_remove', 0)
-                ->first() : null;
-            if ($row && Schema::hasColumn('companies', $row->field)) {
-                $value = null;
-                $details = json_decode($row->details ?? '', true);
-                foreach ((is_array($details) ? ($details['options'] ?? []) : []) as $option) {
-                    if (is_array($option) && mb_strtolower(trim((string) ($option['label'] ?? ''))) === 'клиент') {
-                        $value = $option['value'];
-                        break;
-                    }
-                }
-                if ($value !== null) {
-                    $this->companyTypeMeta = (object) [
-                        'field' => $row->field,
-                        'value' => $value,
-                        'is_plural' => (bool) $row->is_plural,
-                    ];
-                }
-            }
-        }
-
-        return $this->companyTypeMeta ?: null;
     }
 
     public const COMPANY_REQUISITE_FIELDS = [

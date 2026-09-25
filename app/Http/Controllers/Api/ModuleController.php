@@ -411,6 +411,9 @@ class ModuleController extends Controller
             'enabled' => 1
         ]);
         $module->enable();
+        if (strtolower($module->getName()) === 'bitrix24' && class_exists(\Modules\Bitrix24\Services\B24EntitySync::class)) {
+            \Modules\Bitrix24\Services\B24EntitySync::moduleUserId();
+        }
 
         $now = Carbon::now();
         if(\DB::table('local_cache')->where(['url' => 'sidebar', 'user_id' => \Auth::user()->id])->exists())

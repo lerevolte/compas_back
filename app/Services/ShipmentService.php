@@ -47,10 +47,7 @@ class ShipmentService
                 return false;
             }
             $products = self::decode($order->products);
-            if (!count($products)) {
-                return false;
-            }
-            $received = self::receiptsUsage(self::SUPPLIER, $orderId);
+            $received = self::supplierReceivedUsage($orderId);
             $changed = false;
             foreach ($products as $i => $product) {
                 if (!is_array($product)) {
@@ -65,22 +62,62 @@ class ShipmentService
                     $changed = true;
                 }
             }
-            if (!$changed) {
-                return false;
+            if ($changed) {
+                $order->products = json_encode($products, JSON_UNESCAPED_UNICODE);
+                $order->timestamps = false;
+                $order->saveQuietly();
+                $order->timestamps = true;
+                try {
+                    \App\Events\ObjectUpdated::dispatch('ObjectUpdated', $order->getData(['products']));
+                } catch (\Throwable $e) {
+                }
             }
-            $order->products = json_encode($products, JSON_UNESCAPED_UNICODE);
-            $order->timestamps = false;
-            $order->saveQuietly();
-            $order->timestamps = true;
             try {
-                \App\Events\ObjectUpdated::dispatch('ObjectUpdated', $order->getData(['products']));
+                self::updateShipmentStatus(self::SUPPLIER, $order, $products, $received);
             } catch (\Throwable $e) {
             }
 
-            return true;
+            return $changed;
         } catch (\Throwable $e) {
             return false;
         }
+    }
+
+    public static function supplierReceivedUsage(int $orderId): array
+    {
+        $result = ['id' => [], 'name' => [], 'price_id' => [], 'price_name' => []];
+        if (!Schema::hasTable(self::RECEIPT_DOC)) {
+            return $result;
+        }
+        $documentIds = ObjectRelation::where('source_slug', self::SUPPLIER)
+            ->where('source_id', $orderId)
+            ->where('target_slug', self::RECEIPT_DOC)
+            ->pluck('target_id')
+            ->all();
+        $taskIds = ObjectRelation::where('source_slug', self::SUPPLIER)
+            ->where('source_id', $orderId)
+            ->whereIn('target_slug', self::SOURCES)
+            ->get(['target_slug', 'target_id']);
+        foreach ($taskIds as $task) {
+            $documentIds = array_merge($documentIds, ObjectRelation::where('source_slug', $task->target_slug)
+                ->where('source_id', $task->target_id)
+                ->where('target_slug', self::RECEIPT_DOC)
+                ->pluck('target_id')
+                ->all());
+        }
+        $documentIds = array_values(array_unique(array_map('intval', $documentIds)));
+        if (!count($documentIds)) {
+            return $result;
+        }
+        $query = DB::table(self::RECEIPT_DOC)->whereIn('id', $documentIds);
+        if (Schema::hasColumn(self::RECEIPT_DOC, 'deleted_at')) {
+            $query->whereNull('deleted_at');
+        }
+        foreach ($query->pluck('products') as $products) {
+            self::accumulate($result, $products);
+        }
+
+        return $result;
     }
 
     public const ACTION_FIELD = 'action_type';
@@ -367,6 +404,13 @@ class ShipmentService
                 if ($parent && $parent[0] === 'deals') {
                     self::recalcDealShipped((int) $parent[1]);
                 }
+                $supplier = ObjectRelation::where('source_slug', self::SUPPLIER)
+                    ->where('target_slug', $slug)
+                    ->where('target_id', $id)
+                    ->value('source_id');
+                if ($supplier) {
+                    self::recalcSupplierReceived((int) $supplier);
+                }
             } catch (\Throwable $e) {
             }
 
@@ -393,8 +437,9 @@ class ShipmentService
         $hasAny = false;
         $full = false;
         $lines = 0;
+        $services = self::serviceIds(array_map(fn ($p) => is_array($p) ? ($p['id'] ?? 0) : 0, $products));
         foreach ($products as $product) {
-            if (!is_array($product)) {
+            if (!is_array($product) || in_array((int) ($product['id'] ?? 0), $services, true)) {
                 continue;
             }
             $count = (float) ($product['count'] ?? 0);
@@ -413,9 +458,15 @@ class ShipmentService
                 $full = false;
             }
         }
-        $label = !$lines || !$hasAny ? 'Не отгружено' : ($full ? 'Отгружено полностью' : 'Отгружено частично');
+        $index = !$lines || !$hasAny ? 0 : ($full ? 2 : 1);
+        $label = ['Не отгружено', 'Отгружено частично', 'Отгружено полностью'][$index];
 
         $valueId = DB::table('field_values')->where('field_id', $fieldId)->where('value', $label)->value('id');
+        if (!$valueId) {
+            $ordered = DB::table('field_values')->where('field_id', $fieldId)->where('is_hidden', '!=', 1)
+                ->orderBy('sort')->orderBy('id')->pluck('id')->all();
+            $valueId = count($ordered) >= 3 ? $ordered[$index] : null;
+        }
         if (!$valueId || (string) $object->shipment_status === (string) $valueId) {
             return;
         }
@@ -443,10 +494,6 @@ class ShipmentService
                 return false;
             }
             $products = self::decode($deal->products);
-            if (!count($products)) {
-                return false;
-            }
-
             $shipped = self::shippedForDeal($dealId);
             $changed = false;
             foreach ($products as $i => $product) {
@@ -462,21 +509,23 @@ class ShipmentService
                     $changed = true;
                 }
             }
-            if (!$changed) {
-                return false;
+            if ($changed) {
+                $deal->products = json_encode($products, JSON_UNESCAPED_UNICODE);
+                $deal->timestamps = false;
+                $deal->saveQuietly();
+                $deal->timestamps = true;
+
+                try {
+                    \App\Events\ObjectUpdated::dispatch('ObjectUpdated', $deal->getData(['products']));
+                } catch (\Throwable $e) {
+                }
             }
-
-            $deal->products = json_encode($products, JSON_UNESCAPED_UNICODE);
-            $deal->timestamps = false;
-            $deal->saveQuietly();
-            $deal->timestamps = true;
-
             try {
-                \App\Events\ObjectUpdated::dispatch('ObjectUpdated', $deal->getData(['products']));
+                self::updateShipmentStatus('deals', $deal, $products, $shipped);
             } catch (\Throwable $e) {
             }
 
-            return true;
+            return $changed;
         } catch (\Throwable $e) {
             return false;
         }

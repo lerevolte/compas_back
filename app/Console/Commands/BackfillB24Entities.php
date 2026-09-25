@@ -36,7 +36,7 @@ class BackfillB24Entities extends Command
         }
 
         foreach ($tenants as $tenant) {
-            $tenant->run(function () use ($tenant, $entities, $chunk) {
+            $tenant->run(fn () => \Modules\Bitrix24\Services\B24EntitySync::asModuleUser(function () use ($tenant, $entities, $chunk) {
                 if (!B24EntitySync::ready()) {
                     $this->line("  – {$tenant->id}: синк Bitrix24 не настроен, пропуск");
                     return;
@@ -73,7 +73,7 @@ class BackfillB24Entities extends Command
                     } while ($result['more']);
                     $this->info("  ✓ {$tenant->id} {$entity}: {$total}");
                 }
-            });
+            }));
         }
 
         return self::SUCCESS;

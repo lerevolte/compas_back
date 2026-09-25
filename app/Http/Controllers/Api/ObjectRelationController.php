@@ -39,7 +39,15 @@ class ObjectRelationController extends Controller
                 ], 422);
             }
         }
+        $storehouseErrors = \App\Services\StorehouseService::linkErrors($data['source_slug'], (int) $data['source_id'], $data['target_slug'], (int) $data['target_id']);
+        if (count($storehouseErrors)) {
+            return response()->json([
+                'title' => 'Склад не совпадает с документом-основанием — связь не создана',
+                'errors' => $storehouseErrors,
+            ], 422);
+        }
         ObjectRelation::link($data['source_slug'], $data['source_id'], $data['target_slug'], $data['target_id']);
+        \App\Services\StorehouseService::inheritOnLink($data['source_slug'], (int) $data['source_id'], $data['target_slug'], (int) $data['target_id']);
         if ($data['source_slug'] === 'deals' && \App\Services\ShipmentService::isSource($data['target_slug'])) {
             \App\Services\ShipmentService::setDealColumn($data['target_slug'], (int) $data['target_id'], (int) $data['source_id']);
             try {
@@ -97,6 +105,7 @@ class ObjectRelationController extends Controller
             'target_slug' => 'required|string|max:64',
             'target_id' => 'nullable|integer',
             'products' => 'nullable|array',
+            'fields' => 'nullable|array',
         ]);
 
         $products = [];
@@ -119,6 +128,12 @@ class ObjectRelationController extends Controller
             isset($data['target_id']) ? (int) $data['target_id'] : null,
             $products
         );
+        $errors = array_merge($errors, \App\Services\StorehouseService::draftErrors(
+            $data['source_slug'],
+            (int) $data['source_id'],
+            $data['target_slug'],
+            (array) ($data['fields'] ?? [])
+        ));
 
         return response()->json(['errors' => $errors]);
     }

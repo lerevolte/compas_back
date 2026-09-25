@@ -148,6 +148,14 @@ class CrudService
                         'status' => 422
                     ];
                 }
+                $storehouseErrors = \App\Services\StorehouseService::rowErrors($slug, (int) $row['id'], $row);
+                if(count($storehouseErrors)) {
+                    return [
+                        'title' => 'Склад не совпадает с документом-основанием — сохранение запрещено',
+                        'errors' => $storehouseErrors,
+                        'status' => 422
+                    ];
+                }
             }
 
             
@@ -385,10 +393,7 @@ class CrudService
                         $new_values_keyby[$nv] = $nv;
                     }
                     if(method_exists($ob->{$relation_table}(), 'sync')) {
-                        // Связи с мягко удалёнными записями сохраняем: фронт их
-                        // не показывает (SoftDeletes-scope), поэтому их нет в
-                        // присланном списке, и обычный sync молча отвязал бы их —
-                        // после восстановления из корзины связь была бы потеряна.
+                        $before_sync = $ob->{$relation_table}()->pluck($ob->{$relation_table}()->getRelated()->getQualifiedKeyName())->toArray();
                         $sync_values = $new_values;
                         $related_model = $ob->{$relation_table}()->getRelated();
                         if(in_array(\Illuminate\Database\Eloquent\SoftDeletes::class, class_uses_recursive($related_model))) {
@@ -399,6 +404,8 @@ class CrudService
                             $sync_values = array_values(array_unique(array_merge($new_values, $trashed_linked)));
                         }
                         $ob->{$relation_table}()->sync($sync_values);
+                        if($relation_table == 'contacts')
+                            \App\Models\Contact::tagFrom($slug, array_diff($new_values, $before_sync));
                     }
                     $old_values = $ob->{$relation_table}->pluck('id')->toArray();
                     if($model_fields[$field]->related_field) {
@@ -593,6 +600,9 @@ class CrudService
                 $data = ['success' => true, 'details' => $data['viewDetail'], 'history_events' => $history_response_events, 'history_fields' => $history_response_fields];
         }
 
+        $warnings = \App\Services\StorehouseService::pullWarnings();
+        if(count($warnings))
+            $data['warnings'] = $warnings;
         $data['status'] = 200;
 
         return $data;

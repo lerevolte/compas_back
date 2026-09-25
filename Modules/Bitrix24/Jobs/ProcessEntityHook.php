@@ -31,7 +31,7 @@ class ProcessEntityHook implements ShouldQueue
         if (!$tenant) {
             return;
         }
-        $tenant->run(function () {
+        $tenant->run(fn () => B24EntitySync::asModuleUser(function () {
             if ($this->type === 'product') {
                 $productSvc = \Modules\Bitrix24\Services\B24ProductSync::make();
                 if (!$productSvc) {
@@ -112,6 +112,6 @@ class ProcessEntityHook implements ShouldQueue
                     'error'  => $e->getMessage(),
                 ]);
             }
-        });
+        }));
     }
 }
