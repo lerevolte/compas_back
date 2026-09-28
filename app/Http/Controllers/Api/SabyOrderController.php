@@ -77,6 +77,8 @@ class SabyOrderController extends Controller
             if ($task->route_id && (int) $pointTask->route_id !== (int) $task->route_id) {
                 return response()->json(['message' => $pointLabel . ' должна быть из маршрута задачи'], 422);
             }
+        } elseif (!$currentIsLoading) {
+            $pointTask = SabyOrderService::defaultLoadingTask($task);
         }
 
         $massMethod = $request->mass_method !== null && $request->mass_method !== '' ? (string) $request->mass_method : null;

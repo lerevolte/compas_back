@@ -40,6 +40,35 @@ class SabyOrderService extends SabyWaybillService
         }
     }
 
+    public static function defaultLoadingTask(Task $task): ?Task
+    {
+        if (!$task->route_id) {
+            return null;
+        }
+        try {
+            $ordered = Task::where('route_id', $task->route_id)
+                ->orderBy('sort')
+                ->orderBy('id')
+                ->pluck('id')
+                ->map(fn ($v) => (int) $v)
+                ->all();
+            $position = array_search((int) $task->id, $ordered, true);
+            if ($position === false || $position === 0) {
+                return null;
+            }
+            $previous = array_reverse(array_slice($ordered, 0, $position));
+            $warehouses = \App\Services\ShipmentService::loadingWarehouseTaskIds($previous);
+            foreach ($previous as $id) {
+                if (in_array($id, $warehouses, true)) {
+                    return Task::find($id);
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return null;
+    }
+
     public function createOrder(Task $task, ?Task $pointTask = null, ?string $massMethod = null, bool $currentIsLoading = false, ?string $vehicleType = null, ?string $bodyType = null): SabyOrder
     {
         $substitutions = $this->buildOrder($task, $pointTask, $massMethod, $currentIsLoading, $vehicleType, $bodyType);

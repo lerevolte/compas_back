@@ -124,6 +124,7 @@ class ShipmentService
     public const ACTION_LOADING = 'Загрузка';
     public const ACTION_UNLOADING = 'Выгрузка';
     public const ACTION_SUPPLY = 'Приход от поставщика';
+    public const ACTION_WAREHOUSE = 'Склад погрузки';
 
     private static array $actionCache = [];
     private static ?array $actionIdsCache = null;
@@ -149,6 +150,10 @@ class ShipmentService
                     if (is_numeric($supply)) {
                         $result['supply'] = (int) $supply;
                     }
+                    $warehouse = $decoded['warehouse_value_id'] ?? null;
+                    if (is_numeric($warehouse)) {
+                        $result['warehouse'] = (int) $warehouse;
+                    }
                 }
             }
         } catch (\Throwable $e) {
@@ -157,6 +162,64 @@ class ShipmentService
         self::$actionIdsCache = $result;
 
         return $result;
+    }
+
+    public static function loadingWarehouseTaskIds(array $taskIds): array
+    {
+        $taskIds = array_values(array_filter(array_map('intval', $taskIds)));
+        if (!count($taskIds)) {
+            return [];
+        }
+        try {
+            if (!Schema::hasColumn('logistic_tasks', self::ACTION_FIELD)) {
+                return [];
+            }
+            $ids = self::actionValueIds();
+            $warehouseId = $ids['warehouse'] ?? null;
+            if (!$warehouseId) {
+                $typeId = DB::table('data_types')->where('slug', 'logistic_tasks')->value('id');
+                $fieldId = $typeId
+                    ? DB::table('data_rows')->where('data_type_id', $typeId)->where('field', self::ACTION_FIELD)->value('id')
+                    : null;
+                $warehouseId = $fieldId
+                    ? DB::table('field_values')->where('field_id', $fieldId)->whereRaw('LOWER(value) = ?', [mb_strtolower(self::ACTION_WAREHOUSE)])->value('id')
+                    : null;
+            }
+            if (!$warehouseId) {
+                return [];
+            }
+            $rows = DB::table('logistic_tasks')->whereIn('id', $taskIds)->pluck(self::ACTION_FIELD, 'id');
+            $result = [];
+            foreach ($rows as $id => $raw) {
+                $decoded = is_string($raw) ? json_decode($raw, true) : $raw;
+                if (is_array($decoded)) {
+                    $raw = $decoded[0] ?? null;
+                }
+                if ($raw !== null && $raw !== '' && is_numeric($raw) && (int) $raw === (int) $warehouseId) {
+                    $result[] = (int) $id;
+                }
+            }
+
+            return $result;
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    public static function loadingWarehouseLabel(): string
+    {
+        try {
+            $ids = self::actionValueIds();
+            if (!empty($ids['warehouse'])) {
+                $label = trim((string) DB::table('field_values')->where('id', $ids['warehouse'])->value('value'));
+                if ($label !== '') {
+                    return $label;
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return self::ACTION_WAREHOUSE;
     }
 
     public static function taskActionValue($raw)

@@ -117,11 +117,22 @@ class SabyWaybillController extends Controller
         $carType = $car ? $this->carOption($car, 'vehicle_type') : null;
         $carBodyType = $car ? $this->carOption($car, 'body_type') : null;
 
-        $tasks = Task::where('route_id', $task->route_id)
+        $routeTasks = Task::where('route_id', $task->route_id)
             ->orderBy('sort')
             ->orderBy('id')
-            ->get()
-            ->map(function ($item) use ($task) {
+            ->get();
+        $warehouseIds = \App\Services\ShipmentService::loadingWarehouseTaskIds($routeTasks->pluck('id')->all());
+        $defaultLoadingTaskId = null;
+        foreach ($routeTasks as $item) {
+            if ((int) $item->id === (int) $task->id) {
+                break;
+            }
+            if (in_array((int) $item->id, $warehouseIds, true)) {
+                $defaultLoadingTaskId = (int) $item->id;
+            }
+        }
+        $tasks = $routeTasks
+            ->map(function ($item) use ($task, $warehouseIds) {
                 $name = (string) $item->name;
                 $decoded = json_decode($name, true);
                 if (is_array($decoded) && array_key_exists('value', $decoded)) {
@@ -140,6 +151,7 @@ class SabyWaybillController extends Controller
                     'address' => $address,
                     'plan_time' => $item->plan_time,
                     'is_current' => $item->id === $task->id,
+                    'is_loading_warehouse' => in_array((int) $item->id, $warehouseIds, true),
                 ];
             })
             ->values();
@@ -147,6 +159,8 @@ class SabyWaybillController extends Controller
         return response()->json([
             'data' => $tasks,
             'route_id' => $task->route_id,
+            'default_loading_task_id' => $defaultLoadingTaskId,
+            'loading_warehouse_label' => \App\Services\ShipmentService::loadingWarehouseLabel(),
             'mass_methods' => $this->massMethods(),
             'vehicle_types' => $this->fieldOptions('vehicle_type'),
             'vehicle_type' => $carType,
