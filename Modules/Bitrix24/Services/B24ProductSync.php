@@ -81,7 +81,7 @@ class B24ProductSync
             if ($max > 0 && count($result) >= $max) {
                 break;
             }
-        } while ($start !== null && count($batch) && $guard < 200);
+        } while ($start !== null && count($batch) && $guard < 2000);
 
         return $result;
     }
@@ -295,11 +295,28 @@ class B24ProductSync
             return $stat;
         }
         $catalogId = $this->catalogId();
-        $rows = $this->b24All('crm.product.list', [
-            'filter' => $catalogId ? ['CATALOG_ID' => $catalogId] : [],
-            'select' => ['ID', self::ARTICLE_PROPERTY],
-            'order' => ['ID' => 'ASC'],
-        ]);
+        $rows = [];
+        $lastId = 0;
+        $guard = 0;
+        do {
+            $filter = $catalogId ? ['CATALOG_ID' => $catalogId] : [];
+            $filter['>ID'] = $lastId;
+            $resp = $this->b24('crm.product.list', [
+                'filter' => $filter,
+                'select' => ['ID', self::ARTICLE_PROPERTY],
+                'order' => ['ID' => 'ASC'],
+                'start' => -1,
+            ]);
+            $batch = $resp['result'] ?? [];
+            if (!is_array($batch) || !count($batch)) {
+                break;
+            }
+            foreach ($batch as $row) {
+                $rows[] = $row;
+                $lastId = max($lastId, (int) $row['ID']);
+            }
+            $guard++;
+        } while (count($batch) >= 50 && $guard < 5000);
         $stat['fetched'] = count($rows);
         foreach ($rows as $row) {
             $article = array_key_exists(self::ARTICLE_PROPERTY, $row) ? $this->propertyValue($row[self::ARTICLE_PROPERTY]) : null;
