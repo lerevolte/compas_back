@@ -133,6 +133,19 @@ class Deal extends Model
         $this->timestamps = false;
         $this->saveQuietly();
         $this->timestamps = true;
+        $this->pushServicesPriceToB24();
+    }
+
+    public function pushServicesPriceToB24(): void
+    {
+        if (!$this->b24_id || !class_exists(\Modules\Bitrix24\Services\B24EntitySync::class)) {
+            return;
+        }
+        try {
+            \Modules\Bitrix24\Services\B24EntitySync::make()?->pushDeal($this, ['delivery_price']);
+        } catch (\Throwable $e) {
+            \Log::channel('bitrix24')->warning('deal services price push failed', ['deal_id' => $this->id, 'error' => $e->getMessage()]);
+        }
     }
 
     public function setProducts(array $products)

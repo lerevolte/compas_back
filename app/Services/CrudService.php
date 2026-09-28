@@ -366,7 +366,7 @@ class CrudService
             $ob = $objects_collection_by_key[$id];
 
             foreach($row as $field => $value) {
-                if($field == 'copy' || $field == 'is_new' || !isset($model_fields[$field]))
+                if($field == 'copy' || $field == 'is_new' || !isset($model_fields[$field]) || $model_fields[$field]->type == 'waybills')
                     continue;
                 if($model_fields[$field]->type == 'relation' && !$model_fields[$field]->is_plural && is_array($value)) {
                     info('$field');

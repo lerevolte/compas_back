@@ -14,6 +14,19 @@ class SabyOrder extends Model
         'error' => 'array',
     ];
 
+    protected static function booted(): void
+    {
+        $sync = function ($model) {
+            \App\Services\Saby\SabyOrderService::syncTaskColumn($model->task_id);
+            $original = $model->getOriginal('task_id');
+            if ($original && (int) $original !== (int) $model->task_id) {
+                \App\Services\Saby\SabyOrderService::syncTaskColumn($original);
+            }
+        };
+        static::saved($sync);
+        static::deleted($sync);
+    }
+
     public function task()
     {
         return $this->belongsTo(Task::class, 'task_id');

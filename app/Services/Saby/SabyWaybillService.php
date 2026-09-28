@@ -605,6 +605,7 @@ class SabyWaybillService
                     $waybill->update(['status' => $state]);
                     if (Schema::hasTable('saby_orders')) {
                         SabyOrder::where('waybill_doc_id', $waybill->doc_id)->update(['waybill_state' => $state, 'waybill_checked_at' => now()]);
+                        SabyOrder::where('waybill_doc_id', $waybill->doc_id)->pluck('task_id')->each(fn ($id) => SabyOrderService::syncTaskColumn($id));
                     }
                     throw new SabyException('Накладная уже подписана или отправлена (' . $state . ') — удалить её можно только в Saby');
                 }
@@ -633,11 +634,13 @@ class SabyWaybillService
 
         $this->log('info', 'waybill deleted', ['task_id' => $waybill->task_id, 'doc_id' => $waybill->doc_id]);
         if ($waybill->doc_id && Schema::hasTable('saby_orders')) {
+            $orderTaskIds = SabyOrder::where('waybill_doc_id', $waybill->doc_id)->pluck('task_id');
             SabyOrder::where('waybill_doc_id', $waybill->doc_id)->update([
                 'waybill_doc_id' => null, 'waybill_number' => null, 'waybill_date' => null, 'waybill_state' => null,
                 'waybill_stage' => null, 'waybill_pdf_url' => null, 'waybill_cabinet_url' => null,
                 'waybill_archive_url' => null, 'waybill_qr_url' => null, 'waybill_checked_at' => null,
             ]);
+            $orderTaskIds->each(fn ($id) => SabyOrderService::syncTaskColumn($id));
         }
         $waybill->delete();
     }

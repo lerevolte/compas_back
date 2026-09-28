@@ -23,6 +23,25 @@ class Product extends Model
                 $model->user_id = $user->id;
 
        });
+       static::saving(function($model)
+       {
+            $model->applyVolumeFromDimensions();
+       });
+       static::saved(function($model)
+       {
+            if (\App\Services\SiteProductSync::$muted || !\App\Services\SiteProductSync::ready()) {
+                return;
+            }
+            $changed = array_intersect(array_keys($model->getChanges()), \App\Services\SiteProductSync::TRIGGER_FIELDS);
+            if (!count($changed) || trim((string) $model->article) === '') {
+                return;
+            }
+            try {
+                \App\Jobs\PushProductToSite::dispatch((string) tenant('id'), (int) $model->id);
+            } catch (\Throwable $e) {
+                \Log::channel('site_sync')->warning('site-sync: не удалось поставить товар в очередь', ['product_id' => $model->id, 'error' => $e->getMessage()]);
+            }
+       });
        static::updated(function($model)
        {
             if(!$model->remnants->count() && $model->quantity) {
@@ -75,4 +94,24 @@ class Product extends Model
         return $this->belongsToMany(Category::class, 'product_category');
     }
 
+
+    public function applyVolumeFromDimensions(): void
+    {
+        foreach (['length', 'width', 'height', 'volume'] as $column) {
+            if (!array_key_exists($column, $this->getAttributes()) && !\Schema::hasColumn($this->getTable(), $column)) {
+                return;
+            }
+        }
+        $dims = [];
+        foreach (['length', 'width', 'height'] as $column) {
+            $raw = $this->getAttribute($column);
+            $raw = is_string($raw) ? str_replace(',', '.', trim($raw)) : $raw;
+            if ($raw === null || $raw === '' || !is_numeric($raw) || (float) $raw <= 0) {
+                return;
+            }
+            $dims[] = (float) $raw;
+        }
+        $liters = round($dims[0] * $dims[1] * $dims[2] / 1000, 3);
+        $this->volume = rtrim(rtrim(number_format($liters, 3, '.', ''), '0'), '.');
+    }
 }

@@ -17,6 +17,7 @@ class InstallStorehouses extends Command
     public const SLUG = StorehouseService::TABLE;
     public const MODEL = 'App\\Models\\Storehouse';
     public const LEGACY_TITLES = ['Склад отгрузки', 'Склад списания'];
+    public const REMOVED_FIELDS = ['address'];
 
     public static function ensureTable($db): void
     {
@@ -28,7 +29,8 @@ CREATE TABLE IF NOT EXISTS `storehouses` (
   `deleted_at` timestamp NULL DEFAULT NULL,
   `choosed_at` timestamp NULL DEFAULT NULL,
   `name` text DEFAULT NULL,
-  `address` text DEFAULT NULL,
+  `photo` text DEFAULT NULL,
+  `comment` text DEFAULT NULL,
   `user_id` int(11) DEFAULT NULL,
   `sort` int(11) DEFAULT NULL,
   `color` varchar(191) DEFAULT '',
@@ -85,6 +87,12 @@ SQL);
     private function installEntity($db, string $label): void
     {
         $now = now();
+        $sb = $db->getSchemaBuilder();
+        foreach (['photo', 'comment'] as $column) {
+            if (!$sb->hasColumn(self::SLUG, $column)) {
+                $db->statement('ALTER TABLE `' . self::SLUG . '` ADD COLUMN `' . $column . '` TEXT NULL');
+            }
+        }
         $type = $db->table('data_types')->where('slug', self::SLUG)->first();
         $attrs = [
             'name' => self::SLUG,
@@ -124,12 +132,34 @@ SQL);
             ['field' => 'created_at', 'type' => 'date', 'title' => 'Дата создания', 'sort' => 1, 'only_read' => 1, 'is_default' => 1, 'mobile_pages' => '0', 'is_permanent' => 1],
             ['field' => 'updated_at', 'type' => 'date', 'title' => 'Дата изменения', 'sort' => 2, 'only_read' => 1, 'is_default' => 1, 'mobile_pages' => '0', 'is_permanent' => 1],
             ['field' => 'name', 'type' => 'text', 'title' => 'Название', 'sort' => 3, 'is_default' => 1, 'permanent_name' => 1, 'is_permanent' => 1],
-            ['field' => 'address', 'type' => 'text', 'title' => 'Адрес', 'sort' => 4],
+            ['field' => 'photo', 'type' => 'file', 'title' => 'Фото', 'sort' => 4, 'show_file_name' => 1, 'is_default' => 1],
+            ['field' => 'comment', 'type' => 'text', 'title' => 'Примечание', 'sort' => 5, 'is_plural' => 1],
+            ['field' => 'user_id', 'type' => 'relation', 'title' => 'Ответственный', 'sort' => 6, 'required' => 1, 'details' => '{"table":"users"}', 'is_link' => 1, 'relation_table' => 'users', 'is_inactive' => 1],
         ];
         $existing = $db->table('data_rows')->where('data_type_id', $typeId)->pluck('field')->all();
+        $added = [];
         foreach ($rows as $row) {
             if (!in_array($row['field'], $existing, true)) {
                 $db->table('data_rows')->insert(array_merge($base, $row));
+                $added[] = $row['field'];
+            }
+        }
+        if (count($added)) {
+            $this->line("    [{$label}] storehouses: добавлены поля " . implode(', ', $added));
+        }
+
+        $removedIds = $db->table('data_rows')->where('data_type_id', $typeId)->whereIn('field', self::REMOVED_FIELDS)->pluck('id');
+        if ($removedIds->count()) {
+            if ($sb->hasTable('section_fields_sort')) {
+                $db->table('section_fields_sort')->whereIn('field_id', $removedIds)->delete();
+            }
+            $db->table('field_values')->whereIn('field_id', $removedIds)->delete();
+            $db->table('data_rows')->whereIn('id', $removedIds)->delete();
+            $this->line("    [{$label}] storehouses: снято поле «Адрес»");
+        }
+        foreach (self::REMOVED_FIELDS as $column) {
+            if ($sb->hasColumn(self::SLUG, $column)) {
+                $db->statement('ALTER TABLE `' . self::SLUG . '` DROP COLUMN `' . $column . '`');
             }
         }
 

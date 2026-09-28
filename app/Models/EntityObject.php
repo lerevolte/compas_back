@@ -2271,7 +2271,6 @@ class EntityObject
                         $data['product_count'] = $product['count'];
                         $data['product_weight'] = $product['weight'];
                         $data['product_volume'] = $product['volume'] ?? 0;
-                        $data['product_sum'] = $product['sum'];
                         $data['product_shipped'] = $product['shipped'] ?? 0;
                         $line_nds = $product['nds'] ?? null;
                         $line_nds_included = $product['nds_included'] ?? null;
@@ -2283,6 +2282,10 @@ class EntityObject
                         }
                         $data['product_nds'] = $line_nds;
                         $data['product_nds_included'] = $line_nds_included === null || $line_nds_included === '' ? '1' : (string) $line_nds_included;
+                        $line_parts = \App\Services\ShipmentService::lineParts(['nds' => $line_nds, 'nds_included' => $data['product_nds_included']] + $product, \App\Services\ShipmentService::linePriceKey((string) ($request->order_entity ?? '')));
+                        $data['product_sum'] = round($line_parts['net'], 2);
+                        $data['product_nds_sum'] = round($line_parts['vat'], 2);
+                        $data['product_total'] = round($line_parts['gross'], 2);
                         $data['sort'] = $num;
                         $products_objects[] = $data;
                     } elseif(empty($product['id'])) {
@@ -2311,7 +2314,9 @@ class EntityObject
                             'product_count' => $product['count'] ?? null,
                             'product_weight' => $product['weight'] ?? null,
                             'product_volume' => $product['volume'] ?? 0,
-                            'product_sum' => $product['sum'] ?? null,
+                            'product_sum' => round(\App\Services\ShipmentService::lineParts($product, \App\Services\ShipmentService::linePriceKey((string) ($request->order_entity ?? '')))['net'], 2),
+                            'product_nds_sum' => round(\App\Services\ShipmentService::lineParts($product, \App\Services\ShipmentService::linePriceKey((string) ($request->order_entity ?? '')))['vat'], 2),
+                            'product_total' => round(\App\Services\ShipmentService::lineParts($product, \App\Services\ShipmentService::linePriceKey((string) ($request->order_entity ?? '')))['gross'], 2),
                             'product_shipped' => $product['shipped'] ?? 0,
                             'product_nds' => $product['nds'] ?? null,
                             'product_nds_included' => ($product['nds_included'] ?? null) === null || ($product['nds_included'] ?? null) === '' ? '1' : (string) $product['nds_included'],
@@ -2550,6 +2555,12 @@ class EntityObject
 
         $history_items = \App\Models\History::getDataList($history_events);
         $history_response_events = array_merge($history_response_events, $history_items['fields']);
+
+        foreach ($fields as $field => $value) {
+            if (isset($model_fields[$field]) && $model_fields[$field]->type == 'waybills') {
+                unset($fields[$field]);
+            }
+        }
 
         $route_id = $fields['route_id'] ?? null;
         if (is_array($route_id)) {

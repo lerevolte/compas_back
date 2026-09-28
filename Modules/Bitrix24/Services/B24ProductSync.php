@@ -26,6 +26,7 @@ class B24ProductSync
     private const LINK_PROPERTY = 'PROPERTY_132';
     private const WEIGHT_PROPERTY = 'PROPERTY_134';
     private const TYPE_PROPERTY = 'PROPERTY_180';
+    private const ARTICLE_PROPERTY = 'PROPERTY_131';
     private const TYPE_SERVICE_ENUM = '131';
 
     public static function make(): ?self
@@ -257,7 +258,7 @@ class B24ProductSync
             'select' => [
                 'ID', 'NAME', 'PRICE', 'SECTION_ID', 'CATALOG_ID', 'TIMESTAMP_X', 'ACTIVE',
                 'PREVIEW_PICTURE', 'DETAIL_PICTURE', 'VAT_ID', 'VAT_INCLUDED',
-                self::LINK_PROPERTY, self::WEIGHT_PROPERTY, self::TYPE_PROPERTY,
+                self::LINK_PROPERTY, self::WEIGHT_PROPERTY, self::TYPE_PROPERTY, self::ARTICLE_PROPERTY,
             ],
             'order'  => $since ? ['TIMESTAMP_X' => 'ASC'] : ['ID' => 'ASC'],
         ], $limit);
@@ -285,6 +286,32 @@ class B24ProductSync
             }
         }
         return ['count' => $count, 'last_modify' => $lastModify, 'more' => $more];
+    }
+
+    public function pullArticles(): array
+    {
+        $stat = ['fetched' => 0, 'updated' => 0];
+        if (!Schema::hasColumn('products', 'article')) {
+            return $stat;
+        }
+        $catalogId = $this->catalogId();
+        $rows = $this->b24All('crm.product.list', [
+            'filter' => $catalogId ? ['CATALOG_ID' => $catalogId] : [],
+            'select' => ['ID', self::ARTICLE_PROPERTY],
+            'order' => ['ID' => 'ASC'],
+        ]);
+        $stat['fetched'] = count($rows);
+        foreach ($rows as $row) {
+            $article = array_key_exists(self::ARTICLE_PROPERTY, $row) ? $this->propertyValue($row[self::ARTICLE_PROPERTY]) : null;
+            if ($article === null) {
+                continue;
+            }
+            $stat['updated'] += Product::withTrashed()
+                ->where('id_b24', (string) $row['ID'])
+                ->where(fn ($q) => $q->whereNull('article')->orWhere('article', '!=', $article))
+                ->update(['article' => $article]);
+        }
+        return $stat;
     }
 
     public function pullProductById($productId): ?Product
@@ -499,6 +526,12 @@ class B24ProductSync
                 $typeValue = $this->propertyValue($row[self::TYPE_PROPERTY]);
                 if ($typeValue !== null) {
                     $model->product_type = $typeValue === self::TYPE_SERVICE_ENUM ? '1' : '0';
+                }
+            }
+            if (Schema::hasColumn('products', 'article') && array_key_exists(self::ARTICLE_PROPERTY, $row)) {
+                $article = $this->propertyValue($row[self::ARTICLE_PROPERTY]);
+                if ($article !== null) {
+                    $model->article = $article;
                 }
             }
             if (Schema::hasColumn('products', 'nds') && array_key_exists('VAT_ID', $row)) {

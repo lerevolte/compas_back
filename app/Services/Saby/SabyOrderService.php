@@ -40,6 +40,69 @@ class SabyOrderService extends SabyWaybillService
         }
     }
 
+    public const TASK_COLUMN = 'saby_waybills';
+
+    public static function syncTaskColumn($taskId): void
+    {
+        $taskId = (int) $taskId;
+        if (!$taskId) {
+            return;
+        }
+        try {
+            if (!Schema::hasColumn('logistic_tasks', self::TASK_COLUMN)) {
+                return;
+            }
+            $items = [];
+            $linkedDocs = [];
+            if (Schema::hasTable('saby_orders')) {
+                $orders = DB::table('saby_orders')->where('task_id', $taskId)->orderByDesc('id')->get();
+                foreach ($orders as $order) {
+                    $code = (string) ($order->state_code ?? '0');
+                    $item = [
+                        'type' => 'order',
+                        'id' => (int) $order->id,
+                        'number' => $order->number,
+                        'date' => $order->date,
+                        'state' => self::ORDER_STATES[$code] ?? trim((string) ($order->state_name . ($order->state_note ? ' — ' . $order->state_note : ''))),
+                        'state_code' => $code,
+                        'url' => $order->cabinet_url,
+                        'waybill' => null,
+                    ];
+                    if ($order->waybill_doc_id) {
+                        $linkedDocs[] = $order->waybill_doc_id;
+                        $item['waybill'] = [
+                            'number' => $order->waybill_number,
+                            'date' => $order->waybill_date,
+                            'state' => trim((string) $order->waybill_state) !== '' ? $order->waybill_state : 'Черновик',
+                            'url' => $order->waybill_cabinet_url,
+                        ];
+                    }
+                    $items[] = $item;
+                }
+            }
+            if (Schema::hasTable('saby_waybills') && Schema::hasColumn('saby_waybills', 'task_id')) {
+                $waybills = DB::table('saby_waybills')->where('task_id', $taskId)->orderByDesc('id')->get();
+                foreach ($waybills as $waybill) {
+                    if ($waybill->doc_id && in_array($waybill->doc_id, $linkedDocs, true)) {
+                        continue;
+                    }
+                    $items[] = [
+                        'type' => 'waybill',
+                        'id' => (int) $waybill->id,
+                        'number' => $waybill->number,
+                        'date' => $waybill->date,
+                        'state' => trim((string) $waybill->status) !== '' ? $waybill->status : 'Черновик',
+                        'url' => $waybill->cabinet_url,
+                    ];
+                }
+            }
+            DB::table('logistic_tasks')->where('id', $taskId)->update([
+                self::TASK_COLUMN => count($items) ? json_encode($items, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
+            ]);
+        } catch (\Throwable $e) {
+        }
+    }
+
     public static function defaultLoadingTask(Task $task): ?Task
     {
         if (!$task->route_id) {

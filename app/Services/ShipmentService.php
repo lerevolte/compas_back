@@ -855,20 +855,36 @@ class ShipmentService
         return array_values($result);
     }
 
-    public static function lineTotal(array $line, string $priceKey = 'price'): float
+    public static function lineParts(array $line, string $priceKey = 'price'): array
     {
         $count = isset($line['count']) && is_numeric($line['count']) ? (float) $line['count'] : 0.0;
         $price = isset($line[$priceKey]) && is_numeric($line[$priceKey]) ? (float) $line[$priceKey] : 0.0;
-        $total = $count * $price;
+        $base = $count * $price;
         $rate = $line['nds'] ?? null;
         $rate = is_array($rate) ? ($rate[0] ?? null) : $rate;
+        $rate = is_numeric($rate) && (float) $rate > 0 ? (float) $rate : 0.0;
         $included = $line['nds_included'] ?? null;
         $included = is_array($included) ? ($included[0] ?? null) : $included;
-        if (is_numeric($rate) && (float) $rate > 0 && $included !== null && $included !== '' && (string) $included === '0') {
-            $total *= 1 + (float) $rate / 100;
+        $included = !($included !== null && $included !== '' && (string) $included === '0');
+        if ($rate <= 0) {
+            return ['net' => $base, 'vat' => 0.0, 'gross' => $base, 'rate' => 0.0, 'included' => $included];
         }
+        if ($included) {
+            $net = $base / (1 + $rate / 100);
+            return ['net' => $net, 'vat' => $base - $net, 'gross' => $base, 'rate' => $rate, 'included' => true];
+        }
+        $vat = $base * $rate / 100;
+        return ['net' => $base, 'vat' => $vat, 'gross' => $base + $vat, 'rate' => $rate, 'included' => false];
+    }
 
-        return $total;
+    public static function linePriceKey(string $slug): string
+    {
+        return $slug === 'supplier_orders' ? 'purchase_price' : 'price';
+    }
+
+    public static function lineTotal(array $line, string $priceKey = 'price'): float
+    {
+        return self::lineParts($line, $priceKey)['gross'];
     }
 
     public static function productsOf(string $slug, int $id): array

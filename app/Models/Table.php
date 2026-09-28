@@ -592,20 +592,23 @@ class Table
         return $table_columns;
     }
 
+    public const NDS_SUM_TITLE = 'Сумма НДС';
+    public const TOTAL_TITLE = 'Всего';
+
     private static function ndsColumn(string $key, string $title, string $type, int $index): array
     {
         $column = array(
             'id' => null,
             'title' => $title,
             'key' => $key,
-            'width' => $key == 'product_nds' ? '150px' : '130px',
+            'width' => $key == 'product_nds' ? '150px' : ($type == 'number' ? '160px' : '130px'),
             'enabled' => 1,
             'sort_order' => '',
             'type' => $type,
             'fixed' => '',
             'index' => $index,
             'fixTarget' => '0px',
-            'read_only' => 0,
+            'read_only' => $type == 'number' ? 1 : 0,
             "mask" => "",
             'is_another_title' => 0
         );
@@ -758,7 +761,7 @@ class Table
             $table_columns = collect($tables['order_products']['fields']);
             $table_columns = $table_columns->keyBy('key')->toArray();
             foreach($table_columns as $key => $column) {
-                if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'remnant_name' && $key != 'product_name' && $key != 'product_id' && $key != 'product_price' && $key != 'product_purchase_price' && $key != 'product_count' && $key != 'product_weight' && $key != 'product_volume' && $key != 'product_sum' && $key != 'product_shipped' && $key != 'product_nds' && $key != 'product_nds_included' && $key != 'iconDrag' || $key == 'price' || $key == 'name' || $key == 'weight' || $key == 'volume' || $key == 'purchase_price')
+                if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'remnant_name' && $key != 'product_name' && $key != 'product_id' && $key != 'product_price' && $key != 'product_purchase_price' && $key != 'product_count' && $key != 'product_weight' && $key != 'product_volume' && $key != 'product_sum' && $key != 'product_shipped' && $key != 'product_nds' && $key != 'product_nds_included' && $key != 'product_nds_sum' && $key != 'product_total' && $key != 'iconDrag' || $key == 'price' || $key == 'name' || $key == 'weight' || $key == 'volume' || $key == 'purchase_price')
                     unset($table_columns[$key]);
             }
             unset($table_columns['iconDelete']);
@@ -902,6 +905,10 @@ class Table
                 $table_columns['product_nds'] = self::ndsColumn('product_nds', 'НДС', 'select_dropdown', count($table_columns));
             if(!isset($table_columns['product_nds_included']))
                 $table_columns['product_nds_included'] = self::ndsColumn('product_nds_included', 'Включать НДС', 'checkbox', count($table_columns));
+            if(!isset($table_columns['product_nds_sum']))
+                $table_columns['product_nds_sum'] = self::ndsColumn('product_nds_sum', self::NDS_SUM_TITLE, 'number', count($table_columns));
+            if(!isset($table_columns['product_total']))
+                $table_columns['product_total'] = self::ndsColumn('product_total', self::TOTAL_TITLE, 'number', count($table_columns));
 
             if(!isset($table_columns['iconDrag'])) {
                 $table_columns['iconDrag'] = array(
@@ -1043,6 +1050,8 @@ class Table
                 $table_columns['product_shipped'] = self::shippedColumn(6);
             $table_columns['product_nds'] = self::ndsColumn('product_nds', 'НДС', 'select_dropdown', 7);
             $table_columns['product_nds_included'] = self::ndsColumn('product_nds_included', 'Включать НДС', 'checkbox', 8);
+            $table_columns['product_nds_sum'] = self::ndsColumn('product_nds_sum', self::NDS_SUM_TITLE, 'number', 9);
+            $table_columns['product_total'] = self::ndsColumn('product_total', self::TOTAL_TITLE, 'number', 10);
 
             if(!isset($table_columns['iconDrag'])) {
                 $table_columns['isChoose'] = array(
@@ -1174,6 +1183,14 @@ class Table
             }
             if($key == 'product_price')
                 $table_columns[$i]['read_only'] = $isSupplierOrder ? 1 : 0;
+            if($key == 'product_sum')
+                $table_columns[$i]['read_only'] = 0;
+            if(in_array($key, ['product_nds_sum', 'product_total'], true)) {
+                $table_columns[$i]['read_only'] = 1;
+                $table_columns[$i]['type'] = 'number';
+                if(empty($column['is_another_title']))
+                    $table_columns[$i]['title'] = $key == 'product_total' ? self::TOTAL_TITLE : self::NDS_SUM_TITLE;
+            }
         }
 
         if(in_array((string) $parentSlug, [\App\Services\ShipmentService::DOCUMENT, \App\Services\ShipmentService::RETURN_DOC, \App\Services\ShipmentService::RECEIPT_DOC], true)) {

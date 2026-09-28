@@ -75,7 +75,7 @@ class TaskController extends Controller
             if ($count === null || $count === '' || (is_numeric($count) && (float) $count <= 0)) {
                 continue;
             }
-            $products[] = array(
+            $line = array(
                 'id' => $product['id'] ?? null,
                 'name' => $product['product_name'] ?? ($product['name'] ?? ''),
                 'price' => $product['product_price'] ?? null,
@@ -87,6 +87,11 @@ class TaskController extends Controller
                 'nds' => $product['product_nds'] ?? ($product['nds'] ?? null),
                 'nds_included' => $product['product_nds_included'] ?? ($product['nds_included'] ?? null),
             );
+            $parts = \App\Services\ShipmentService::lineParts($line, \App\Services\ShipmentService::linePriceKey((string) $slug));
+            $line['sum'] = round($parts['net'], 2);
+            $line['nds_sum'] = round($parts['vat'], 2);
+            $line['total'] = round($parts['gross'], 2);
+            $products[] = $line;
         }
         $errors = \App\Services\ShipmentService::withFamilyLock($slug, (int) $id, function () use ($class, $slug, $id, $products) {
             $object = $class::find($id);
