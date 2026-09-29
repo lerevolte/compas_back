@@ -144,8 +144,8 @@ class ShipmentService
             if (is_array($decoded)) {
                 $loading = $decoded['loading_value_id'] ?? null;
                 $unloading = $decoded['unloading_value_id'] ?? null;
-                if (is_numeric($loading) && is_numeric($unloading)) {
-                    $result = ['loading' => (int) $loading, 'unloading' => (int) $unloading];
+                if (is_numeric($unloading) && (int) $unloading > 0) {
+                    $result = ['loading' => is_numeric($loading) && (int) $loading > 0 ? (int) $loading : null, 'unloading' => (int) $unloading];
                     $supply = $decoded['supply_value_id'] ?? null;
                     if (is_numeric($supply)) {
                         $result['supply'] = (int) $supply;
@@ -246,6 +246,18 @@ class ShipmentService
             if ($mapped && DB::table('field_values')->where('field_id', $taskFieldId)->where('id', (int) $mapped)->exists()) {
                 return (string) $mapped;
             }
+            $label = mb_strtolower(trim((string) DB::table('field_values')->where('id', (int) $source->id)->value('value')));
+            if ($label !== '') {
+                $byLabel = DB::table('field_values')
+                    ->where('field_id', $taskFieldId)
+                    ->whereRaw('LOWER(TRIM(value)) = ?', [$label])
+                    ->orderBy('is_hidden')
+                    ->orderBy('id')
+                    ->value('id');
+                if ($byLabel) {
+                    return (string) $byLabel;
+                }
+            }
         } catch (\Throwable $e) {
         }
 
@@ -273,7 +285,7 @@ class ShipmentService
                     $valueId = (int) $raw;
                     $ids = self::actionValueIds();
                     if (count($ids)) {
-                        $isLoading = $valueId === $ids['loading'] || (isset($ids['supply']) && $valueId === $ids['supply']);
+                        $isLoading = ($ids['loading'] !== null && $valueId === $ids['loading']) || (isset($ids['supply']) && $valueId === $ids['supply']);
                         $result = $isLoading ? 'loading' : ($valueId === $ids['unloading'] ? 'unloading' : 'other');
                     } else {
                         $label = mb_strtolower(trim((string) DB::table('field_values')->where('id', $valueId)->value('value')));

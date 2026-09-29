@@ -135,7 +135,11 @@ class InstallActionTypeField extends Command
             $programIds = [];
             $keyByText = array_column(self::VALUES, 'key', 'value');
             $detailsKeys = array_values($keyByText);
-            foreach ($detailsKeys as $detailsKey) {
+            $disabled = array_values(array_filter($detailsKeys, fn ($k) => array_key_exists($k, $details) && is_numeric($details[$k]) && (int) $details[$k] === 0));
+            foreach ($disabled as $detailsKey) {
+                $programIds[$detailsKey] = 0;
+            }
+            foreach (array_diff($detailsKeys, $disabled) as $detailsKey) {
                 $candidate = $details[$detailsKey] ?? null;
                 if (is_numeric($candidate) && $db->table('field_values')->where('field_id', $fieldId)->where('id', (int) $candidate)->exists()) {
                     $programIds[$detailsKey] = (int) $candidate;
@@ -166,7 +170,7 @@ class InstallActionTypeField extends Command
                     ->map(fn ($v) => (int) $v)
                     ->all();
                 foreach (['unloading_value_id', 'loading_value_id'] as $detailsKey) {
-                    if (!isset($programIds[$detailsKey]) && count($existing)) {
+                    if (!array_key_exists($detailsKey, $programIds) && count($existing)) {
                         $programIds[$detailsKey] = array_shift($existing);
                         $this->warn("    [{$label}] {$slug}: {$detailsKey} сопоставлен по порядку создания (id {$programIds[$detailsKey]}) — проверьте, что значение соответствует смыслу");
                     }
@@ -175,6 +179,9 @@ class InstallActionTypeField extends Command
 
             foreach (self::VALUES as $sort => $def) {
                 $detailsKey = $def['key'];
+                if (array_key_exists($detailsKey, $programIds) && $programIds[$detailsKey] === 0) {
+                    continue;
+                }
                 if (isset($programIds[$detailsKey])) {
                     $db->table('field_values')->where('id', $programIds[$detailsKey])->update(['is_hidden' => 0]);
                     continue;
@@ -194,7 +201,7 @@ class InstallActionTypeField extends Command
             $db->table('data_rows')->where('id', $fieldId)->update([
                 'details' => json_encode($details, JSON_UNESCAPED_UNICODE),
             ]);
-            $this->line("    [{$label}] {$slug}: программные значения закреплены — выгрузка id {$programIds['unloading_value_id']}, загрузка id {$programIds['loading_value_id']}, приход от поставщика id {$programIds['supply_value_id']}, склад погрузки id {$programIds['warehouse_value_id']}");
+            $this->line("    [{$label}] {$slug}: программные значения закреплены — выгрузка id {$programIds['unloading_value_id']}, загрузка id " . ($programIds['loading_value_id'] ?: 'нет') . ", приход от поставщика id " . ($programIds['supply_value_id'] ?: 'нет') . ", склад погрузки id " . ($programIds['warehouse_value_id'] ?: 'нет'));
 
             $defaultId = $programIds['unloading_value_id'];
             if ($defaultId) {

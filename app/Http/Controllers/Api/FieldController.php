@@ -535,7 +535,10 @@ class FieldController extends Controller
         }
 
         if ($request->options && !in_array($field->type, ['text_group', 'relation']) && $field->field !== 'is_admin') {
-            $details = ['options' => []];
+            $details = json_decode((string) $field->details, true);
+            $details = is_array($details) ? $details : [];
+            unset($details['can_create']);
+            $details['options'] = [];
             foreach ($request->options as $item) {
                 $details['options'][$item['value']] = [
                     'value' => $item['value'],

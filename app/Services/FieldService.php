@@ -321,8 +321,11 @@ class FieldService
         $data['title'] = isset($dto->title) ? $dto->title : $field->title;
         $data['visible_always'] = isset($dto->visible_always) ? $dto->visible_always : $field->visible_always;
 
-        $details = array();
+        $details = json_decode((string) $field->details, true);
+        $details = is_array($details) ? $details : array();
+        unset($details['options'], $details['can_create']);
         if($dto->options && $field->type != 'text_group' && $field->type != 'relation' && $field->field != 'is_admin') {
+            $details['options'] = array();
             foreach($dto->options as $k => $item) {
                 $details['options'][$item['value']] = array(
                     'value' => $item['value'],
