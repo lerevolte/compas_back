@@ -24,7 +24,6 @@ class B24EntitySync
     private array $responsibleCache = [];
 
     private const CONTACT_TYPE_UF = 'UF_CRM_1785851130';
-    public const SERVICES_PRICE_UF = 'UF_CRM_1790603636';
 
     private const DEFAULT_EXCLUDE_STAGES = ['NEW'];
     private const STAGE_PALETTE = [
@@ -2428,10 +2427,6 @@ class B24EntitySync
                     $fields['UF_CRM_1623418181538'] = is_array($phones)
                         ? implode(', ', array_filter($phones, fn ($v) => $v !== null && $v !== ''))
                         : self::attrString($deal->phone);
-                    break;
-                case 'delivery_price':
-                    $fields['UF_CRM_1633508830'] = self::attrString($deal->delivery_price);
-                    $fields[self::SERVICES_PRICE_UF] = self::attrString($deal->delivery_price);
                     break;
                 case 'comment':
                     $fields['UF_CRM_5EAFC3D4C5F76'] = self::attrString($deal->comment);

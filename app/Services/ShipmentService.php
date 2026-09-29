@@ -765,7 +765,7 @@ class ShipmentService
             return null;
         }
         if (self::isSource($slug)) {
-            $parentSlugs = ['deals'];
+            $parentSlugs = ['deals', self::SUPPLIER];
         } elseif ($slug === self::DOCUMENT || $slug === self::RETURN_DOC) {
             $parentSlugs = self::SOURCES;
         } elseif ($slug === self::RECEIPT_DOC) {
@@ -791,7 +791,7 @@ class ShipmentService
             return self::SOURCES;
         }
         if ($slug === self::SUPPLIER) {
-            return [self::RECEIPT_DOC];
+            return array_merge([self::RECEIPT_DOC], self::SOURCES);
         }
         if (self::isSource($slug)) {
             if ($id && self::isNeutralAction($slug, $id)) {
@@ -1083,7 +1083,7 @@ class ShipmentService
             if ($slug === 'deals') {
                 $lines = self::childLines($slug, $id, self::SOURCES);
             } elseif ($slug === self::SUPPLIER) {
-                $lines = self::childLines($slug, $id, [self::RECEIPT_DOC]);
+                $lines = self::childLines($slug, $id, self::childSlugsOf($slug, $id));
             } elseif (self::isSource($slug) && self::isLoading($slug, $id)) {
                 $lines = self::childLines($slug, $id, [self::RECEIPT_DOC]);
             } elseif (self::isSource($slug)) {

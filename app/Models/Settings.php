@@ -1002,6 +1002,10 @@ class Settings extends Model
             if(property_exists($object, 'price')) $label['price'] = $object->price;
             if(property_exists($object, 'weight')) $label['weight'] = $object->weight;
             if(property_exists($object, 'quantity')) $label['count'] = $object->quantity;
+            if(property_exists($object, 'nds'))
+                $label['nds'] = is_string($object->nds) && is_array($nds_dec = json_decode($object->nds, true)) ? ($nds_dec[0] ?? null) : $object->nds;
+            if(property_exists($object, 'nds_included'))
+                $label['nds_included'] = is_string($object->nds_included) && is_array($ndsi_dec = json_decode($object->nds_included, true)) ? ($ndsi_dec[0] ?? null) : $object->nds_included;
         }
         return array(
             'label' => $label,

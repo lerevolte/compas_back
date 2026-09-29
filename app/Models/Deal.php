@@ -16,7 +16,7 @@ class Deal extends Model
     public const PRODUCT_FIELD = 'deal_id';
 
     public const B24_PUSH_FIELDS = [
-        'address', 'time', 'phone', 'delivery_price', 'comment',
+        'address', 'time', 'phone', 'comment',
         'pallets_count', 'delivery_date', 'contact', 'contact_id', 'company_id', 'bank_requisite_id',
         'car_requirements', 'car_type', 'products',
     ];
@@ -133,19 +133,6 @@ class Deal extends Model
         $this->timestamps = false;
         $this->saveQuietly();
         $this->timestamps = true;
-        $this->pushServicesPriceToB24();
-    }
-
-    public function pushServicesPriceToB24(): void
-    {
-        if (!$this->b24_id || !class_exists(\Modules\Bitrix24\Services\B24EntitySync::class)) {
-            return;
-        }
-        try {
-            \Modules\Bitrix24\Services\B24EntitySync::make()?->pushDeal($this, ['delivery_price']);
-        } catch (\Throwable $e) {
-            \Log::channel('bitrix24')->warning('deal services price push failed', ['deal_id' => $this->id, 'error' => $e->getMessage()]);
-        }
     }
 
     public function setProducts(array $products)

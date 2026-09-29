@@ -92,7 +92,7 @@ SQL);
             }
         }
 
-        return $data;
+        return array_filter($data, fn ($v) => !($v === null || $v === '' || $v === []));
     }
 
     private static function optionLabel(string $field, $value): ?string
@@ -157,6 +157,40 @@ SQL);
         Log::channel('site_sync')->info('site-sync: отправлено', ['sent' => $stat['sent'], 'updated' => $stat['updated'], 'missing' => count($stat['missing']), 'errors' => count($stat['errors'])]);
 
         return $stat;
+    }
+
+    public static function read(array $ids): array
+    {
+        $config = self::config();
+        if (!$config || !count($ids)) {
+            return ['items' => [], 'missing' => [], 'error' => $config ? null : 'not configured'];
+        }
+        try {
+            $response = Http::timeout(120)
+                ->withHeaders(['X-Compas-Token' => $config['token']])
+                ->post($config['url'], ['token' => $config['token'], 'action' => 'read', 'ids' => array_values($ids)]);
+            $body = $response->json();
+            if (!$response->ok() || !is_array($body) || empty($body['ok'])) {
+                return ['items' => [], 'missing' => [], 'error' => 'HTTP ' . $response->status() . ': ' . mb_substr((string) $response->body(), 0, 300)];
+            }
+
+            return ['items' => $body['items'] ?? [], 'missing' => $body['missing'] ?? [], 'error' => null];
+        } catch (\Throwable $e) {
+            return ['items' => [], 'missing' => [], 'error' => $e->getMessage()];
+        }
+    }
+
+    public static function optionValue(string $field, string $label)
+    {
+        self::optionLabel($field, '__warmup__');
+        $needle = mb_strtolower(trim($label));
+        foreach (self::$optionsCache[$field] ?? [] as $value => $text) {
+            if (mb_strtolower(trim($text)) === $needle) {
+                return is_numeric($value) ? (int) $value : $value;
+            }
+        }
+
+        return null;
     }
 
     public static function pushProducts(iterable $products): array

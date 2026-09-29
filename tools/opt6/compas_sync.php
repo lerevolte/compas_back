@@ -53,11 +53,25 @@ if (!is_array($payload)) {
 $token = (string) ($payload['token'] ?? ($_SERVER['HTTP_X_COMPAS_TOKEN'] ?? ''));
 if (strlen(COMPAS_SYNC_TOKEN) < 16 || !hash_equals(COMPAS_SYNC_TOKEN, $token)) {
     compas_log('unauthorized from ' . ($_SERVER['REMOTE_ADDR'] ?? '?'));
-    compas_respond(['ok' => false, 'error' => 'Unauthorized'], 403);
+    compas_respond([
+        'ok' => false,
+        'error' => 'Unauthorized',
+        'version' => 2,
+        'expected_fp' => substr(hash('sha256', COMPAS_SYNC_TOKEN), 0, 8),
+        'expected_len' => strlen(COMPAS_SYNC_TOKEN),
+        'got_fp' => substr(hash('sha256', $token), 0, 8),
+        'got_len' => strlen($token),
+    ], 403);
 }
 
+$action = (string) ($payload['action'] ?? 'write');
 $products = $payload['products'] ?? null;
-if (!is_array($products) || !count($products)) {
+if ($action === 'read') {
+    $readIds = array_values(array_filter(array_map('intval', (array) ($payload['ids'] ?? []))));
+    if (!count($readIds)) {
+        compas_respond(['ok' => false, 'error' => 'Empty ids'], 400);
+    }
+} elseif (!is_array($products) || !count($products)) {
     compas_respond(['ok' => false, 'error' => 'Empty products'], 400);
 }
 
@@ -65,6 +79,49 @@ require_once($_SERVER['DOCUMENT_ROOT'] . '/bitrix/modules/main/include/prolog_be
 
 if (!CModule::IncludeModule('iblock') || !CModule::IncludeModule('catalog')) {
     compas_respond(['ok' => false, 'error' => 'iblock/catalog module not available'], 500);
+}
+
+if ($action === 'read') {
+    $codes = array_flip($COMPAS_PROPERTY_MAP);
+    $items = [];
+    $found = [];
+    $res = \Bitrix\Iblock\ElementTable::getList([
+        'select' => ['ID'],
+        'filter' => ['IBLOCK_ID' => COMPAS_SYNC_IBLOCK_ID, 'ID' => array_slice($readIds, 0, 500)],
+    ]);
+    while ($row = $res->fetch()) {
+        $found[] = (int) $row['ID'];
+    }
+    foreach ($found as $id) {
+        $item = ['id' => $id];
+        $props = CIBlockElement::GetProperty(COMPAS_SYNC_IBLOCK_ID, $id, ['sort' => 'asc'], []);
+        while ($prop = $props->Fetch()) {
+            $code = (string) $prop['CODE'];
+            if (!isset($codes[$code])) {
+                continue;
+            }
+            $field = $codes[$code];
+            $value = $prop['PROPERTY_TYPE'] === 'L' ? $prop['VALUE_ENUM'] : $prop['VALUE'];
+            if ($value === null || $value === '' || $value === false) {
+                continue;
+            }
+            if (($prop['MULTIPLE'] ?? 'N') === 'Y') {
+                $item[$field] = array_merge($item[$field] ?? [], [(string) $value]);
+            } else {
+                $item[$field] = (string) $value;
+            }
+        }
+        $catalog = CCatalogProduct::GetByID($id);
+        if ($catalog && (float) $catalog['WEIGHT'] > 0) {
+            $item['catalog_weight'] = (float) $catalog['WEIGHT'];
+        }
+        $items[] = $item;
+    }
+    compas_respond([
+        'ok' => true,
+        'items' => $items,
+        'missing' => array_values(array_diff($readIds, $found)),
+    ]);
 }
 
 $propertyCache = [];
