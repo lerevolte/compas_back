@@ -122,7 +122,13 @@ class CrudService
             }
             if(isset($row['copy'])) {
                 $obj = $entity_class::findOrFail($row['id']);
-                $copyErrors = \App\Services\ShipmentService::copyErrors($slug, $obj, $row);
+                $copyRow = $row;
+                if(array_key_exists('products_draft', $row)) {
+                    if(is_array($row['products_draft']))
+                        $copyRow['products'] = array_values(array_filter($row['products_draft'], 'is_array'));
+                    unset($row['products_draft'], $copyRow['products_draft']);
+                }
+                $copyErrors = \App\Services\ShipmentService::copyErrors($slug, $obj, $copyRow);
                 if(count($copyErrors)) {
                     return [
                         'title' => 'Расхождение по составу с заказом — копирование запрещено',
