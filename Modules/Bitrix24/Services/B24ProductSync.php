@@ -285,12 +285,12 @@ class B24ProductSync
         do {
             $filter = $catalogId ? ['CATALOG_ID' => $catalogId] : [];
             $filter['>ID'] = $lastId;
-            $resp = $this->b24('crm.product.list', [
+            $resp = retry(6, fn () => $this->b24('crm.product.list', [
                 'filter' => $filter,
                 'select' => $select,
                 'order' => ['ID' => 'ASC'],
                 'start' => -1,
-            ]);
+            ]), 3000);
             $batch = $resp['result'] ?? [];
             if (!is_array($batch) || !count($batch)) {
                 break;
