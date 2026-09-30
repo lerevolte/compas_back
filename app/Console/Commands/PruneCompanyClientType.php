@@ -13,9 +13,10 @@ class PruneCompanyClientType extends Command
 {
     protected $signature = 'companies:prune-client-type
         {target=all-tenants : all-tenants | <tenant_id>}
+        {--add : проставить «Клиент» компаниям, у которых есть заказ покупателя}
         {--dry-run : только посчитать}';
 
-    protected $description = 'Снять тип «Клиент» у компаний, по которым нет ни одного заказа покупателя';
+    protected $description = 'Снять тип «Клиент» у компаний, по которым нет ни одного заказа покупателя; с --add — проставить его компаниям с заказами';
 
     public function handle(): int
     {
@@ -58,6 +59,27 @@ class PruneCompanyClientType extends Command
                     $withDeals[$id] = true;
                 }
             }
+        }
+
+        if ($this->option('add')) {
+            $missing = [];
+            foreach (array_chunk(array_keys($withDeals), 1000) as $chunk) {
+                foreach (DB::table('companies')->whereIn('id', $chunk)->get(['id', $row->field]) as $item) {
+                    if (!in_array((string) $option, array_map('strval', TypeTagService::current($item->{$row->field})), true)) {
+                        $missing[] = (int) $item->id;
+                    }
+                }
+            }
+            if ($this->option('dry-run')) {
+                $this->line("  [{$label}] будет проставлен «Клиент» у " . count($missing) . ' компаний');
+                return;
+            }
+            $added = 0;
+            foreach (array_chunk($missing, 200) as $chunk) {
+                $added += Company::addType($chunk, 'Клиент');
+            }
+            $this->line("  [{$label}] проставлен «Клиент» у {$added} компаний");
+            return;
         }
 
         $targets = [];

@@ -28,6 +28,14 @@ class B24ProductSync
     private const TYPE_PROPERTY = 'PROPERTY_180';
     private const ARTICLE_PROPERTY = 'PROPERTY_131';
     private const TYPE_SERVICE_ENUM = '131';
+    private const BARCODE_PROPERTY = 'PROPERTY_143';
+    private const REPLENISHMENT_PROPERTY = 'PROPERTY_171';
+    private const FACT_PRODUCT_CODE = 'FACT_PRODUCT';
+    public const FACT_COLUMN = 'b24_fact_product';
+
+    private array $columnCache = [];
+    private ?string $factPropertyKey = null;
+    private bool $factPropertyResolved = false;
 
     public static function make(): ?self
     {
@@ -111,6 +119,240 @@ class B24ProductSync
             );
         }
         return $catalogId;
+    }
+
+    private function hasColumn(string $column): bool
+    {
+        if (!array_key_exists($column, $this->columnCache)) {
+            $this->columnCache[$column] = Schema::hasColumn('products', $column);
+        }
+
+        return $this->columnCache[$column];
+    }
+
+    private function factProperty(): ?string
+    {
+        if ($this->factPropertyResolved) {
+            return $this->factPropertyKey;
+        }
+        $this->factPropertyResolved = true;
+        $stored = DB::table('settings')->where('type', 'b24_fact_product_property')->value('value');
+        if ($stored) {
+            return $this->factPropertyKey = (string) $stored;
+        }
+        try {
+            $resp = $this->b24('crm.product.property.list', [
+                'filter' => ['CODE' => self::FACT_PRODUCT_CODE],
+            ]);
+            foreach (($resp['result'] ?? []) as $item) {
+                if (($item['CODE'] ?? null) === self::FACT_PRODUCT_CODE && !empty($item['ID'])) {
+                    $this->factPropertyKey = 'PROPERTY_' . (int) $item['ID'];
+                    break;
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+        if ($this->factPropertyKey) {
+            DB::table('settings')->updateOrInsert(
+                ['type' => 'b24_fact_product_property', 'entity' => null, 'user_id' => null],
+                ['key' => 'b24_fact_product_property', 'value' => $this->factPropertyKey]
+            );
+        } else {
+            Log::channel('bitrix24')->warning('product-sync: свойство товара с кодом ' . self::FACT_PRODUCT_CODE . ' не найдено');
+        }
+
+        return $this->factPropertyKey;
+    }
+
+    private function extraSelect(): array
+    {
+        $select = ['XML_ID', self::BARCODE_PROPERTY, self::REPLENISHMENT_PROPERTY];
+        if ($this->hasColumn(self::FACT_COLUMN) && ($fact = $this->factProperty())) {
+            $select[] = $fact;
+        }
+
+        return $select;
+    }
+
+    private function propertyValues($raw): array
+    {
+        if ($raw === null || $raw === '' || $raw === false) {
+            return [];
+        }
+        if (!is_array($raw)) {
+            return [(string) $raw];
+        }
+        if (array_key_exists('value', $raw)) {
+            return $this->propertyValues($raw['value']);
+        }
+        $values = [];
+        foreach ($raw as $item) {
+            foreach ($this->propertyValues($item) as $value) {
+                $values[] = $value;
+            }
+        }
+
+        return array_values(array_filter($values, fn ($v) => trim($v) !== ''));
+    }
+
+    private function extraValues(array $row): array
+    {
+        $values = [];
+        if ($this->hasColumn('supplier_barcode') && array_key_exists(self::BARCODE_PROPERTY, $row)) {
+            $barcodes = $this->propertyValues($row[self::BARCODE_PROPERTY]);
+            if (count($barcodes)) {
+                $values['supplier_barcode'] = implode(', ', $barcodes);
+            }
+        }
+        if ($this->hasColumn('replenishment_period') && array_key_exists(self::REPLENISHMENT_PROPERTY, $row)) {
+            $period = str_replace(',', '.', $this->propertyValues($row[self::REPLENISHMENT_PROPERTY])[0] ?? '');
+            if (is_numeric($period)) {
+                $values['replenishment_period'] = (string) ((float) $period == (int) $period ? (int) $period : (float) $period);
+            }
+        }
+        if ($this->hasColumn('id_1c') && array_key_exists('XML_ID', $row)) {
+            $xmlId = trim((string) ($row['XML_ID'] ?? ''));
+            if ($xmlId !== '') {
+                $values['id_1c'] = $xmlId;
+            }
+        }
+        if ($this->hasColumn(self::FACT_COLUMN)) {
+            $fact = $this->factProperty();
+            $key = $fact && array_key_exists($fact, $row) ? $fact : (array_key_exists(self::FACT_PRODUCT_CODE, $row) ? self::FACT_PRODUCT_CODE : null);
+            if ($key) {
+                $kit = $this->propertyValues($row[$key])[0] ?? null;
+                $values[self::FACT_COLUMN] = $kit !== null && is_numeric($kit) && (int) $kit > 0 ? (string) (int) $kit : null;
+            }
+        }
+
+        return $values;
+    }
+
+    private function kitIds($raw): array
+    {
+        $decoded = is_array($raw) ? $raw : json_decode((string) $raw, true);
+
+        return is_array($decoded) ? array_values(array_unique(array_map('intval', array_filter($decoded, 'is_numeric')))) : [];
+    }
+
+    private function writeKit(int $kitId, array $ids): void
+    {
+        $value = json_encode(array_values($ids));
+        try {
+            History::saveForObject('products', [['id' => $kitId, 'kit_products' => $value]]);
+        } catch (\Throwable $e) {
+        }
+        DB::table('products')->where('id', $kitId)->update(['kit_products' => $value, 'updated_at' => now()]);
+    }
+
+    public function syncKitMembership(int $productId, ?string $kitB24Id, ?string $oldKitB24Id = null): bool
+    {
+        if (!$this->hasColumn('kit_products')) {
+            return false;
+        }
+        $changed = false;
+        if ($oldKitB24Id && $oldKitB24Id !== $kitB24Id) {
+            $old = DB::table('products')->where('id_b24', $oldKitB24Id)->whereNull('deleted_at')->first(['id', 'kit_products']);
+            $ids = $old ? $this->kitIds($old->kit_products) : [];
+            if ($old && in_array($productId, $ids, true)) {
+                $this->writeKit((int) $old->id, array_values(array_diff($ids, [$productId])));
+                $changed = true;
+            }
+        }
+        if ($kitB24Id) {
+            $kit = DB::table('products')->where('id_b24', $kitB24Id)->whereNull('deleted_at')->first(['id', 'kit_products']);
+            if ($kit && (int) $kit->id !== $productId) {
+                $ids = $this->kitIds($kit->kit_products);
+                if (!in_array($productId, $ids, true)) {
+                    $ids[] = $productId;
+                    $this->writeKit((int) $kit->id, $ids);
+                    $changed = true;
+                }
+            }
+        }
+
+        return $changed;
+    }
+
+    public function pullExtraProps(): array
+    {
+        $stat = ['fetched' => 0, 'updated' => 0, 'kits' => 0];
+        $catalogId = $this->catalogId();
+        $select = array_merge(['ID'], $this->extraSelect());
+        $lastId = 0;
+        $guard = 0;
+        $members = [];
+        do {
+            $filter = $catalogId ? ['CATALOG_ID' => $catalogId] : [];
+            $filter['>ID'] = $lastId;
+            $resp = $this->b24('crm.product.list', [
+                'filter' => $filter,
+                'select' => $select,
+                'order' => ['ID' => 'ASC'],
+                'start' => -1,
+            ]);
+            $batch = $resp['result'] ?? [];
+            if (!is_array($batch) || !count($batch)) {
+                break;
+            }
+            foreach ($batch as $row) {
+                $lastId = max($lastId, (int) $row['ID']);
+                $stat['fetched']++;
+                $values = $this->extraValues($row);
+                if (!count($values)) {
+                    continue;
+                }
+                $local = DB::table('products')->where('id_b24', (string) $row['ID'])->orderByRaw('deleted_at IS NULL DESC')->orderBy('id')->first();
+                if (!$local) {
+                    continue;
+                }
+                $oldKit = array_key_exists(self::FACT_COLUMN, $values) ? ($local->{self::FACT_COLUMN} ?? null) : null;
+                $diff = array_filter($values, fn ($value, $key) => (string) ($local->{$key} ?? '') !== (string) ($value ?? ''), ARRAY_FILTER_USE_BOTH);
+                if (count($diff)) {
+                    $this->writeSyncFieldHistory($local->id, $diff);
+                    DB::table('products')->where('id', $local->id)->update($diff);
+                    $stat['updated']++;
+                }
+                if (array_key_exists(self::FACT_COLUMN, $values) && !$local->deleted_at) {
+                    $members[] = [(int) $local->id, $values[self::FACT_COLUMN], $oldKit ? (string) $oldKit : null];
+                }
+            }
+            $guard++;
+        } while (count($batch) >= 50 && $guard < 5000);
+
+        foreach ($members as [$productId, $kit, $oldKit]) {
+            if ($this->syncKitMembership($productId, $kit, $oldKit)) {
+                $stat['kits']++;
+            }
+        }
+
+        return $stat;
+    }
+
+    private function preservedProperties($b24Id): array
+    {
+        $keys = [self::ARTICLE_PROPERTY, self::BARCODE_PROPERTY, self::REPLENISHMENT_PROPERTY];
+        if ($fact = $this->factProperty()) {
+            $keys[] = $fact;
+        }
+        $fields = [];
+        try {
+            $row = $this->b24('crm.product.get', ['id' => $b24Id])['result'] ?? null;
+            if (!is_array($row)) {
+                return [];
+            }
+            foreach ($keys as $key) {
+                $raw = $row[$key] ?? null;
+                if ($raw === null || $raw === '' || $raw === false || $raw === []) {
+                    continue;
+                }
+                $fields[$key] = $raw;
+            }
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        return $fields;
     }
 
     private function typeEnumIds(): array
@@ -259,6 +501,7 @@ class B24ProductSync
                 'ID', 'NAME', 'PRICE', 'SECTION_ID', 'CATALOG_ID', 'TIMESTAMP_X', 'ACTIVE',
                 'PREVIEW_PICTURE', 'DETAIL_PICTURE', 'VAT_ID', 'VAT_INCLUDED',
                 self::LINK_PROPERTY, self::WEIGHT_PROPERTY, self::TYPE_PROPERTY, self::ARTICLE_PROPERTY,
+                ...$this->extraSelect(),
             ],
             'order'  => $since ? ['TIMESTAMP_X' => 'ASC'] : ['ID' => 'ASC'],
         ], $limit);
@@ -563,6 +806,14 @@ class B24ProductSync
                     : null;
             }
 
+            $extra = $this->extraValues($row);
+            $oldKit = array_key_exists(self::FACT_COLUMN, $extra) ? ($model->{self::FACT_COLUMN} ?: null) : null;
+            foreach ($extra as $column => $value) {
+                if ((string) ($model->{$column} ?? '') !== (string) ($value ?? '')) {
+                    $model->{$column} = $value;
+                }
+            }
+
             $this->applyProductPicture($model, $row);
 
             if ($isNew) {
@@ -571,6 +822,14 @@ class B24ProductSync
             } elseif (count($model->getDirty())) {
                 $this->writeSyncFieldHistory($model->id, $model->getDirty());
                 $model->save();
+            }
+
+            if (array_key_exists(self::FACT_COLUMN, $extra)) {
+                try {
+                    $this->syncKitMembership((int) $model->id, $extra[self::FACT_COLUMN], $oldKit ? (string) $oldKit : null);
+                } catch (\Throwable $e) {
+                    Log::channel('bitrix24')->warning('product-sync: состав набора не обновлён', ['product_id' => $model->id, 'error' => $e->getMessage()]);
+                }
             }
 
             return $model;
@@ -741,6 +1000,7 @@ class B24ProductSync
         }
 
         if ($product->id_b24) {
+            $fields += $this->preservedProperties($product->id_b24);
             $resp = $this->b24('crm.product.update', ['id' => $product->id_b24, 'fields' => $fields]);
         } else {
             $fields['CATALOG_ID'] = $this->catalogId();
@@ -851,7 +1111,7 @@ class B24ProductSync
     {
         unset(
             $changed['updated_at'], $changed['created_at'], $changed['id_b24'],
-            $changed['deleted_at'], $changed['photo']
+            $changed['deleted_at'], $changed['photo'], $changed[self::FACT_COLUMN]
         );
         if (!count($changed)) {
             return;

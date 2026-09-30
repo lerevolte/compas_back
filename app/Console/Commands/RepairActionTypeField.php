@@ -16,11 +16,12 @@ class RepairActionTypeField extends Command
         {--loading= : id значения «загрузки» у задач, 0 — загрузки нет}
         {--supply= : id значения «приход от поставщика» у задач}
         {--warehouse= : id значения «склад погрузки» у задач}
+        {--transfer= : id значения «перемещение» у задач}
         {--dry-run : только показать, что будет исправлено}';
 
     protected $description = 'Восстановить программные значения поля «Тип действия» задач, таблицу соответствий у библиотеки/быстрых задач (по названиям) и перевести задачи с чужими значениями на значения задач';
 
-    private const KEYS = ['unloading' => 'unloading_value_id', 'loading' => 'loading_value_id', 'supply' => 'supply_value_id', 'warehouse' => 'warehouse_value_id'];
+    private const KEYS = ['unloading' => 'unloading_value_id', 'loading' => 'loading_value_id', 'supply' => 'supply_value_id', 'warehouse' => 'warehouse_value_id', 'transfer' => 'transfer_value_id'];
 
     public function handle(): int
     {

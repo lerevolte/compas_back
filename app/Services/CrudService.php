@@ -125,7 +125,7 @@ class CrudService
                 $copyErrors = \App\Services\ShipmentService::copyErrors($slug, $obj, $row);
                 if(count($copyErrors)) {
                     return [
-                        'title' => 'Расхождение по составу с заказом покупателя — копирование запрещено',
+                        'title' => 'Расхождение по составу с заказом — копирование запрещено',
                         'errors' => $copyErrors,
                         'status' => 422
                     ];
@@ -499,6 +499,8 @@ class CrudService
                     )), JSON_UNESCAPED_UNICODE);
                 } elseif($model_fields[$field]->type == 'relation' && $model_fields[$field]->is_plural && is_array($value)) {
                     $ob->{$field} = json_encode(array_values(array_map('intval', array_filter($value, 'is_numeric'))));
+                } elseif($model_fields[$field]->type == 'checkbox') {
+                    $ob->{$field} = \App\Models\Field::checkboxValue($value);
                 } else {
                     $ob->{$field} = $value;
                 }

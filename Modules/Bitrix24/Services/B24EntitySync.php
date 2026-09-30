@@ -1701,6 +1701,9 @@ class B24EntitySync
             if (count($companyIds) && Schema::hasColumn('companies', 'deal_id')) {
                 DB::table('companies')->whereIntegerInRaw('id', $companyIds)->update(['deal_id' => $model->id]);
             }
+            if (count($companyIds)) {
+                Company::addType($companyIds, 'Клиент');
+            }
         }
         $model->company_id = json_encode($companyIds);
 

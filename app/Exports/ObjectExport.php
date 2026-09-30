@@ -240,6 +240,8 @@ class ObjectExport implements FromCollection, WithHeadings, WithMapping
                             return $item['value'] == $value;
                         });
                         $data[$field->field] = $list_value ? $list_value['label']['text'] : '';
+                    } elseif($field->type == 'checkbox') {
+                        $data[$field->field] = \App\Models\Field::getHumanValue($field, $value)['res'];
                     } elseif($field->type == 'select_dropdown' && $field->is_plural && isset($settings['list_values'][$field->id])) {
                         if($item[$field->field])
                             $value = $item[$field->field];//json_decode($item[$field->field], true);
@@ -253,7 +255,6 @@ class ObjectExport implements FromCollection, WithHeadings, WithMapping
                         }
 
                     } elseif($field->type == 'select_dropdown' && !$field->is_plural && isset($settings['list_values'][$field->id])) {
-                        //info($value);
                         if(is_array($value))
                             $value = $value[0];
                         if(isset($settings['list_values'][$field->id][$value])) {

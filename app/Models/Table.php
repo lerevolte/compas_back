@@ -595,6 +595,15 @@ class Table
     public const NDS_SUM_TITLE = 'Сумма НДС';
     public const TOTAL_TITLE = 'Всего';
 
+    public static function ndsIncludedTitle(): string
+    {
+        $settings = app('settings');
+        $field = $settings['products']['fields'][\App\Console\Commands\InstallProductNdsFields::INCLUDED_FIELD] ?? null;
+        $title = $field ? trim((string) ($field->title ?? '')) : '';
+
+        return $title !== '' ? $title : \App\Console\Commands\InstallProductNdsFields::INCLUDED_TITLE;
+    }
+
     private static function ndsColumn(string $key, string $title, string $type, int $index): array
     {
         $column = array(
@@ -904,7 +913,9 @@ class Table
             if(!isset($table_columns['product_nds']))
                 $table_columns['product_nds'] = self::ndsColumn('product_nds', 'НДС', 'select_dropdown', count($table_columns));
             if(!isset($table_columns['product_nds_included']))
-                $table_columns['product_nds_included'] = self::ndsColumn('product_nds_included', 'Включать НДС', 'checkbox', count($table_columns));
+                $table_columns['product_nds_included'] = self::ndsColumn('product_nds_included', self::ndsIncludedTitle(), 'checkbox', count($table_columns));
+            elseif(empty($table_columns['product_nds_included']['is_another_title']))
+                $table_columns['product_nds_included']['title'] = self::ndsIncludedTitle();
             if(!isset($table_columns['product_nds_sum']))
                 $table_columns['product_nds_sum'] = self::ndsColumn('product_nds_sum', self::NDS_SUM_TITLE, 'number', count($table_columns));
             if(!isset($table_columns['product_total']))
@@ -1049,7 +1060,7 @@ class Table
             if(\App\Services\ShipmentService::hasShippedColumn((string) $parentSlug))
                 $table_columns['product_shipped'] = self::shippedColumn(6);
             $table_columns['product_nds'] = self::ndsColumn('product_nds', 'НДС', 'select_dropdown', 7);
-            $table_columns['product_nds_included'] = self::ndsColumn('product_nds_included', 'Включать НДС', 'checkbox', 8);
+            $table_columns['product_nds_included'] = self::ndsColumn('product_nds_included', self::ndsIncludedTitle(), 'checkbox', 8);
             $table_columns['product_nds_sum'] = self::ndsColumn('product_nds_sum', self::NDS_SUM_TITLE, 'number', 9);
             $table_columns['product_total'] = self::ndsColumn('product_total', self::TOTAL_TITLE, 'number', 10);
 

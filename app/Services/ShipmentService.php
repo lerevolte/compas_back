@@ -125,6 +125,7 @@ class ShipmentService
     public const ACTION_UNLOADING = 'Выгрузка';
     public const ACTION_SUPPLY = 'Приход от поставщика';
     public const ACTION_WAREHOUSE = 'Склад погрузки';
+    public const ACTION_TRANSFER = 'Перемещение';
 
     private static array $actionCache = [];
     private static ?array $actionIdsCache = null;
@@ -153,6 +154,10 @@ class ShipmentService
                     $warehouse = $decoded['warehouse_value_id'] ?? null;
                     if (is_numeric($warehouse)) {
                         $result['warehouse'] = (int) $warehouse;
+                    }
+                    $transfer = $decoded['transfer_value_id'] ?? null;
+                    if (is_numeric($transfer) && (int) $transfer > 0) {
+                        $result['transfer'] = (int) $transfer;
                     }
                 }
             }
@@ -287,12 +292,18 @@ class ShipmentService
                     if (count($ids)) {
                         $isLoading = ($ids['loading'] !== null && $valueId === $ids['loading']) || (isset($ids['supply']) && $valueId === $ids['supply']);
                         $result = $isLoading ? 'loading' : ($valueId === $ids['unloading'] ? 'unloading' : 'other');
+                        if ($result === 'other') {
+                            $isTransfer = isset($ids['transfer'])
+                                ? $valueId === $ids['transfer']
+                                : mb_strtolower(trim((string) DB::table('field_values')->where('id', $valueId)->value('value'))) === mb_strtolower(self::ACTION_TRANSFER);
+                            $result = $isTransfer ? 'transfer' : 'other';
+                        }
                     } else {
                         $label = mb_strtolower(trim((string) DB::table('field_values')->where('id', $valueId)->value('value')));
                         if ($label !== '') {
                             $result = in_array($label, [mb_strtolower(self::ACTION_LOADING), mb_strtolower(self::ACTION_SUPPLY)], true)
                                 ? 'loading'
-                                : ($label === mb_strtolower(self::ACTION_UNLOADING) ? 'unloading' : 'other');
+                                : ($label === mb_strtolower(self::ACTION_UNLOADING) ? 'unloading' : ($label === mb_strtolower(self::ACTION_TRANSFER) ? 'transfer' : 'other'));
                         }
                     }
                 }
@@ -313,6 +324,11 @@ class ShipmentService
     public static function isNeutralAction(string $slug, int $id): bool
     {
         return self::actionKind($slug, $id) === 'other';
+    }
+
+    public static function isTransfer(string $slug, int $id): bool
+    {
+        return self::actionKind($slug, $id) === 'transfer';
     }
 
     public static function forgetLoading(string $slug, int $id): void
@@ -797,10 +813,58 @@ class ShipmentService
             if ($id && self::isNeutralAction($slug, $id)) {
                 return [];
             }
+            if ($id && self::isTransfer($slug, $id)) {
+                return [self::DOCUMENT, self::RECEIPT_DOC];
+            }
             return $id && self::isLoading($slug, $id) ? [self::RECEIPT_DOC] : [self::DOCUMENT];
         }
 
         return [];
+    }
+
+    public static function siblingSlugsFor(string $parentSlug, int $parentId, ?string $childSlug): array
+    {
+        $slugs = self::childSlugsOf($parentSlug, $parentId);
+        if ($childSlug === null || !in_array($childSlug, $slugs, true)) {
+            return $slugs;
+        }
+        if ($parentSlug === self::SUPPLIER && $childSlug === self::RECEIPT_DOC) {
+            return [self::RECEIPT_DOC];
+        }
+        if (self::isSource($parentSlug) && self::isTransfer($parentSlug, $parentId)) {
+            return [$childSlug];
+        }
+
+        return $slugs;
+    }
+
+    public static function maxUsage(array $base, array $other): array
+    {
+        foreach (['id', 'name', 'price_id', 'price_name'] as $bucket) {
+            foreach ($other[$bucket] ?? [] as $key => $value) {
+                $base[$bucket][$key] = max($base[$bucket][$key] ?? 0, $value);
+            }
+        }
+
+        return $base;
+    }
+
+    public static function usageForTarget(string $slug, int $id, ?string $targetSlug = null): array
+    {
+        $childSlugs = self::childSlugsOf($slug, $id);
+        if ($targetSlug !== null && in_array($targetSlug, $childSlugs, true)) {
+            return self::usageByChildren($slug, $id, self::siblingSlugsFor($slug, $id, $targetSlug));
+        }
+        if (self::isSource($slug) && self::isTransfer($slug, $id)) {
+            $result = ['id' => [], 'name' => [], 'price_id' => [], 'price_name' => []];
+            foreach ($childSlugs as $childSlug) {
+                $result = self::maxUsage($result, self::usageByChildren($slug, $id, [$childSlug]));
+            }
+
+            return $result;
+        }
+
+        return self::usageByChildren($slug, $id, $childSlugs);
     }
 
     public static function lookup(array $shipped, array $product): float
@@ -833,7 +897,7 @@ class ShipmentService
 
     public static function residualProducts(string $sourceSlug, int $sourceId, array $products, ?array $exceptTarget = null): array
     {
-        $childSlugs = self::childSlugsOf($sourceSlug, $sourceId);
+        $childSlugs = self::siblingSlugsFor($sourceSlug, $sourceId, $exceptTarget[0] ?? null);
         if (!count($childSlugs) || !count($products)) {
             return $products;
         }
@@ -917,21 +981,34 @@ class ShipmentService
         if (!self::isSource($slug)) {
             return [];
         }
-        $dealId = array_key_exists('deal_id', $row) ? self::normalizeDealId($row['deal_id']) : null;
-        if (!array_key_exists('deal_id', $row)) {
-            $parent = self::parentOf($slug, (int) $source->id);
-            $dealId = $parent && $parent[0] === 'deals' ? (int) $parent[1] : self::normalizeDealId($source->deal_id ?? null);
-        }
-        if (!$dealId) {
-            return [];
-        }
         $products = array_key_exists('products', $row) ? self::decode($row['products']) : self::decode($source->products ?? null);
         $products = array_values(array_filter($products, 'is_array'));
         if (!count($products)) {
             return [];
         }
+        $dealId = array_key_exists('deal_id', $row) ? self::normalizeDealId($row['deal_id']) : null;
+        if (!array_key_exists('deal_id', $row)) {
+            $parent = self::parentOf($slug, (int) $source->id);
+            $dealId = $parent && $parent[0] === 'deals' ? (int) $parent[1] : self::normalizeDealId($source->deal_id ?? null);
+        }
+        $errors = [];
+        if ($dealId) {
+            $errors = self::withFamilyLock('deals', $dealId, fn () => self::validateAgainstPair('deals', $dealId, $slug, null, $products));
+        }
+        if (ObjectRelation::ready() && Schema::hasTable(self::SUPPLIER)) {
+            $orderIds = ObjectRelation::where('source_slug', self::SUPPLIER)
+                ->where('target_slug', $slug)
+                ->where('target_id', (int) $source->id)
+                ->pluck('source_id')
+                ->map(fn ($v) => (int) $v)
+                ->unique()
+                ->all();
+            foreach ($orderIds as $orderId) {
+                $errors = array_merge($errors, self::withFamilyLock(self::SUPPLIER, $orderId, fn () => self::validateAgainstPair(self::SUPPLIER, $orderId, $slug, null, $products)));
+            }
+        }
 
-        return self::withFamilyLock('deals', $dealId, fn () => self::validateAgainstPair('deals', $dealId, $slug, null, $products));
+        return array_values(array_unique($errors));
     }
 
     public static function relationChangeErrors(string $slug, int $id, array $row): array
@@ -1009,7 +1086,7 @@ class ShipmentService
             $usedOthers = self::usageByChildren(
                 $parentSlug,
                 $parentId,
-                self::childSlugsOf($parentSlug, $parentId),
+                self::siblingSlugsFor($parentSlug, $parentId, $childSlug),
                 $exceptChildId ? [$childSlug, $exceptChildId] : null
             );
 
@@ -1086,6 +1163,16 @@ class ShipmentService
                 $lines = self::childLines($slug, $id, self::childSlugsOf($slug, $id));
             } elseif (self::isSource($slug) && self::isLoading($slug, $id)) {
                 $lines = self::childLines($slug, $id, [self::RECEIPT_DOC]);
+            } elseif (self::isSource($slug) && self::isTransfer($slug, $id)) {
+                $lines = self::childLines($slug, $id, [self::DOCUMENT]);
+                foreach (self::childLines($slug, $id, [self::RECEIPT_DOC]) as $key => $line) {
+                    if (!isset($lines[$key])) {
+                        $lines[$key] = $line;
+                        continue;
+                    }
+                    $lines[$key]['count'] = max($lines[$key]['count'], $line['count']);
+                    $lines[$key]['price_total'] = max($lines[$key]['price_total'], $line['price_total']);
+                }
             } elseif (self::isSource($slug)) {
                 $docs = self::childLines($slug, $id, [self::DOCUMENT]);
                 $returns = self::childLines($slug, $id, [self::RETURN_DOC]);

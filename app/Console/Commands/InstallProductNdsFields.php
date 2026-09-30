@@ -10,7 +10,7 @@ class InstallProductNdsFields extends Command
     protected $signature = 'products:install-nds-fields
         {target=avixo : seeds | all-tenants | <tenant_id>}';
 
-    protected $description = 'Добавить поля «НДС» (Без НДС/5%/10%/20%/22%) и «НДС включен в цену» (Да/Нет) в сущность products';
+    protected $description = 'Добавить поля «НДС» (Без НДС/5%/10%/20%/22%) и чекбокс «НДС включен в цену» в сущность products';
 
     public const NDS_FIELD = 'nds';
     public const NDS_TITLE = 'НДС';
@@ -24,10 +24,6 @@ class InstallProductNdsFields extends Command
 
     public const INCLUDED_FIELD = 'nds_included';
     public const INCLUDED_TITLE = 'НДС включен в цену';
-    public const INCLUDED_OPTIONS = [
-        ['value' => '1', 'label' => 'Да'],
-        ['value' => '0', 'label' => 'Нет'],
-    ];
 
     public function handle(): int
     {
@@ -91,14 +87,16 @@ class InstallProductNdsFields extends Command
 
         $defs = [
             self::NDS_FIELD => [
+                'type' => 'select_dropdown',
                 'title' => self::NDS_TITLE,
                 'details' => json_encode(['options' => self::NDS_OPTIONS], JSON_UNESCAPED_UNICODE),
                 'default_value' => null,
                 'set_default' => 0,
             ],
             self::INCLUDED_FIELD => [
+                'type' => 'checkbox',
                 'title' => self::INCLUDED_TITLE,
-                'details' => json_encode(['options' => self::INCLUDED_OPTIONS], JSON_UNESCAPED_UNICODE),
+                'details' => null,
                 'default_value' => '1',
                 'set_default' => 1,
             ],
@@ -112,8 +110,8 @@ class InstallProductNdsFields extends Command
 
             if ($existing) {
                 $db->table('data_rows')->where('id', $existing->id)->update([
-                    'type' => 'select_dropdown',
-                    'title' => $def['title'],
+                    'type' => $def['type'],
+                    'title' => trim((string) $existing->title) !== '' ? $existing->title : $def['title'],
                     'details' => $def['details'],
                     'default_value' => $def['default_value'],
                     'set_default' => $def['set_default'],
@@ -125,7 +123,7 @@ class InstallProductNdsFields extends Command
                 $id = $db->table('data_rows')->insertGetId([
                     'data_type_id' => $dataType->id,
                     'field' => $field,
-                    'type' => 'select_dropdown',
+                    'type' => $def['type'],
                     'title' => $def['title'],
                     'required' => 0,
                     'visible_always' => 1,
@@ -141,6 +139,17 @@ class InstallProductNdsFields extends Command
                 $this->line("    [{$label}] создано поле {$field} (id {$id})");
             }
         }
+
+        $included = self::INCLUDED_FIELD;
+        $db->table('products')->where($included, 'like', '[%')->orderBy('id')->select('id', $included)->chunkById(500, function ($rows) use ($db, $included) {
+            foreach ($rows as $row) {
+                $decoded = json_decode((string) $row->{$included}, true);
+                $value = is_array($decoded) ? ($decoded[0] ?? null) : null;
+                $db->table('products')->where('id', $row->id)->update([
+                    $included => $value === null || $value === '' ? null : ((string) $value === '0' ? '0' : '1'),
+                ]);
+            }
+        });
 
         try {
             if ($sb->hasTable('local_cache')) {

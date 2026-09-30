@@ -150,7 +150,8 @@ class ObjectRelationController extends Controller
         $loading = \App\Services\ShipmentService::isLoading($slug, $id);
         $childSlugs = \App\Services\ShipmentService::childSlugsOf($slug, $id);
         if (count($childSlugs)) {
-            $used = \App\Services\ShipmentService::usageByChildren($slug, $id, $childSlugs);
+            $target = request()->query('target');
+            $used = \App\Services\ShipmentService::usageForTarget($slug, $id, is_string($target) && $target !== '' ? $target : null);
             $returned = \App\Services\ShipmentService::isSource($slug) && !$loading
                 ? \App\Services\ShipmentService::returnsUsage($slug, (int) $id)
                 : null;
@@ -204,7 +205,7 @@ class ObjectRelationController extends Controller
                     ];
                 }
             } else {
-                $siblingSlugs = \App\Services\ShipmentService::childSlugsOf($parentSlug, (int) $parentId);
+                $siblingSlugs = \App\Services\ShipmentService::siblingSlugsFor($parentSlug, (int) $parentId, $slug);
                 $usedOthers = \App\Services\ShipmentService::usageByChildren($parentSlug, $parentId, $siblingSlugs, [$slug, $id]);
                 $services = \App\Services\ShipmentService::serviceIds(array_map(fn ($p) => $p['id'] ?? 0, array_filter($products, 'is_array')));
                 foreach ($products as $product) {

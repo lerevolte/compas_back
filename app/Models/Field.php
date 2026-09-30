@@ -650,8 +650,26 @@ class Field extends Model
         return $data;
     }
 
+    public static function checkboxValue($value): ?string
+    {
+        if(is_string($value) && $value !== '' && $value[0] === '[')
+            $value = json_decode($value, true);
+        if(is_array($value))
+            $value = $value[0] ?? null;
+        if($value === null || $value === '')
+            return null;
+
+        return in_array($value, [true, 1, '1', 'Y', 'true'], true) ? '1' : '0';
+    }
+
     public static function getHumanValue($field, $value)
     {
+        if($field->type == 'checkbox') {
+            $checked = self::checkboxValue($value);
+            $res = $checked === null ? '' : ($checked === '1' ? 'Да' : 'Нет');
+
+            return array('res' => $res, 'arr_res' => array(), 'values' => array());
+        }
         $settings = app('settings');
         $res = '';
         $arr_res = array();

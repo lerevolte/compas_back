@@ -10,7 +10,7 @@ class InstallActionTypeField extends Command
     protected $signature = 'logistic:install-action-type
         {target=all-tenants : seeds | all-tenants | <tenant_id>}';
 
-    protected $description = 'Установить поле-статус «Тип действия» (action_type) у задач логистики (Выгрузка по умолчанию / Загрузка / Приход от поставщика / Склад погрузки) и зеркальное поле у библиотеки задач и быстрых задач с сопоставлением значений; у заказов покупателей поле снимается';
+    protected $description = 'Установить поле-статус «Тип действия» (action_type) у задач логистики (Выгрузка по умолчанию / Загрузка / Приход от поставщика / Склад погрузки / Перемещение) и зеркальное поле у библиотеки задач и быстрых задач с сопоставлением значений; у заказов покупателей поле снимается';
 
     public const FIELD = 'action_type';
     public const TITLE = 'Тип действия';
@@ -22,6 +22,7 @@ class InstallActionTypeField extends Command
         ['value' => 'Загрузка', 'color' => '#007AFF', 'key' => 'loading_value_id'],
         ['value' => 'Приход от поставщика', 'color' => '#AF52DE', 'key' => 'supply_value_id'],
         ['value' => 'Склад погрузки', 'color' => '#FF9500', 'key' => 'warehouse_value_id'],
+        ['value' => 'Перемещение', 'color' => '#5AC8FA', 'key' => 'transfer_value_id'],
     ];
 
     public function handle(): int
@@ -201,7 +202,7 @@ class InstallActionTypeField extends Command
             $db->table('data_rows')->where('id', $fieldId)->update([
                 'details' => json_encode($details, JSON_UNESCAPED_UNICODE),
             ]);
-            $this->line("    [{$label}] {$slug}: программные значения закреплены — выгрузка id {$programIds['unloading_value_id']}, загрузка id " . ($programIds['loading_value_id'] ?: 'нет') . ", приход от поставщика id " . ($programIds['supply_value_id'] ?: 'нет') . ", склад погрузки id " . ($programIds['warehouse_value_id'] ?: 'нет'));
+            $this->line("    [{$label}] {$slug}: программные значения закреплены — выгрузка id {$programIds['unloading_value_id']}, загрузка id " . ($programIds['loading_value_id'] ?: 'нет') . ", приход от поставщика id " . ($programIds['supply_value_id'] ?: 'нет') . ", склад погрузки id " . ($programIds['warehouse_value_id'] ?: 'нет') . ", перемещение id " . ($programIds['transfer_value_id'] ?: 'нет'));
 
             $defaultId = $programIds['unloading_value_id'];
             if ($defaultId) {
