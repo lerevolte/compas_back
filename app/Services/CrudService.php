@@ -547,7 +547,9 @@ class CrudService
         if($new_object) {
             $ids[] = $new_object->id;
         }
-        $settings = app('settings');
+        $shared = app('settings');
+        if(isset($shared[$slug]['fields']))
+            $settings = $shared;
         $objects_collection = $entity_class::whereIntegerInRaw('id', $ids)->get();
         $objects = $objects_collection->keyBy('id');
         foreach($rows as $k => $row) {
