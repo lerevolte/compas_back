@@ -323,8 +323,19 @@ class FieldService
 
         $details = json_decode((string) $field->details, true);
         $details = is_array($details) ? $details : array();
+        $stage_options = array_values(is_array($details['options'] ?? null) ? $details['options'] : array());
         unset($details['options'], $details['can_create']);
-        if($dto->options && $field->type != 'text_group' && $field->type != 'relation' && $field->field != 'is_admin') {
+        if($field->type == 'deal_stages') {
+            $details['options'] = $stage_options;
+            if($dto->options) {
+                $details['stage_overrides'] = \App\Models\Field::stageOverrides($stage_options, $dto->options);
+                $details['options'] = \App\Models\Field::stageOptions($stage_options, $details['stage_overrides']);
+            }
+            if(isset($dto->show_stage_bar)) {
+                $details['show_stage_bar'] = $dto->show_stage_bar ? 1 : 0;
+            }
+            $data['details'] = json_encode($details, JSON_UNESCAPED_UNICODE);
+        } elseif($dto->options && $field->type != 'text_group' && $field->type != 'relation' && $field->field != 'is_admin') {
             $details['options'] = array();
             foreach($dto->options as $k => $item) {
                 $details['options'][$item['value']] = array(

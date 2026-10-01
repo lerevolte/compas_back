@@ -27,6 +27,7 @@ final class FieldUpdateDto
         public readonly mixed $default_value = null,
         public readonly ?int $set_default = null,
         public readonly ?string $mask = null,
+        public readonly ?int $show_stage_bar = null,
     )
     {
     }

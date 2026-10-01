@@ -637,8 +637,10 @@ class Field extends Model
             'related_table' => $this->type == 'relation' ? self::relatedTable($this) : null,
         );
 
+        $details = array();
         if ($this->details) {
             $details = json_decode($this->details, true);
+            $details = is_array($details) ? $details : array();
             if (isset($details['can_create'])) {
                 $data['can_create'] = $details['can_create'] ? 1 : 0;
             }
@@ -647,7 +649,87 @@ class Field extends Model
             }
         }
 
+        if ($this->type == 'deal_stages') {
+            $data['show_stage_bar'] = isset($details['show_stage_bar']) && !$details['show_stage_bar'] ? 0 : 1;
+        }
+
         return $data;
+    }
+
+    public static function stageOverrides(array $options, array $items): array
+    {
+        $base = array();
+        foreach ($options as $option) {
+            if (!is_array($option) || !isset($option['value'])) {
+                continue;
+            }
+            $base[(string) $option['value']] = array(
+                'label' => (string) ($option['b24_label'] ?? ($option['label'] ?? '')),
+                'color' => (string) ($option['b24_color'] ?? ($option['color'] ?? '')),
+            );
+        }
+
+        $overrides = array();
+        foreach ($items as $item) {
+            if (!is_array($item) || !isset($item['value']) || !isset($base[(string) $item['value']])) {
+                continue;
+            }
+            $value = (string) $item['value'];
+            $label = array_key_exists('custom_label', $item) ? $item['custom_label'] : ($item['label'] ?? '');
+            $label = is_string($label) ? trim($label) : '';
+            $color = is_string($item['color'] ?? null) ? trim($item['color']) : '';
+            $file = is_string($item['file'] ?? null) ? trim($item['file']) : '';
+            $override = array();
+            if ($label !== '' && $label !== $base[$value]['label']) {
+                $override['label'] = $label;
+            }
+            if ($color !== '' && mb_strtolower($color) !== mb_strtolower($base[$value]['color'])) {
+                $override['color'] = $color;
+            }
+            if ($file !== '') {
+                $override['file'] = $file;
+            }
+            if (count($override)) {
+                $overrides[$value] = $override;
+            }
+        }
+
+        return $overrides;
+    }
+
+    public static function stageOptions(array $options, array $overrides): array
+    {
+        $result = array();
+        foreach ($options as $option) {
+            if (!is_array($option) || !isset($option['value'])) {
+                continue;
+            }
+            $value = (string) $option['value'];
+            $base_label = (string) ($option['b24_label'] ?? ($option['label'] ?? ''));
+            $base_color = (string) ($option['b24_color'] ?? ($option['color'] ?? ''));
+            $override = isset($overrides[$value]) && is_array($overrides[$value]) ? $overrides[$value] : array();
+            $custom_label = trim((string) ($override['label'] ?? ''));
+            if ($custom_label === $base_label) {
+                $custom_label = '';
+            }
+            $custom_color = trim((string) ($override['color'] ?? ''));
+            $file = trim((string) ($override['file'] ?? ''));
+            $item = array(
+                'value' => $value,
+                'label' => $custom_label !== '' ? $custom_label . ' (' . $base_label . ')' : $base_label,
+                'b24_label' => $base_label,
+                'custom_label' => $custom_label,
+                'color' => $custom_color !== '' ? $custom_color : $base_color,
+                'b24_color' => $base_color,
+                'file' => $file !== '' ? $file : null,
+            );
+            if (isset($option['semantics'])) {
+                $item['semantics'] = $option['semantics'];
+            }
+            $result[] = $item;
+        }
+
+        return $result;
     }
 
     public static function checkboxValue($value): ?string

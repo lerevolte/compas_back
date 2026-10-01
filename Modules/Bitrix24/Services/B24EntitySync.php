@@ -210,6 +210,8 @@ class B24EntitySync
         $row = $this->stageFieldRow();
         if ($row) {
             $details = json_decode($row->details ?? '', true) ?: [];
+            $overrides = is_array($details['stage_overrides'] ?? null) ? $details['stage_overrides'] : [];
+            $options = \App\Models\Field::stageOptions($options, $overrides);
             if (($details['options'] ?? null) != $options) {
                 $details['options'] = $options;
                 DB::table('data_rows')->where('id', $row->id)->update([
@@ -252,7 +254,7 @@ class B24EntitySync
     {
         $row = $this->stageFieldRow();
         $details = $row ? (json_decode($row->details ?? '', true) ?: []) : [];
-        $options = $details['options'] ?? [];
+        $options = array_values(is_array($details['options'] ?? null) ? $details['options'] : []);
         if (!count($options)) {
             $options = $this->syncStages();
         }
