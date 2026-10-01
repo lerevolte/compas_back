@@ -1596,6 +1596,16 @@ class EntityObject
         if($request->ids) {
             $paginator = $paginator->whereIntegerInRaw('id', $request->ids);
         }
+        if($request->category_tree_id && is_numeric($request->category_tree_id) && isset($settings[$slug]['fields']['category_id'])) {
+            $tree_field = $settings[$slug]['fields']['category_id'];
+            $tree_table = $tree_field->relation_table ?: (json_decode($tree_field->details ?? '', true)['table'] ?? null);
+            $tree_dt = $tree_table ? \DB::table('data_types')->where('name', $tree_table)->first() : null;
+            $tree_ids = [(int) $request->category_tree_id];
+            if($tree_dt && $tree_dt->model_name && class_exists($tree_dt->model_name) && $tree_dt->model_name::where('id', $request->category_tree_id)->exists()) {
+                $tree_ids = $tree_dt->model_name::descendantsAndSelf($request->category_tree_id)->pluck('id')->toArray();
+            }
+            $paginator = $paginator->whereIntegerInRaw('category_id', $tree_ids);
+        }
         if($request->filter && is_array($request->filter)){
 
             if ($slug == 'logistic_tasks' && isset($request->filter['route_id'])) {
