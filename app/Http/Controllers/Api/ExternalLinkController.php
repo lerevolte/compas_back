@@ -105,13 +105,6 @@ class ExternalLinkController extends Controller
         return response()->json($result, $result['status'] ?? 200);
     }
 
-    /**
-     * Таблица привязанной сущности для внешней ссылки (без авторизации).
-     * Безопасность: объём строк ограничивается СЕРВЕРОМ — берём id связанных
-     * с родителем строк (как в compose_show/detail), клиентский filter для
-     * ограничения не используем. $slug должен быть реальной привязанной
-     * вкладкой родителя.
-     */
     public function table($token, $slug, Request $request)
     {
         $link = ExternalLink::where('token', $token)->firstOrFail();
@@ -125,8 +118,6 @@ class ExternalLinkController extends Controller
         $parentSlug = $link->model_slug;
         $parentId   = $link->model_id;
 
-        // 1. $slug должен быть привязанной (plural relation) вкладкой родителя.
-        //    Особый случай: задачи маршрута (routes -> logistic_tasks по route_id).
         $isRouteTasks = ($parentSlug === 'routes' && $slug === 'logistic_tasks');
         $isValidTab = false;
         foreach (($settings[$parentSlug]['fields'] ?? []) as $field) {
@@ -144,12 +135,10 @@ class ExternalLinkController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        // 2. Серверный scoping: id связанных строк родителя.
         $allowedIds = $this->relatedIds($settings, $parentSlug, $parentId, $slug);
 
         $scoped = new Request();
         if ($allowedIds !== null) {
-            // Пустой набор -> заведомо пустой результат, но в форме таблицы.
             $scoped->merge(['ids' => $allowedIds ?: [-1]]);
         } elseif ($isRouteTasks) {
             $scoped->merge(['filter' => ['route_id' => $parentId]]);
@@ -165,10 +154,6 @@ class ExternalLinkController extends Controller
             return response()->json(['message' => $list['error']['message']], $list['error']['code']);
         }
 
-        // Поля с ограничением видимости по ролям (roles_read) во внешней ссылке
-        // показывать нельзя: внешний зритель анонимен (ролей нет), а запрос
-        // выполняется от имени админа (actAsSystemUser), который иначе видит всё.
-        // Поэтому вырезаем такие поля из колонок, схемы полей и значений строк.
         $restricted = $this->restrictedFields($slug);
 
         $table = array_values(array_filter(
@@ -191,10 +176,6 @@ class ExternalLinkController extends Controller
             }, $list['data']);
         }
 
-        // Задачи маршрута выводим в порядке маршрута (по полю sort), а не в
-        // порядке по умолчанию (id) — иначе во внешней ссылке порядок точек не
-        // совпадал с маршрутом (8579). Сортируем по последовательности id из
-        // relation tasks() (она уже orderBy('sort')).
         if ($isRouteTasks && isset($list['data']) && is_array($list['data'])) {
             $orderedIds = \App\Models\Route::find($parentId)?->tasks()->pluck('id')->toArray() ?? [];
             if (!empty($orderedIds)) {
@@ -218,9 +199,7 @@ class ExternalLinkController extends Controller
             'categories'  => [],
             'permissions' => $this->externalPermissions($slug),
             'tabs'        => [],
-            // Настройки полей «Маршрут списком» — те же, что внутри портала,
-            // чтобы внешняя ссылка показывала идентичный набор/порядок колонок (8579).
-            'route_tasks_view' => $isRouteTasks ? \App\Http\Controllers\Api\RouteController::getTasksViewFields() : [],
+            'route_tasks_view' => $isRouteTasks ? \App\Http\Controllers\Api\RouteController::getTasksViewFields($this->externalRole()?->id) : [],
         ]);
     }
 

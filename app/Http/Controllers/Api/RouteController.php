@@ -1034,21 +1034,30 @@ class RouteController extends Controller
         return response()->json($route->getTaskFilters());
     }
 
-    public function tasks_view_fields()
+    public function tasks_view_fields(Request $request)
     {
-        return response()->json(['fields' => self::getTasksViewFields()]);
+        $user = Auth::user();
+        if ($user && $user->is_admin && $request->has('role_id')) {
+            return response()->json(['fields' => self::getTasksViewFields($request->role_id ? (int) $request->role_id : null)]);
+        }
+
+        return response()->json(['fields' => self::getTasksViewFields($user && $user->role_id ? (int) $user->role_id : null)]);
     }
 
-    public static function getTasksViewFields(): array
+    public static function getTasksViewFields(?int $roleId = null): array
     {
-        $row = \DB::table('settings')
-            ->where('type', 'route_tasks_view_fields')
-            ->whereNull('user_id')
-            ->first();
-        if ($row && $row->value) {
-            $decoded = json_decode($row->value, true);
-            if (is_array($decoded)) {
-                return $decoded;
+        $entities = $roleId ? ['role_' . $roleId, null] : [null];
+        foreach ($entities as $entity) {
+            $row = \DB::table('settings')
+                ->where('type', 'route_tasks_view_fields')
+                ->where('entity', $entity)
+                ->whereNull('user_id')
+                ->first();
+            if ($row && $row->value) {
+                $decoded = json_decode($row->value, true);
+                if (is_array($decoded)) {
+                    return $decoded;
+                }
             }
         }
         return [];
@@ -1056,6 +1065,16 @@ class RouteController extends Controller
 
     public function save_tasks_view_fields(Request $request)
     {
+        $user = Auth::user();
+        if (!$user || !$user->is_admin) {
+            return response()->json(['message' => 'Доступ ограничен'], 403);
+        }
+
+        $roleId = $request->input('role_id') ? (int) $request->input('role_id') : null;
+        if ($roleId && !\DB::table('roles')->where('id', $roleId)->exists()) {
+            return response()->json(['message' => 'Роль не найдена'], 422);
+        }
+
         $fields = $request->input('fields', []);
         if (!is_array($fields)) {
             $fields = [];
@@ -1073,7 +1092,7 @@ class RouteController extends Controller
         }
 
         \DB::table('settings')->updateOrInsert(
-            ['type' => 'route_tasks_view_fields', 'entity' => null, 'user_id' => null],
+            ['type' => 'route_tasks_view_fields', 'entity' => $roleId ? 'role_' . $roleId : null, 'user_id' => null],
             ['key' => 'route_tasks_view_fields', 'value' => json_encode($clean, JSON_UNESCAPED_UNICODE)]
         );
 
