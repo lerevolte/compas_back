@@ -1865,6 +1865,7 @@ class EntityObject
                 'pickups' => \App\Models\Pickup::class,
                 'supplier_orders' => \App\Models\SupplierOrder::class,
                 'addresses' => \App\Models\Address::class,
+                'specifications' => \App\Models\Specification::class,
             ][$request->order_entity] ?? \App\Models\Task::class;
             $order = $order_class::withTrashed()->where(['id' => $request->order_id])->first();
 
@@ -2282,6 +2283,7 @@ class EntityObject
                         $data['product_weight'] = Product::unitValue($item->weight ?? null, $product['weight'] ?? null);
                         $data['product_volume'] = Product::unitValue($item->volume ?? null, $product['volume'] ?? 0);
                         $data['product_shipped'] = $product['shipped'] ?? 0;
+                        $data['product_output_count'] = $product['output_count'] ?? null;
                         $line_nds = $product['nds'] ?? null;
                         $line_nds_included = $product['nds_included'] ?? null;
                         if ($line_nds === null && isset($item->nds)) {
@@ -2328,6 +2330,7 @@ class EntityObject
                             'product_nds_sum' => round(\App\Services\ShipmentService::lineParts($product, \App\Services\ShipmentService::linePriceKey((string) ($request->order_entity ?? '')))['vat'], 2),
                             'product_total' => round(\App\Services\ShipmentService::lineParts($product, \App\Services\ShipmentService::linePriceKey((string) ($request->order_entity ?? '')))['gross'], 2),
                             'product_shipped' => $product['shipped'] ?? 0,
+                            'product_output_count' => $product['output_count'] ?? null,
                             'product_nds' => $product['nds'] ?? null,
                             'product_nds_included' => ($product['nds_included'] ?? null) === null || ($product['nds_included'] ?? null) === '' ? '1' : (string) $product['nds_included'],
                             'sort' => $num,

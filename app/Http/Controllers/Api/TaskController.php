@@ -54,6 +54,11 @@ class TaskController extends Controller
         return $this->saveProductsFor('addresses', \App\Models\Address::class, $id, $request);
     }
 
+    public function set_specification_products($id, Request $request)
+    {
+        return $this->saveProductsFor('specifications', \App\Models\Specification::class, $id, $request);
+    }
+
     public function set_supplier_order_products($id, Request $request)
     {
         return $this->saveProductsFor('supplier_orders', \App\Models\SupplierOrder::class, $id, $request);
@@ -72,6 +77,9 @@ class TaskController extends Controller
         $products = array();
         foreach ($request->products as $product) {
             $count = $product['product_count'] ?? null;
+            if (is_string($count)) {
+                $count = str_replace(',', '.', trim($count));
+            }
             if ($count === null || $count === '' || (is_numeric($count) && (float) $count <= 0)) {
                 continue;
             }
@@ -80,13 +88,17 @@ class TaskController extends Controller
                 'name' => $product['product_name'] ?? ($product['name'] ?? ''),
                 'price' => $product['product_price'] ?? null,
                 'purchase_price' => $product['product_purchase_price'] ?? ($product['purchase_price'] ?? null),
-                'count' => $product['product_count'] ?? null,
+                'count' => $count,
                 'weight' => $product['product_weight'] ?? null,
                 'volume' => $product['product_volume'] ?? 0,
                 'sum' => $product['product_sum'] ?? null,
                 'nds' => $product['product_nds'] ?? ($product['nds'] ?? null),
                 'nds_included' => $product['product_nds_included'] ?? ($product['nds_included'] ?? null),
             );
+            $outputCount = $product['product_output_count'] ?? null;
+            if ($outputCount !== null && $outputCount !== '') {
+                $line['output_count'] = is_string($outputCount) ? str_replace(',', '.', trim($outputCount)) : $outputCount;
+            }
             $parts = \App\Services\ShipmentService::lineParts($line, \App\Services\ShipmentService::linePriceKey((string) $slug));
             $line['sum'] = round($parts['net'], 2);
             $line['nds_sum'] = round($parts['vat'], 2);

@@ -714,6 +714,67 @@ class Table
     }
 
     public const ORDER_PRODUCTS = 'order_products';
+    public const OUTPUT_COUNT_KEY = 'product_output_count';
+    public const OUTPUT_COUNT_TITLE = 'Кол-во продукции';
+    public const OUTPUT_COUNT_ENTITIES = ['specifications'];
+
+    private static function withOutputCountColumn(array $columns, $parentSlug): array
+    {
+        $enabled = in_array((string) $parentSlug, self::OUTPUT_COUNT_ENTITIES, true);
+        $result = [];
+        $found = false;
+        foreach ($columns as $column) {
+            if (($column['key'] ?? null) !== self::OUTPUT_COUNT_KEY) {
+                $result[] = $column;
+                continue;
+            }
+            if (!$enabled || $found) {
+                continue;
+            }
+            $found = true;
+            $column['type'] = 'number';
+            $column['read_only'] = 0;
+            if (empty($column['is_another_title'])) {
+                $column['title'] = self::OUTPUT_COUNT_TITLE;
+            }
+            $result[] = $column;
+        }
+        if (!$enabled || $found) {
+            return $result;
+        }
+        $column = [
+            'id' => null,
+            'title' => self::OUTPUT_COUNT_TITLE,
+            'key' => self::OUTPUT_COUNT_KEY,
+            'width' => '200px',
+            'enabled' => 1,
+            'sort_order' => '',
+            'type' => 'number',
+            'fixed' => '',
+            'index' => 0,
+            'fixTarget' => '0px',
+            'read_only' => 0,
+            'mask' => '',
+            'is_another_title' => 0,
+        ];
+        $inserted = [];
+        $placed = false;
+        foreach ($result as $item) {
+            $inserted[] = $item;
+            if (($item['key'] ?? null) === 'product_count') {
+                $inserted[] = $column;
+                $placed = true;
+            }
+        }
+        if (!$placed) {
+            $inserted[] = $column;
+        }
+        foreach ($inserted as $i => $item) {
+            $inserted[$i]['index'] = $i;
+        }
+
+        return $inserted;
+    }
 
     public static function orderProductsKey($parentSlug = null): string
     {
@@ -792,7 +853,7 @@ class Table
             $table_columns = collect($layout['fields']);
             $table_columns = $table_columns->keyBy('key')->toArray();
             foreach($table_columns as $key => $column) {
-                if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'remnant_name' && $key != 'product_name' && $key != 'product_id' && $key != 'product_price' && $key != 'product_purchase_price' && $key != 'product_count' && $key != 'product_weight' && $key != 'product_volume' && $key != 'product_sum' && $key != 'product_shipped' && $key != 'product_nds' && $key != 'product_nds_included' && $key != 'product_nds_sum' && $key != 'product_total' && $key != 'iconDrag' || $key == 'price' || $key == 'name' || $key == 'weight' || $key == 'volume' || $key == 'purchase_price' || $key == 'nds' || $key == 'nds_included')
+                if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'remnant_name' && $key != 'product_name' && $key != 'product_id' && $key != 'product_price' && $key != 'product_purchase_price' && $key != 'product_count' && $key != 'product_weight' && $key != 'product_volume' && $key != 'product_sum' && $key != 'product_shipped' && $key != 'product_nds' && $key != 'product_nds_included' && $key != 'product_nds_sum' && $key != 'product_total' && $key != self::OUTPUT_COUNT_KEY && $key != 'iconDrag' || $key == 'price' || $key == 'name' || $key == 'weight' || $key == 'volume' || $key == 'purchase_price' || $key == 'nds' || $key == 'nds_included')
                     unset($table_columns[$key]);
             }
             unset($table_columns['iconDelete']);
@@ -1233,10 +1294,7 @@ class Table
             }
         }
 
-        info('product table_columns');
-        info($table_columns);
-
-        return $table_columns;
+        return self::withOutputCountColumn($table_columns, $parentSlug);
     }
 
     public static function roles()

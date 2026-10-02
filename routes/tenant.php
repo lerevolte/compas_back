@@ -137,6 +137,15 @@ Route::middleware([
     'api',
     InitializeTenancyByDomain::class,
     PreventAccessFromCentralDomains::class,
+    ])->prefix('api/1c')->group(function () {
+        Route::get('documents', [App\Http\Controllers\Api\OneCController::class, 'documents'])->name('onec.documents');
+        Route::match(['get', 'post'], 'documents/confirm', [App\Http\Controllers\Api\OneCController::class, 'confirm'])->name('onec.documents.confirm');
+});
+
+Route::middleware([
+    'api',
+    InitializeTenancyByDomain::class,
+    PreventAccessFromCentralDomains::class,
     ])->prefix('api')->group(function () {
         Route::post(
             'auth',
@@ -507,6 +516,11 @@ Route::middleware([
         Route::put(
             'addresses/{id}/set_products',
             [App\Http\Controllers\Api\TaskController::class, 'set_address_products']
+        );
+
+        Route::put(
+            'specifications/{id}/set_products',
+            [App\Http\Controllers\Api\TaskController::class, 'set_specification_products']
         );
 
         Route::put(
