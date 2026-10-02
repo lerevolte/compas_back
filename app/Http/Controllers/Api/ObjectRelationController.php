@@ -205,8 +205,7 @@ class ObjectRelationController extends Controller
                     ];
                 }
             } else {
-                $siblingSlugs = \App\Services\ShipmentService::siblingSlugsFor($parentSlug, (int) $parentId, $slug);
-                $usedOthers = \App\Services\ShipmentService::usageByChildren($parentSlug, $parentId, $siblingSlugs, [$slug, $id]);
+                $usedOthers = \App\Services\ShipmentService::usageBySiblings($parentSlug, (int) $parentId, $slug, [$slug, $id]);
                 $services = \App\Services\ShipmentService::serviceIds(array_map(fn ($p) => $p['id'] ?? 0, array_filter($products, 'is_array')));
                 foreach ($products as $product) {
                     if (!is_array($product)) {

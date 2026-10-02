@@ -713,6 +713,27 @@ class Table
         );
     }
 
+    public const ORDER_PRODUCTS = 'order_products';
+
+    public static function orderProductsKey($parentSlug = null): string
+    {
+        $parentSlug = preg_replace('/[^a-z0-9_]/i', '', (string) $parentSlug);
+
+        return $parentSlug !== '' ? self::ORDER_PRODUCTS . '_' . $parentSlug : self::ORDER_PRODUCTS;
+    }
+
+    public static function orderProductsLayout($tables, $parentSlug = null): ?array
+    {
+        if(!is_array($tables))
+            return null;
+        foreach([self::orderProductsKey($parentSlug), self::ORDER_PRODUCTS] as $key) {
+            if(isset($tables[$key]['fields']) && is_array($tables[$key]['fields']))
+                return $tables[$key];
+        }
+
+        return null;
+    }
+
     public static function get_order_products($parentSlug = null)
     {
         $user = \Auth::user();
@@ -721,6 +742,7 @@ class Table
         $tables = $user->tables;
         if($tables)
             $tables = json_decode($tables, true);
+        $layout = self::orderProductsLayout($tables, $parentSlug);
         $settings = app('settings');
         $options = array();
         $items = Product::orderBy('choosed_at', 'DESC')->orderBy('name', 'ASC')->whereNull('deleted_at')->limit(10)->get();
@@ -762,12 +784,12 @@ class Table
             }
             $options[] = $option;
         }
-        if(isset($tables['order_products'])) {
+        if($layout) {
 
             $entity = \DB::table('data_types')->where('slug', 'products')->first();
             $entity_class = $entity->model_name;
             $model_fields = collect($settings['products']['fields']);
-            $table_columns = collect($tables['order_products']['fields']);
+            $table_columns = collect($layout['fields']);
             $table_columns = $table_columns->keyBy('key')->toArray();
             foreach($table_columns as $key => $column) {
                 if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'remnant_name' && $key != 'product_name' && $key != 'product_id' && $key != 'product_price' && $key != 'product_purchase_price' && $key != 'product_count' && $key != 'product_weight' && $key != 'product_volume' && $key != 'product_sum' && $key != 'product_shipped' && $key != 'product_nds' && $key != 'product_nds_included' && $key != 'product_nds_sum' && $key != 'product_total' && $key != 'iconDrag' || $key == 'price' || $key == 'name' || $key == 'weight' || $key == 'volume' || $key == 'purchase_price' || $key == 'nds' || $key == 'nds_included')

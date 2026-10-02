@@ -20,7 +20,7 @@ class B24ProductSync
     private array $params;
     private ?bool $catalogScope = null;
 
-    public const PUSH_PRODUCT_FIELDS = ['name', 'price', 'weight', 'category_id', 'product_type'];
+    public const PUSH_PRODUCT_FIELDS = ['name', 'price', 'weight', 'category_id', 'product_type', 'fact_product_id'];
     public const PUSH_CATEGORY_FIELDS = ['name', 'parent_id'];
 
     private const LINK_PROPERTY = 'PROPERTY_132';
@@ -268,6 +268,18 @@ class B24ProductSync
                     $this->writeKit((int) $kit->id, $ids);
                     $changed = true;
                 }
+            }
+        }
+        if ($this->hasColumn(\App\Services\ProductKitService::FACT_FIELD)) {
+            $kitLocal = $kitB24Id
+                ? (int) DB::table('products')->where('id_b24', $kitB24Id)->whereNull('deleted_at')->value('id')
+                : 0;
+            if ($kitLocal === $productId) {
+                $kitLocal = 0;
+            }
+            if (\App\Services\ProductKitService::factOf($productId) !== $kitLocal) {
+                \App\Services\ProductKitService::setFact($productId, $kitLocal ?: null, true);
+                $changed = true;
             }
         }
 
@@ -987,9 +999,18 @@ class B24ProductSync
             }
             $fields['SECTION_ID'] = $sectionId;
         }
-        $propsChanged = $all || in_array('weight', $changed, true) || in_array('product_type', $changed, true);
+        $kitId = $this->hasColumn('fact_product_id') ? (\App\Services\ProductKitService::ids($product->fact_product_id)[0] ?? 0) : 0;
+        $factChanged = $this->hasColumn('fact_product_id')
+            && (in_array('fact_product_id', $changed, true) || (!$product->id_b24 && $kitId));
+        $propsChanged = $all || $factChanged || in_array('weight', $changed, true) || in_array('product_type', $changed, true);
         if (!count($fields) && !$propsChanged) {
             return;
+        }
+        if ($factChanged && ($fact = $this->factProperty())) {
+            $kitB24 = $kitId ? DB::table('products')->where('id', $kitId)->value('id_b24') : null;
+            if ($kitB24 || $product->id_b24) {
+                $fields[$fact] = $kitB24 ? (string) $kitB24 : '';
+            }
         }
 
         $fields[self::WEIGHT_PROPERTY] = $product->weight !== null ? (string) $product->weight : '';

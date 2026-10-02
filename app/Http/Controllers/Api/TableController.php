@@ -69,6 +69,9 @@ class TableController extends Controller
         $table = $tenant->run(function () use ($slug) {
             $user = User::find(1);
             $tables = $this->getUserTables($user);
+            if (!isset($tables[$slug]) && str_starts_with((string) $slug, \App\Models\Table::ORDER_PRODUCTS . '_')) {
+                return $tables[\App\Models\Table::ORDER_PRODUCTS] ?? [];
+            }
             return $tables[$slug] ?? [];
         });
 

@@ -3,6 +3,7 @@
 define('COMPAS_SYNC_TOKEN', 'CHANGE_ME');
 define('COMPAS_SYNC_IBLOCK_ID', 2);
 define('COMPAS_SYNC_LOG', $_SERVER['DOCUMENT_ROOT'] . '/upload/compas_sync.log');
+define('COMPAS_SYNC_SITE_URL', 'https://opt6.ru');
 
 $COMPAS_PROPERTY_MAP = [
     'length' => 'HEIGHT',
@@ -56,7 +57,7 @@ if (strlen(COMPAS_SYNC_TOKEN) < 16 || !hash_equals(COMPAS_SYNC_TOKEN, $token)) {
     compas_respond([
         'ok' => false,
         'error' => 'Unauthorized',
-        'version' => 2,
+        'version' => 3,
         'expected_fp' => substr(hash('sha256', COMPAS_SYNC_TOKEN), 0, 8),
         'expected_len' => strlen(COMPAS_SYNC_TOKEN),
         'got_fp' => substr(hash('sha256', $token), 0, 8),
@@ -66,7 +67,7 @@ if (strlen(COMPAS_SYNC_TOKEN) < 16 || !hash_equals(COMPAS_SYNC_TOKEN, $token)) {
 
 $action = (string) ($payload['action'] ?? 'write');
 $products = $payload['products'] ?? null;
-if ($action === 'read') {
+if ($action === 'read' || $action === 'links') {
     $readIds = array_values(array_filter(array_map('intval', (array) ($payload['ids'] ?? []))));
     if (!count($readIds)) {
         compas_respond(['ok' => false, 'error' => 'Empty ids'], 400);
@@ -79,6 +80,35 @@ require_once($_SERVER['DOCUMENT_ROOT'] . '/bitrix/modules/main/include/prolog_be
 
 if (!CModule::IncludeModule('iblock') || !CModule::IncludeModule('catalog')) {
     compas_respond(['ok' => false, 'error' => 'iblock/catalog module not available'], 500);
+}
+
+if ($action === 'links') {
+    $items = [];
+    $found = [];
+    $res = CIBlockElement::GetList(
+        [],
+        ['IBLOCK_ID' => COMPAS_SYNC_IBLOCK_ID, 'ID' => array_slice($readIds, 0, 500)],
+        false,
+        false,
+        ['ID', 'IBLOCK_ID', 'DETAIL_PAGE_URL']
+    );
+    while ($row = $res->GetNext()) {
+        $id = (int) $row['ID'];
+        $found[] = $id;
+        $path = trim((string) $row['DETAIL_PAGE_URL']);
+        if ($path === '') {
+            continue;
+        }
+        $items[] = [
+            'id' => $id,
+            'url' => preg_match('#^https?://#i', $path) ? $path : COMPAS_SYNC_SITE_URL . '/' . ltrim($path, '/'),
+        ];
+    }
+    compas_respond([
+        'ok' => true,
+        'items' => $items,
+        'missing' => array_values(array_diff($readIds, $found)),
+    ]);
 }
 
 if ($action === 'read') {

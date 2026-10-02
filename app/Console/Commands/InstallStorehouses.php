@@ -12,7 +12,7 @@ class InstallStorehouses extends Command
         {target=all-tenants : seeds | all-tenants | <tenant_id>}
         {--dry-run : показать план конвертации без изменений}';
 
-    protected $description = 'Сущность «Склады»: «Склад отгрузки» (список) → relation «Склад списания» со складами из вариантов списка; поля «Склад списания»/«Склад прихода» у задач, самовывозов, накладных и возвратов';
+    protected $description = 'Сущность «Склады» с полем «Адрес склада»: «Склад отгрузки» (список) → relation «Склад списания» со складами из вариантов списка; поля «Склад списания»/«Склад прихода» у задач, самовывозов, накладных и возвратов';
 
     public const SLUG = StorehouseService::TABLE;
     public const MODEL = 'App\\Models\\Storehouse';
@@ -88,7 +88,7 @@ SQL);
     {
         $now = now();
         $sb = $db->getSchemaBuilder();
-        foreach (['photo', 'comment'] as $column) {
+        foreach (['photo', 'comment', 'storehouse_address'] as $column) {
             if (!$sb->hasColumn(self::SLUG, $column)) {
                 $db->statement('ALTER TABLE `' . self::SLUG . '` ADD COLUMN `' . $column . '` TEXT NULL');
             }
@@ -135,6 +135,7 @@ SQL);
             ['field' => 'photo', 'type' => 'file', 'title' => 'Фото', 'sort' => 4, 'show_file_name' => 1, 'is_default' => 1],
             ['field' => 'comment', 'type' => 'text', 'title' => 'Примечание', 'sort' => 5, 'is_plural' => 1],
             ['field' => 'user_id', 'type' => 'relation', 'title' => 'Ответственный', 'sort' => 6, 'required' => 1, 'details' => '{"table":"users"}', 'is_link' => 1, 'relation_table' => 'users', 'is_inactive' => 1],
+            ['field' => 'storehouse_address', 'type' => 'address', 'title' => 'Адрес склада', 'sort' => 7],
         ];
         $existing = $db->table('data_rows')->where('data_type_id', $typeId)->pluck('field')->all();
         $added = [];

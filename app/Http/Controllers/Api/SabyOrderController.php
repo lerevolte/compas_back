@@ -16,7 +16,7 @@ class SabyOrderController extends Controller
 {
     public function index($id)
     {
-        if (!SabyOrderService::ready() || !SabyOrderService::tableReady()) {
+        if (!SabyOrderService::ready() || !SabyOrderService::tableReady() || !\App\Services\Saby\SabyFieldAccess::can('read')) {
             return response()->json(['enabled' => false, 'data' => [], 'waybills' => []]);
         }
 
@@ -47,11 +47,19 @@ class SabyOrderController extends Controller
         } catch (\Throwable $e) {
         }
 
-        return response()->json(['enabled' => true, 'data' => $orders, 'waybills' => $waybills]);
+        return response()->json([
+            'enabled' => true,
+            'can_edit' => \App\Services\Saby\SabyFieldAccess::can('write'),
+            'data' => $orders,
+            'waybills' => $waybills,
+        ]);
     }
 
     public function store($id, Request $request)
     {
+        if ($denied = \App\Services\Saby\SabyFieldAccess::denied()) {
+            return $denied;
+        }
         $service = SabyOrderService::make();
         if (!$service || !SabyOrderService::tableReady()) {
             return response()->json(['message' => 'Модуль Saby не настроен'], 422);
@@ -116,6 +124,9 @@ class SabyOrderController extends Controller
 
     public function refresh($orderId)
     {
+        if ($denied = \App\Services\Saby\SabyFieldAccess::denied()) {
+            return $denied;
+        }
         $service = SabyOrderService::make();
         if (!$service) {
             return response()->json(['message' => 'Модуль Saby не настроен'], 422);
@@ -135,6 +146,9 @@ class SabyOrderController extends Controller
 
     public function updateData($orderId, Request $request)
     {
+        if ($denied = \App\Services\Saby\SabyFieldAccess::denied()) {
+            return $denied;
+        }
         $service = SabyOrderService::make();
         if (!$service) {
             return response()->json(['message' => 'Модуль Saby не настроен'], 422);
@@ -158,6 +172,9 @@ class SabyOrderController extends Controller
 
     public function destroy($orderId)
     {
+        if ($denied = \App\Services\Saby\SabyFieldAccess::denied()) {
+            return $denied;
+        }
         $order = SabyOrder::find($orderId);
         if (!$order) {
             return response()->json(['message' => 'Заказ не найден'], 404);
@@ -174,6 +191,9 @@ class SabyOrderController extends Controller
 
     public function waybill($id)
     {
+        if ($denied = \App\Services\Saby\SabyFieldAccess::denied()) {
+            return $denied;
+        }
         $service = SabyWaybillService::make();
         $orderService = SabyOrderService::make();
         if (!$service || !$orderService || !SabyOrderService::tableReady()) {

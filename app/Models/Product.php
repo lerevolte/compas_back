@@ -80,8 +80,14 @@ class Product extends Model
                 \Log::channel('bitrix24')->warning('product push failed', ['product_id' => $model->id, 'error' => $e->getMessage()]);
             }
        });
-        // sync([]) при удалении убран: записи удаляются мягко, связи сохраняются,
-        // чтобы восстановление из корзины возвращало запись вместе со связями.
+       static::saved(function($model)
+       {
+            try {
+                \App\Services\ProductKitService::onSaved($model);
+            } catch (\Throwable $e) {
+                \Log::warning('product kit mirror failed', ['product_id' => $model->id, 'error' => $e->getMessage()]);
+            }
+       });
     }
 
     public function remnants()
@@ -94,6 +100,16 @@ class Product extends Model
         return $this->belongsToMany(Category::class, 'product_category');
     }
 
+
+    public static function unitValue($current, $fallback)
+    {
+        $value = is_string($current) ? str_replace(',', '.', trim($current)) : $current;
+        if ($value !== null && $value !== '' && is_numeric($value) && (float) $value > 0) {
+            return (float) $value == (int) $value ? (int) $value : (float) $value;
+        }
+
+        return $fallback;
+    }
 
     public function applyVolumeFromDimensions(): void
     {

@@ -2279,8 +2279,8 @@ class EntityObject
                         $data['product_price'] = $product['price'];
                         $data['product_purchase_price'] = $product['purchase_price'] ?? null;
                         $data['product_count'] = $product['count'];
-                        $data['product_weight'] = $product['weight'];
-                        $data['product_volume'] = $product['volume'] ?? 0;
+                        $data['product_weight'] = Product::unitValue($item->weight ?? null, $product['weight'] ?? null);
+                        $data['product_volume'] = Product::unitValue($item->volume ?? null, $product['volume'] ?? 0);
                         $data['product_shipped'] = $product['shipped'] ?? 0;
                         $line_nds = $product['nds'] ?? null;
                         $line_nds_included = $product['nds_included'] ?? null;

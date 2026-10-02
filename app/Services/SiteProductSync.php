@@ -159,7 +159,7 @@ SQL);
         return $stat;
     }
 
-    public static function read(array $ids): array
+    public static function read(array $ids, string $action = 'read'): array
     {
         $config = self::config();
         if (!$config || !count($ids)) {
@@ -168,7 +168,7 @@ SQL);
         try {
             $response = Http::timeout(120)
                 ->withHeaders(['X-Compas-Token' => $config['token']])
-                ->post($config['url'], ['token' => $config['token'], 'action' => 'read', 'ids' => array_values($ids)]);
+                ->post($config['url'], ['token' => $config['token'], 'action' => $action, 'ids' => array_values($ids)]);
             $body = $response->json();
             if (!$response->ok() || !is_array($body) || empty($body['ok'])) {
                 return ['items' => [], 'missing' => [], 'error' => 'HTTP ' . $response->status() . ': ' . mb_substr((string) $response->body(), 0, 300)];
@@ -178,6 +178,11 @@ SQL);
         } catch (\Throwable $e) {
             return ['items' => [], 'missing' => [], 'error' => $e->getMessage()];
         }
+    }
+
+    public static function links(array $ids): array
+    {
+        return self::read($ids, 'links');
     }
 
     public static function optionValue(string $field, string $label)

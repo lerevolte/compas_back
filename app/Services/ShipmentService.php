@@ -83,7 +83,7 @@ class ShipmentService
         }
     }
 
-    public static function supplierReceivedUsage(int $orderId): array
+    public static function supplierReceivedUsage(int $orderId, ?int $exceptId = null): array
     {
         $result = ['id' => [], 'name' => [], 'price_id' => [], 'price_name' => []];
         if (!Schema::hasTable(self::RECEIPT_DOC)) {
@@ -106,6 +106,9 @@ class ShipmentService
                 ->all());
         }
         $documentIds = array_values(array_unique(array_map('intval', $documentIds)));
+        if ($exceptId) {
+            $documentIds = array_values(array_diff($documentIds, [$exceptId]));
+        }
         if (!count($documentIds)) {
             return $result;
         }
@@ -838,6 +841,15 @@ class ShipmentService
         return $slugs;
     }
 
+    public static function usageBySiblings(string $parentSlug, int $parentId, ?string $childSlug, ?array $except = null): array
+    {
+        if ($parentSlug === self::SUPPLIER && $childSlug === self::RECEIPT_DOC) {
+            return self::supplierReceivedUsage($parentId, $except && $except[0] === self::RECEIPT_DOC ? (int) $except[1] : null);
+        }
+
+        return self::usageByChildren($parentSlug, $parentId, self::siblingSlugsFor($parentSlug, $parentId, $childSlug), $except);
+    }
+
     public static function maxUsage(array $base, array $other): array
     {
         foreach (['id', 'name', 'price_id', 'price_name'] as $bucket) {
@@ -853,7 +865,7 @@ class ShipmentService
     {
         $childSlugs = self::childSlugsOf($slug, $id);
         if ($targetSlug !== null && in_array($targetSlug, $childSlugs, true)) {
-            return self::usageByChildren($slug, $id, self::siblingSlugsFor($slug, $id, $targetSlug));
+            return self::usageBySiblings($slug, $id, $targetSlug);
         }
         if (self::isSource($slug) && self::isTransfer($slug, $id)) {
             $result = ['id' => [], 'name' => [], 'price_id' => [], 'price_name' => []];
@@ -901,7 +913,7 @@ class ShipmentService
         if (!count($childSlugs) || !count($products)) {
             return $products;
         }
-        $used = self::usageByChildren($sourceSlug, $sourceId, $childSlugs, $exceptTarget);
+        $used = self::usageBySiblings($sourceSlug, $sourceId, $exceptTarget[0] ?? null, $exceptTarget);
         $services = self::serviceIds(array_map(fn ($p) => is_array($p) ? ($p['id'] ?? 0) : 0, $products));
 
         $result = [];
@@ -1053,7 +1065,17 @@ class ShipmentService
                 return [];
             }
 
-            return self::validateAgainstPair($parent[0], $parent[1], $slug, $id, $products);
+            $errors = self::validateAgainstPair($parent[0], $parent[1], $slug, $id, $products);
+            if ($slug === self::RECEIPT_DOC && self::isSource($parent[0])) {
+                $order = self::parentOf($parent[0], $parent[1]);
+                if ($order && $order[0] === self::SUPPLIER) {
+                    foreach (self::validateAgainstPair($order[0], $order[1], $slug, $id, $products) as $error) {
+                        $errors[] = 'По заказу поставщику — ' . $error;
+                    }
+                }
+            }
+
+            return $errors;
         } catch (\Throwable $e) {
             return [];
         }
@@ -1083,10 +1105,10 @@ class ShipmentService
                 return [];
             }
             $services = self::serviceIds(array_map(fn ($p) => $p['id'] ?? 0, $parentProducts));
-            $usedOthers = self::usageByChildren(
+            $usedOthers = self::usageBySiblings(
                 $parentSlug,
                 $parentId,
-                self::siblingSlugsFor($parentSlug, $parentId, $childSlug),
+                $childSlug,
                 $exceptChildId ? [$childSlug, $exceptChildId] : null
             );
 

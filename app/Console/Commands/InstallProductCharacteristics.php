@@ -10,7 +10,7 @@ class InstallProductCharacteristics extends Command
     protected $signature = 'products:install-characteristics
         {target=avixo : seeds | all-tenants | <tenant_id>}';
 
-    protected $description = 'Характеристики товара: габариты (см) с автообъёмом (л), ID 1С, ед. изм. хранения, штрихкод поставщиков, кол-во на паллете, срок/способ пополнения, артикул (id на сайте), состав набора, условия хранения — в основной раздел полей';
+    protected $description = 'Характеристики товара: габариты (см) с автообъёмом (л), ID 1С, ед. изм. хранения, штрихкод поставщиков, кол-во на паллете, срок/способ пополнения, артикул (id на сайте), состав набора и обратная связь «Фактически отгружаемый товар» с заполнением по наборам, условия хранения — в основной раздел полей';
 
     public const BEFORE_VOLUME = ['length', 'width', 'height'];
 
@@ -26,6 +26,7 @@ class InstallProductCharacteristics extends Command
         'replenishment_method' => ['type' => 'select_dropdown', 'title' => 'Способ пополнения', 'options' => ['Закупка', 'Производство']],
         'article' => ['type' => 'text', 'title' => 'Артикул'],
         'kit_products' => ['type' => 'relation', 'title' => 'Состав набора', 'relation_table' => 'products', 'is_plural' => 1, 'is_link' => 1],
+        'fact_product_id' => ['type' => 'relation', 'title' => 'Фактически отгружаемый товар', 'relation_table' => 'products', 'is_link' => 1],
         'storage_conditions' => ['type' => 'select_dropdown', 'title' => 'Условия хранения', 'is_plural' => 1, 'options' => ['Беречь от влаги', 'Хрупкое', 'Боится солнца']],
     ];
 
@@ -109,6 +110,7 @@ class InstallProductCharacteristics extends Command
             }
             $existing = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', $field)->first();
             if ($existing) {
+                unset($attrs['title']);
                 $db->table('data_rows')->where('id', $existing->id)->update($attrs);
                 continue;
             }
@@ -133,6 +135,10 @@ class InstallProductCharacteristics extends Command
         }
 
         $this->reorder($db, (int) $typeId, $sectionId);
+
+        \App\Services\ProductKitService::forget();
+        $kits = \App\Services\ProductKitService::backfill($db);
+        $this->line("    [{$label}] products: наборов {$kits['kits']}, «Фактически отгружаемый товар» заполнен у {$kits['filled']} товаров" . ($kits['conflicts'] ? ", товаров в нескольких наборах: {$kits['conflicts']}" : ''));
 
         if (count($created)) {
             $this->line("    [{$label}] products: созданы поля " . implode(', ', $created));

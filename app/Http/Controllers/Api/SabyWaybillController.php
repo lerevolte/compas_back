@@ -14,7 +14,7 @@ class SabyWaybillController extends Controller
 {
     public function index($id)
     {
-        if (!SabyWaybillService::ready()) {
+        if (!SabyWaybillService::ready() || !\App\Services\Saby\SabyFieldAccess::can('read')) {
             return response()->json(['enabled' => false, 'data' => []]);
         }
 
@@ -25,12 +25,16 @@ class SabyWaybillController extends Controller
 
         return response()->json([
             'enabled' => true,
+            'can_edit' => \App\Services\Saby\SabyFieldAccess::can('write'),
             'data' => $waybills,
         ]);
     }
 
     public function store($id, Request $request)
     {
+        if ($denied = \App\Services\Saby\SabyFieldAccess::denied()) {
+            return $denied;
+        }
         $service = SabyWaybillService::make();
         if (!$service) {
             return response()->json(['message' => 'Модуль Saby не настроен'], 422);
@@ -214,6 +218,9 @@ class SabyWaybillController extends Controller
 
     public function refresh($waybillId)
     {
+        if ($denied = \App\Services\Saby\SabyFieldAccess::denied()) {
+            return $denied;
+        }
         $service = SabyWaybillService::make();
         if (!$service) {
             return response()->json(['message' => 'Модуль Saby не настроен'], 422);
@@ -235,6 +242,9 @@ class SabyWaybillController extends Controller
 
     public function updateData($waybillId)
     {
+        if ($denied = \App\Services\Saby\SabyFieldAccess::denied()) {
+            return $denied;
+        }
         $service = SabyWaybillService::make();
         if (!$service) {
             return response()->json(['message' => 'Модуль Saby не настроен'], 422);
@@ -258,6 +268,9 @@ class SabyWaybillController extends Controller
 
     public function destroy($waybillId)
     {
+        if ($denied = \App\Services\Saby\SabyFieldAccess::denied()) {
+            return $denied;
+        }
         $waybill = SabyWaybill::find($waybillId);
         if (!$waybill) {
             return response()->json(['message' => 'Накладная не найдена'], 404);
