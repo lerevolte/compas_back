@@ -233,6 +233,9 @@ SQL);
             ? (self::ids($row->shipment_company_id ?? null)[0] ?? ($order['shipment_company_id'] ?? null))
             : ($order['shipment_company_id'] ?? null);
         $partnerId = self::ids($row->company_id ?? null)[0] ?? null;
+        if (!$isExpense && ($order['type'] ?? null) === 'supplier_order' && !empty($order['company_id'])) {
+            $partnerId = $order['company_id'];
+        }
         $storehouseField = self::STOREHOUSE_FIELDS[$slug];
         $storehouseId = self::ids($row->{$storehouseField} ?? null)[0] ?? null;
 
@@ -316,6 +319,7 @@ SQL);
             'number' => $b24Id ?: (string) $order->id,
             'name' => self::text($order->name ?? ''),
             'shipment_company_id' => self::ids($order->shipment_company_id ?? null)[0] ?? null,
+            'company_id' => self::ids($order->company_id ?? null)[0] ?? null,
             'products' => array_values(array_filter(ShipmentService::decode($order->products ?? null), 'is_array')),
         ];
     }
