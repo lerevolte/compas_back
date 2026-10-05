@@ -872,6 +872,7 @@ class ObjectController extends Controller
             'logistic_tasks' => ['expense_invoices', 'product_returns', 'receipt_invoices'],
             'pickups' => ['expense_invoices', 'product_returns'],
             'addresses' => ['logistic_tasks'],
+            'cash_documents' => ['cash_expenses', 'cash_incomes'],
         ][$slug] ?? null;
         if ($targets === null) {
             return null;
