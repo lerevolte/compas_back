@@ -586,6 +586,26 @@ class B24ProductSync
         return $stat;
     }
 
+    public function pictureIdsFor(array $b24Ids): array
+    {
+        $result = [];
+        foreach (array_chunk(array_values(array_unique(array_map('strval', $b24Ids))), 50) as $chunk) {
+            $rows = $this->b24All('crm.product.list', [
+                'filter' => ['ID' => $chunk],
+                'select' => ['ID', 'PREVIEW_PICTURE', 'DETAIL_PICTURE'],
+            ]);
+            foreach ($rows as $row) {
+                $picture = $row['DETAIL_PICTURE'] ?? $row['PREVIEW_PICTURE'] ?? null;
+                $pictureId = is_array($picture) ? ($picture['id'] ?? null) : $picture;
+                if ($pictureId) {
+                    $result[(string) $row['ID']] = (string) $pictureId;
+                }
+            }
+        }
+
+        return $result;
+    }
+
     public function pullProductById($productId): ?Product
     {
         $resp = $this->b24('crm.product.get', ['id' => $productId]);

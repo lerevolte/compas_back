@@ -57,7 +57,7 @@ if (strlen(COMPAS_SYNC_TOKEN) < 16 || !hash_equals(COMPAS_SYNC_TOKEN, $token)) {
     compas_respond([
         'ok' => false,
         'error' => 'Unauthorized',
-        'version' => 3,
+        'version' => 4,
         'expected_fp' => substr(hash('sha256', COMPAS_SYNC_TOKEN), 0, 8),
         'expected_len' => strlen(COMPAS_SYNC_TOKEN),
         'got_fp' => substr(hash('sha256', $token), 0, 8),
@@ -90,18 +90,30 @@ if ($action === 'links') {
         ['IBLOCK_ID' => COMPAS_SYNC_IBLOCK_ID, 'ID' => array_slice($readIds, 0, 500)],
         false,
         false,
-        ['ID', 'IBLOCK_ID', 'DETAIL_PAGE_URL']
+        ['ID', 'IBLOCK_ID', 'DETAIL_PAGE_URL', 'DETAIL_PICTURE', 'PREVIEW_PICTURE']
     );
+    $absolute = fn ($path) => preg_match('#^https?://#i', $path) ? $path : COMPAS_SYNC_SITE_URL . '/' . ltrim($path, '/');
     while ($row = $res->GetNext()) {
         $id = (int) $row['ID'];
         $found[] = $id;
         $path = trim((string) $row['DETAIL_PAGE_URL']);
-        if ($path === '') {
+        $photo = null;
+        foreach (['DETAIL_PICTURE', 'PREVIEW_PICTURE'] as $field) {
+            if (!empty($row[$field])) {
+                $file = CFile::GetPath((int) $row[$field]);
+                if ($file) {
+                    $photo = $absolute($file);
+                    break;
+                }
+            }
+        }
+        if ($path === '' && !$photo) {
             continue;
         }
         $items[] = [
             'id' => $id,
-            'url' => preg_match('#^https?://#i', $path) ? $path : COMPAS_SYNC_SITE_URL . '/' . ltrim($path, '/'),
+            'url' => $path === '' ? null : $absolute($path),
+            'photo' => $photo,
         ];
     }
     compas_respond([
