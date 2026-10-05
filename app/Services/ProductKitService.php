@@ -233,6 +233,32 @@ class ProductKitService
             $stat['filled']++;
         }
 
+        if (!$hasB24) {
+            return $stat;
+        }
+        $pending = $db->table('products')
+            ->whereNull('deleted_at')
+            ->whereNotNull(self::B24_COLUMN)
+            ->where(self::B24_COLUMN, '!=', '')
+            ->whereNotIn('id', array_keys($owner) ?: [0])
+            ->get(['id', self::B24_COLUMN]);
+        foreach ($pending as $member) {
+            $kit = $db->table('products')
+                ->where('id_b24', (string) $member->{self::B24_COLUMN})
+                ->whereNull('deleted_at')
+                ->first(['id', self::KIT_FIELD]);
+            if (!$kit || (int) $kit->id === (int) $member->id) {
+                continue;
+            }
+            $ids = self::ids($kit->{self::KIT_FIELD});
+            if (!in_array((int) $member->id, $ids, true)) {
+                $ids[] = (int) $member->id;
+                $db->table('products')->where('id', $kit->id)->update([self::KIT_FIELD => json_encode(array_values($ids))]);
+            }
+            $db->table('products')->where('id', $member->id)->update([self::FACT_FIELD => (int) $kit->id]);
+            $stat['filled']++;
+        }
+
         return $stat;
     }
 }

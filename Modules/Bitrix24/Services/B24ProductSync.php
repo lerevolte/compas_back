@@ -286,6 +286,31 @@ class B24ProductSync
         return $changed;
     }
 
+    public function attachPendingMembers(int $kitId, string $kitB24Id): int
+    {
+        if (!$this->hasColumn(self::FACT_COLUMN) || !$this->hasColumn(\App\Services\ProductKitService::FACT_FIELD) || !$this->hasColumn('kit_products')) {
+            return 0;
+        }
+        $members = DB::table('products')
+            ->where(self::FACT_COLUMN, $kitB24Id)
+            ->where('id', '!=', $kitId)
+            ->whereNull('deleted_at')
+            ->get(['id', \App\Services\ProductKitService::FACT_FIELD]);
+        $kitIds = $this->kitIds(DB::table('products')->where('id', $kitId)->value('kit_products'));
+        $count = 0;
+        foreach ($members as $member) {
+            $fact = \App\Services\ProductKitService::ids($member->{\App\Services\ProductKitService::FACT_FIELD})[0] ?? 0;
+            if ($fact === $kitId && in_array((int) $member->id, $kitIds, true)) {
+                continue;
+            }
+            if ($this->syncKitMembership((int) $member->id, $kitB24Id)) {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
     public function pullExtraProps(): array
     {
         $stat = ['fetched' => 0, 'updated' => 0, 'kits' => 0];
@@ -861,6 +886,13 @@ class B24ProductSync
                     $this->syncKitMembership((int) $model->id, $extra[self::FACT_COLUMN], $oldKit ? (string) $oldKit : null);
                 } catch (\Throwable $e) {
                     Log::channel('bitrix24')->warning('product-sync: состав набора не обновлён', ['product_id' => $model->id, 'error' => $e->getMessage()]);
+                }
+            }
+            if (!$model->deleted_at) {
+                try {
+                    $this->attachPendingMembers((int) $model->id, $b24Id);
+                } catch (\Throwable $e) {
+                    Log::channel('bitrix24')->warning('product-sync: участники набора не привязаны', ['product_id' => $model->id, 'error' => $e->getMessage()]);
                 }
             }
 
