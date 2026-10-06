@@ -11,19 +11,29 @@ class InstallCashDocsEntities extends Command
     protected $signature = 'entity:install-cash-docs
         {target=avixo : seeds | all-tenants | <tenant_id>}';
 
-    protected $description = 'Сущности кассы: «Статьи расходов», «Документы по кассе» (операции и сумма считаются по связанным расходам и поступлениям), «Расходы» и «Поступления» с обязательной суммой; расход и поступление создаются на основании документа по кассе';
+    protected $description = 'Сущности кассы: «Статьи» (тип поступление/расход, категории), «Расходы» и «Поступления» (дата операции, статья), «Документы по кассе» — журнал операций, который строится из расходов и поступлений';
+
+    public const ARTICLE_TYPES = '{"options":[{"label":"Поступление","value":"income"},{"label":"Расход","value":"expense"}]}';
+
+    public const CATEGORY_TABLE = 'expense_article_categories';
 
     public const ENTITIES = [
         'expense_articles' => [
-            'title_singular' => 'Статья расходов',
-            'title_plural' => 'Статьи расходов',
+            'title_singular' => 'Статья',
+            'title_plural' => 'Статьи',
             'model' => 'App\\Models\\ExpenseArticle',
             'slug_singular' => 'expense_article',
             'color' => '#A0522D',
-            'columns' => [],
+            'columns' => [
+                'article_type' => 'TEXT NULL',
+                'category_id' => 'TEXT NULL',
+            ],
             'fields' => [
+                'article_type' => ['type' => 'select_dropdown', 'title' => 'Тип', 'details' => self::ARTICLE_TYPES, 'is_default' => 1],
+                'category_id' => ['type' => 'relation', 'title' => 'Категория', 'details' => '{"table":"expense_article_categories"}', 'relation_table' => 'expense_article_categories', 'is_default' => 1],
                 'comment' => ['type' => 'text', 'title' => 'Примечание', 'is_plural' => 1],
             ],
+            'remove_fields' => [],
             'relations_tab' => false,
         ],
         'cash_documents' => [
@@ -36,14 +46,21 @@ class InstallCashDocsEntities extends Command
                 'date' => 'DATE NULL',
                 'sum' => 'VARCHAR(64) NULL',
                 'operations' => 'LONGTEXT NULL',
+                'operation_kind' => 'TEXT NULL',
+                'expense_article_id' => 'TEXT NULL',
+                'operation_slug' => 'VARCHAR(32) NULL',
+                'operation_id' => 'BIGINT UNSIGNED NULL',
             ],
             'fields' => [
-                'date' => ['type' => 'date', 'title' => 'Дата', 'is_default' => 1],
+                'date' => ['type' => 'date', 'title' => 'Дата операции', 'only_read' => 1, 'is_default' => 1, 'rename' => 1],
+                'operation_kind' => ['type' => 'select_dropdown', 'title' => 'Операция', 'details' => self::ARTICLE_TYPES, 'only_read' => 1, 'is_default' => 1],
                 'sum' => ['type' => 'number', 'title' => 'Сумма', 'unit' => 'руб.', 'only_read' => 1, 'is_default' => 1],
-                'operations' => ['type' => 'multi_text', 'title' => 'Операции', 'is_plural' => 1, 'only_read' => 1, 'is_default' => 1],
-                'comment' => ['type' => 'text', 'title' => 'Примечание', 'is_plural' => 1],
+                'expense_article_id' => ['type' => 'relation', 'title' => 'Статья', 'details' => '{"table":"expense_articles"}', 'is_link' => 1, 'relation_table' => 'expense_articles', 'only_read' => 1, 'is_default' => 1, 'rename' => 1],
+                'comment' => ['type' => 'text', 'title' => 'Примечание', 'is_plural' => 1, 'only_read' => 1, 'is_default' => 1],
             ],
-            'relations_tab' => true,
+            'remove_fields' => ['operations'],
+            'readonly_base' => true,
+            'relations_tab' => false,
         ],
         'cash_expenses' => [
             'title_singular' => 'Расход',
@@ -57,11 +74,12 @@ class InstallCashDocsEntities extends Command
                 'expense_article_id' => 'TEXT NULL',
             ],
             'fields' => [
-                'date' => ['type' => 'date', 'title' => 'Дата', 'is_default' => 1],
+                'date' => ['type' => 'date', 'title' => 'Дата операции', 'is_default' => 1, 'rename' => 1],
                 'sum' => ['type' => 'number', 'title' => 'Сумма', 'unit' => 'руб.', 'required' => 1, 'is_default' => 1],
-                'expense_article_id' => ['type' => 'relation', 'title' => 'Статья расходов', 'details' => '{"table":"expense_articles"}', 'is_link' => 1, 'relation_table' => 'expense_articles', 'is_default' => 1],
+                'expense_article_id' => ['type' => 'relation', 'title' => 'Статья', 'details' => '{"table":"expense_articles","option_filter":{"article_type":["expense"]}}', 'is_link' => 1, 'relation_table' => 'expense_articles', 'is_default' => 1, 'rename' => 1],
                 'comment' => ['type' => 'text', 'title' => 'Примечание', 'is_plural' => 1, 'is_default' => 1],
             ],
+            'remove_fields' => [],
             'relations_tab' => true,
         ],
         'cash_incomes' => [
@@ -73,12 +91,15 @@ class InstallCashDocsEntities extends Command
             'columns' => [
                 'date' => 'DATE NULL',
                 'sum' => 'VARCHAR(64) NULL',
+                'expense_article_id' => 'TEXT NULL',
             ],
             'fields' => [
-                'date' => ['type' => 'date', 'title' => 'Дата', 'is_default' => 1],
+                'date' => ['type' => 'date', 'title' => 'Дата операции', 'is_default' => 1, 'rename' => 1],
                 'sum' => ['type' => 'number', 'title' => 'Сумма', 'unit' => 'руб.', 'required' => 1, 'is_default' => 1],
+                'expense_article_id' => ['type' => 'relation', 'title' => 'Статья', 'details' => '{"table":"expense_articles","option_filter":{"article_type":["income"]}}', 'is_link' => 1, 'relation_table' => 'expense_articles', 'is_default' => 1, 'rename' => 1],
                 'comment' => ['type' => 'text', 'title' => 'Примечание', 'is_plural' => 1, 'is_default' => 1],
             ],
+            'remove_fields' => [],
             'relations_tab' => true,
         ],
     ];
@@ -113,6 +134,8 @@ class InstallCashDocsEntities extends Command
     {
         $sb = $db->getSchemaBuilder();
         $now = now();
+
+        $this->installCategories($db, $now);
 
         foreach (self::ENTITIES as $slug => $def) {
             $db->statement(<<<SQL
@@ -181,16 +204,37 @@ SQL);
                 'created_at' => ['type' => 'date', 'title' => 'Дата создания', 'only_read' => 1, 'is_default' => 1, 'hide' => 1, 'mobile_pages' => '0'],
                 'updated_at' => ['type' => 'date', 'title' => 'Дата изменения', 'only_read' => 1, 'is_default' => 1, 'hide' => 1, 'mobile_pages' => '0'],
             ];
-            if (isset($def['fields']['expense_article_id']) && !$db->table('data_types')->where('slug', 'expense_articles')->exists()) {
-                unset($fields['expense_article_id']);
+            if (!empty($def['readonly_base'])) {
+                foreach (['name', 'photo', 'user_id'] as $field) {
+                    $fields[$field]['only_read'] = 1;
+                    unset($fields[$field]['required']);
+                }
+            }
+
+            foreach ($fields as $field => $attrs) {
+                if (($attrs['type'] ?? '') === 'relation' && !empty($attrs['relation_table']) && !$db->table('data_types')->where('name', $attrs['relation_table'])->exists()) {
+                    unset($fields[$field]);
+                }
+            }
+
+            foreach ($def['remove_fields'] ?? [] as $field) {
+                $rowIds = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', $field)->pluck('id');
+                if ($rowIds->count()) {
+                    if ($sb->hasTable('section_fields_sort')) {
+                        $db->table('section_fields_sort')->whereIn('field_id', $rowIds)->delete();
+                    }
+                    $db->table('data_rows')->whereIn('id', $rowIds)->delete();
+                }
             }
 
             $sort = 0;
             $added = 0;
             foreach ($fields as $field => $attrs) {
+                $rename = !empty($attrs['rename']);
+                unset($attrs['rename']);
                 $existing = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', $field)->first();
                 if ($existing) {
-                    $patch = array_intersect_key($attrs, array_flip(['type', 'details', 'relation_table', 'is_plural', 'only_read', 'unit']));
+                    $patch = array_intersect_key($attrs, array_flip(array_merge(['type', 'details', 'relation_table', 'is_plural', 'only_read', 'unit'], $rename ? ['title'] : [])));
                     $patch['is_remove'] = 0;
                     $db->table('data_rows')->where('id', $existing->id)->update($patch);
                     $sort++;
@@ -254,10 +298,52 @@ SQL);
         }
         \App\Services\CashDocumentService::forget();
         if ($inTenant) {
+            $result = \App\Services\CashDocumentService::rebuild();
+            $this->line("    [{$label}] журнал кассы: операций {$result['synced']}, старых документов снято {$result['legacy_removed']}");
             try {
                 \App\Models\Settings::clear_cache();
             } catch (\Throwable $e) {
             }
+        }
+    }
+
+    private function installCategories($db, $now): void
+    {
+        $table = self::CATEGORY_TABLE;
+        $db->statement(<<<SQL
+CREATE TABLE IF NOT EXISTS `{$table}` (
+  `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `created_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT NULL,
+  `deleted_at` timestamp NULL DEFAULT NULL,
+  `choosed_at` timestamp NULL DEFAULT NULL,
+  `name` varchar(255) DEFAULT NULL,
+  `user_id` int(11) DEFAULT NULL,
+  `parent_id` int(11) DEFAULT NULL,
+  `_lft` int(11) NOT NULL DEFAULT 0,
+  `_rgt` int(11) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `{$table}_lft_rgt_parent_id_index` (`_lft`, `_rgt`, `parent_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL);
+        $attrs = [
+            'name' => $table,
+            'slug' => $table,
+            'title_singular' => 'Категория статей',
+            'title_plural' => 'Категории статей',
+            'model_name' => 'App\\Models\\ExpenseArticleCategory',
+            'generate_permissions' => 0,
+            'server_side' => 0,
+            'updated_at' => $now,
+            'enable' => 1,
+            'slug_singular' => 'expense_article_category',
+            'hidden' => 1,
+        ];
+        $typeId = $db->table('data_types')->where('slug', $table)->value('id');
+        if ($typeId) {
+            $db->table('data_types')->where('id', $typeId)->update($attrs);
+        } else {
+            $db->table('data_types')->insert($attrs + ['created_at' => $now]);
         }
     }
 }

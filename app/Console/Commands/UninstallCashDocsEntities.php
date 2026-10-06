@@ -11,7 +11,7 @@ class UninstallCashDocsEntities extends Command
         {target=avixo : seeds | all-tenants | <tenant_id>}
         {--purge : удалить также таблицы, историю и связи}';
 
-    protected $description = 'Снять сущности кассы («Статьи расходов», «Документы по кассе», «Расходы», «Поступления»): метаданные, меню и права (данные сохраняются, --purge удаляет и их)';
+    protected $description = 'Снять сущности кассы («Статьи» с категориями, «Документы по кассе», «Расходы», «Поступления»): метаданные, меню и права (данные сохраняются, --purge удаляет и их)';
 
     public function handle(): int
     {
@@ -78,6 +78,11 @@ class UninstallCashDocsEntities extends Command
             } catch (\Throwable $e) {
             }
             $this->line("    [{$label}] {$slug}: удалено" . ($this->option('purge') ? ' вместе с данными' : ''));
+        }
+        $categoryTable = InstallCashDocsEntities::CATEGORY_TABLE;
+        $db->table('data_types')->where('slug', $categoryTable)->delete();
+        if ($this->option('purge')) {
+            $db->statement("DROP TABLE IF EXISTS `{$categoryTable}`");
         }
         try {
             if ($sb->hasTable('local_cache')) {

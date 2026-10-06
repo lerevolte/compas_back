@@ -671,6 +671,12 @@ class Settings extends Model
 		                        }
 		                        $i++;
 		                    }
+		                    if(!empty($details['option_filter']) && is_array($details['option_filter'])) {
+		                        foreach ($list as $object) {
+		                            if(isset($field_values[$field->id][$object->id]) && !self::option_filter_matches($details['option_filter'], $object))
+		                                $field_values[$field->id][$object->id]['label']['is_filtered'] = 1;
+		                        }
+		                    }
 
 		                } elseif(isset($details['options'])) {
 		                    foreach($details['options'] as $k => $option) {
@@ -869,11 +875,36 @@ class Settings extends Model
             $query->orderBy($name_column, 'ASC');
         $result = array();
         $sort = 0;
+        $details = json_decode((string) \DB::table('data_rows')->where('id', $field_id)->value('details'), true);
+        $option_filter = is_array($details) && !empty($details['option_filter']) && is_array($details['option_filter']) ? $details['option_filter'] : null;
         foreach($query->limit($limit)->get() as $object) {
+            if($option_filter && !self::option_filter_matches($option_filter, $object))
+                continue;
             $result[$object->id] = self::option_from_object($object, $field_id, $table, $sort);
             $sort++;
         }
         return self::mark_occupied($field_id, $result);
+    }
+
+    public static function option_filter_matches(array $filter, $object): bool
+    {
+        foreach ($filter as $column => $allowed) {
+            $value = is_array($object) ? ($object[$column] ?? null) : ($object->{$column} ?? null);
+            if (is_string($value) && strlen($value) && in_array($value[0], ['[', '{'], true)) {
+                $decoded = json_decode($value, true);
+                if (is_array($decoded)) {
+                    $value = array_key_exists('value', $decoded) ? $decoded['value'] : (count($decoded) ? reset($decoded) : null);
+                }
+            }
+            if ($value === null || $value === '') {
+                continue;
+            }
+            if (!in_array((string) $value, array_map('strval', (array) $allowed), true)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public static function mirror_single_column($field_id)

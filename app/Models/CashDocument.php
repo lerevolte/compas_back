@@ -25,5 +25,13 @@ class CashDocument extends Model
                 $model->user_id = $user->id;
             }
         });
+
+        static::deleted(function ($model) {
+            \App\Services\CashDocumentService::onDocumentDeleted($model);
+        });
+
+        static::restored(function ($model) {
+            \App\Services\CashDocumentService::onDocumentRestored($model);
+        });
     }
 }

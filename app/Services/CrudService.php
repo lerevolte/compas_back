@@ -507,6 +507,8 @@ class CrudService
                     $ob->{$field} = json_encode(array_values(array_map('intval', array_filter($value, 'is_numeric'))));
                 } elseif($model_fields[$field]->type == 'checkbox') {
                     $ob->{$field} = \App\Models\Field::checkboxValue($value);
+                } elseif(in_array($model_fields[$field]->type, ['date', 'datetime'], true)) {
+                    $ob->{$field} = self::dateColumnValue($ob->getTable(), $field, $value);
                 } else {
                     $ob->{$field} = $value;
                 }
@@ -616,6 +618,34 @@ class CrudService
         $data['status'] = 200;
 
         return $data;
+    }
+
+    public static function dateColumnValue(string $table, string $column, $value)
+    {
+        if(!is_string($value) || trim($value) === '')
+            return is_string($value) ? null : $value;
+        static $types = [];
+        $key = $table.'.'.$column;
+        if(!array_key_exists($key, $types)) {
+            try {
+                $types[$key] = \Schema::getColumnType($table, $column);
+            } catch (\Throwable $e) {
+                $types[$key] = 'text';
+            }
+        }
+        if(!in_array($types[$key], ['date', 'datetime', 'datetimetz'], true))
+            return $value;
+        $value = trim($value);
+        try {
+            if($types[$key] === 'date') {
+                if(preg_match('/^(\d{4}-\d{2}-\d{2})/', $value, $m))
+                    return $m[1];
+                return \Carbon\Carbon::parse($value)->format('Y-m-d');
+            }
+            return \Carbon\Carbon::parse($value)->format('Y-m-d H:i:s');
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     public function delete(string $slug, array $ids)

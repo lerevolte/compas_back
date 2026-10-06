@@ -26,9 +26,13 @@ class CashExpense extends Model
             }
         });
 
+        static::saving(function ($model) {
+            \App\Services\CashDocumentService::fillDate($model);
+        });
+
         foreach (['saved', 'deleted', 'restored'] as $event) {
             static::{$event}(function ($model) {
-                \App\Services\CashDocumentService::recalcForOperation($model->getTable(), (int) $model->id);
+                \App\Services\CashDocumentService::syncOperation($model->getTable(), (int) $model->id);
             });
         }
     }

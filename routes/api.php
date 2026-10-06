@@ -367,6 +367,11 @@ Route::middleware([
         Route::get('redactor/questions', [App\Http\Controllers\Api\FaqController::class, 'questions']);
 
         Route::get('objects/search', [App\Http\Controllers\Api\ObjectController::class, 'search']);
+        Route::get('cash-documents/{id}/operation', [App\Http\Controllers\Api\CashDocumentController::class, 'operation']);
+        Route::get('expense-articles/categories', [App\Http\Controllers\Api\ExpenseArticleCategoryController::class, 'list']);
+        Route::post('expense-articles/categories', [App\Http\Controllers\Api\ExpenseArticleCategoryController::class, 'store']);
+        Route::put('expense-articles/categories/{id}', [App\Http\Controllers\Api\ExpenseArticleCategoryController::class, 'update']);
+        Route::delete('expense-articles/categories/{id}', [App\Http\Controllers\Api\ExpenseArticleCategoryController::class, 'destroy']);
         // Route::get(
         //     'objects/{model}',
         //     [App\Http\Controllers\Api\ObjectController::class, 'list']

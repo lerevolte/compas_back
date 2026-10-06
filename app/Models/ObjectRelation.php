@@ -49,7 +49,6 @@ class ObjectRelation extends Model
 
         \App\Services\RelationFieldsService::refresh($sourceSlug, (int) $sourceId);
         \App\Services\RelationFieldsService::refresh($targetSlug, (int) $targetId);
-        \App\Services\CashDocumentService::onRelation($sourceSlug, (int) $sourceId, $targetSlug, (int) $targetId);
     }
 
     public static function afterLink(string $sourceSlug, int $sourceId, string $targetSlug, int $targetId): void
@@ -75,7 +74,6 @@ class ObjectRelation extends Model
 
     public static function afterUnlink(string $slugA, int $idA, string $slugB, int $idB): void
     {
-        \App\Services\CashDocumentService::onRelation($slugA, $idA, $slugB, $idB);
         try {
             foreach ([[$slugA, $idA], [$slugB, $idB]] as [$slug, $id]) {
                 if (\App\Services\ShipmentService::isSource($slug)) {
