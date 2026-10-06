@@ -1294,7 +1294,75 @@ class Table
             }
         }
 
-        return self::withOutputCountColumn($table_columns, $parentSlug);
+        return self::withProductionColumns(self::withOutputCountColumn($table_columns, $parentSlug), $parentSlug);
+    }
+
+    public const PRODUCTION_HIDDEN_KEYS = ['product_price', 'product_purchase_price', 'product_sum', 'product_nds', 'product_nds_included', 'product_nds_sum', 'product_total', 'product_shipped'];
+
+    private static function withProductionColumns(array $columns, $parentSlug): array
+    {
+        $parentSlug = (string) $parentSlug;
+        $isEntity = \App\Services\ProductionService::isEntity($parentSlug);
+        $isProduction = \App\Services\ProductionService::isComposition($parentSlug);
+        $extraKeys = [\App\Services\ProductionService::SPEC_KEY, \App\Services\ProductionService::PRODUCED_KEY];
+        $saved = [];
+        $result = [];
+        foreach ($columns as $column) {
+            $key = $column['key'] ?? null;
+            if (in_array($key, $extraKeys, true)) {
+                $saved[$key] = $column;
+                continue;
+            }
+            if ($isProduction && in_array($key, self::PRODUCTION_HIDDEN_KEYS, true)) {
+                continue;
+            }
+            $result[] = $column;
+        }
+        if ($isEntity) {
+            $extra = [];
+            $spec = $saved[\App\Services\ProductionService::SPEC_KEY] ?? [];
+            $extra[] = array_merge([
+                'id' => null, 'width' => '200px', 'enabled' => 1, 'sort_order' => '', 'fixed' => '', 'fixTarget' => '0px', 'mask' => '', 'is_another_title' => 0,
+            ], $spec, [
+                'title' => !empty($spec['is_another_title']) ? $spec['title'] : \App\Services\ProductionService::SPEC_TITLE,
+                'key' => \App\Services\ProductionService::SPEC_KEY,
+                'type' => 'relation',
+                'related_table' => \App\Services\ProductionService::SPECIFICATIONS,
+                'options' => \App\Services\ProductionService::specificationOptions(),
+                'read_only' => 0,
+                'index' => 0,
+            ]);
+            if ($parentSlug === \App\Services\ProductionService::ORDER) {
+                $produced = $saved[\App\Services\ProductionService::PRODUCED_KEY] ?? [];
+                $extra[] = array_merge([
+                    'id' => null, 'width' => '200px', 'enabled' => 1, 'sort_order' => '', 'fixed' => '', 'fixTarget' => '0px', 'mask' => '', 'is_another_title' => 0,
+                ], $produced, [
+                    'title' => !empty($produced['is_another_title']) ? $produced['title'] : \App\Services\ProductionService::PRODUCED_TITLE,
+                    'key' => \App\Services\ProductionService::PRODUCED_KEY,
+                    'type' => 'number',
+                    'read_only' => 1,
+                    'index' => 0,
+                ]);
+            }
+            $inserted = [];
+            $placed = false;
+            foreach ($result as $column) {
+                $inserted[] = $column;
+                if (!$placed && ($column['key'] ?? null) === 'product_count') {
+                    array_push($inserted, ...$extra);
+                    $placed = true;
+                }
+            }
+            if (!$placed) {
+                array_push($inserted, ...$extra);
+            }
+            $result = $inserted;
+        }
+        foreach ($result as $i => $column) {
+            $result[$i]['index'] = $i;
+        }
+
+        return $result;
     }
 
     public static function roles()

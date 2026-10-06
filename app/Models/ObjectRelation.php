@@ -53,6 +53,7 @@ class ObjectRelation extends Model
 
     public static function afterLink(string $sourceSlug, int $sourceId, string $targetSlug, int $targetId): void
     {
+        \App\Services\ProductionService::afterLink($sourceSlug, $sourceId, $targetSlug, $targetId);
         try {
             if ($sourceSlug === 'deals' && \App\Services\ShipmentService::isSource($targetSlug)) {
                 \App\Services\ShipmentService::setDealColumn($targetSlug, $targetId, $sourceId);
@@ -74,6 +75,7 @@ class ObjectRelation extends Model
 
     public static function afterUnlink(string $slugA, int $idA, string $slugB, int $idB): void
     {
+        \App\Services\ProductionService::afterUnlink($slugA, $idA, $slugB, $idB);
         try {
             foreach ([[$slugA, $idA], [$slugB, $idB]] as [$slug, $id]) {
                 if (\App\Services\ShipmentService::isSource($slug)) {

@@ -171,6 +171,8 @@ SQL);
 
         $this->line("    [{$label}] {$slug}: data_type={$typeId}, полей добавлено {$added}");
 
+        $this->installProductField($db, $label);
+
         try {
             if ($sb->hasTable('local_cache')) {
                 $db->table('local_cache')->where('url', 'fields/' . $slug)->update(['updated_at' => $now]);
@@ -183,6 +185,28 @@ SQL);
                 \App\Models\Settings::clear_cache();
             } catch (\Throwable $e) {
             }
+        }
+    }
+
+    private function installProductField($db, string $label): void
+    {
+        $field = \App\Models\Specification::PRODUCT_FIELD;
+        $result = \App\Services\ReverseLinkService::installField($db, 'products', $field, self::TITLE_SINGULAR, self::SLUG);
+        if ($result === null) {
+            return;
+        }
+        if ($result === 'created') {
+            $this->line("    [{$label}] products: добавлено поле «" . self::TITLE_SINGULAR . "»");
+        }
+        $map = [];
+        foreach ($db->table(self::SLUG)->whereNull('deleted_at')->get(['id', 'finished_product_id']) as $specification) {
+            foreach (\App\Services\ReverseLinkService::ids($specification->finished_product_id) as $productId) {
+                $map[$productId][] = (int) $specification->id;
+            }
+        }
+        $filled = \App\Services\ReverseLinkService::backfill($db, 'products', $field, $map);
+        if ($filled) {
+            $this->line("    [{$label}] products: спецификации проставлены у {$filled} товаров");
         }
     }
 }

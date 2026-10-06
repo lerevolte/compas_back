@@ -429,7 +429,7 @@ class EntityObject
                 }
 
                 $val = (string)($current->{$field->field} ?? '');
-                $field_value = ValueHelper::isJson($val) && $field->field != 'products' && is_array(json_decode($val, true))
+                $field_value = ValueHelper::isJson($val) && !in_array($field->field, ['products', 'materials'], true) && is_array(json_decode($val, true))
                     ? json_decode($val, true)
                     : $val;
 
@@ -684,7 +684,7 @@ class EntityObject
                                 $subfield_data['can_edit'] = 0;
                         }
                         $val = (string)$current->{$subfield->field};
-                        $field_value = ValueHelper::isJson($val) && $subfield->field != 'products' && is_array(json_decode($val, true)) ? json_decode($val, true) : $val;
+                        $field_value = ValueHelper::isJson($val) && !in_array($subfield->field, ['products', 'materials'], true) && is_array(json_decode($val, true)) ? json_decode($val, true) : $val;
                         if($subfield->type == 'relation' && $subfield->is_plural && $subfield->relation_table && method_exists($current, $subfield->relation_table)) {
                             $relation_table = $subfield->relation_table;
                             $field_value = \App\Models\Field::relationIds($subfield, $current);
@@ -944,7 +944,7 @@ class EntityObject
                 $field_colors[$field->field] = $field->label_color ? $field->label_color : null;
 
                 $val = (string)$current->{$field->field};
-                $field_value = ValueHelper::isJson($val) && $field->field != 'products' && is_array(json_decode($val, true)) ? json_decode($val, true) : $val;
+                $field_value = ValueHelper::isJson($val) && !in_array($field->field, ['products', 'materials'], true) && is_array(json_decode($val, true)) ? json_decode($val, true) : $val;
                 if($field->type == 'relation' && $field->is_plural && $field->relation_table && method_exists($current, $field->relation_table)) {
                     $relation_table = $field->relation_table;
                     $field_value = \App\Models\Field::relationIds($field, $current);
@@ -1168,7 +1168,7 @@ class EntityObject
                                 $subfield_data['can_edit'] = 0;
                         }
                         $val = (string)$current->{$subfield->field};
-                        $field_value = ValueHelper::isJson($val) && $subfield->field != 'products' && is_array(json_decode($val, true)) ? json_decode($val, true) : $val;
+                        $field_value = ValueHelper::isJson($val) && !in_array($subfield->field, ['products', 'materials'], true) && is_array(json_decode($val, true)) ? json_decode($val, true) : $val;
                         if($subfield->type == 'relation' && $subfield->is_plural && $subfield->relation_table && method_exists($current, $subfield->relation_table)) {
                             $relation_table = $subfield->relation_table;
                             $field_value = \App\Models\Field::relationIds($subfield, $current);
@@ -1866,6 +1866,10 @@ class EntityObject
                 'supplier_orders' => \App\Models\SupplierOrder::class,
                 'addresses' => \App\Models\Address::class,
                 'specifications' => \App\Models\Specification::class,
+                'production_orders' => \App\Models\ProductionOrder::class,
+                'productions' => \App\Models\Production::class,
+                'production_orders_materials' => \App\Models\ProductionOrderMaterials::class,
+                'productions_materials' => \App\Models\ProductionMaterials::class,
             ][$request->order_entity] ?? \App\Models\Task::class;
             $order = $order_class::withTrashed()->where(['id' => $request->order_id])->first();
 
@@ -2108,9 +2112,11 @@ class EntityObject
                     if($field->type == 'relation' && $field->relation_table && (!isset($settings['models'][$field->relation_table]) || !$settings['models'][$field->relation_table]->enable))
                         continue;
                     $value = $item->{$field->field};
-                    $field_value = ValueHelper::isJson($value) && $field->field != 'products' && is_array(json_decode($value, true)) ? json_decode($value, true) : $value;
+                    $field_value = ValueHelper::isJson($value) && !in_array($field->field, ['products', 'materials'], true) && is_array(json_decode($value, true)) ? json_decode($value, true) : $value;
                     if($field->field == 'products') {
                         $field_value = $item->getHtmlProducts();
+                    } elseif($field->field == 'materials' && method_exists($item, 'getHtmlMaterials')) {
+                        $field_value = $item->getHtmlMaterials();
                     }
                     if($field->type == 'relation' && $field->is_plural && $field->relation_table && method_exists($item, $field->relation_table)) {
                         $relation_table = $field->relation_table;
@@ -2284,6 +2290,10 @@ class EntityObject
                         $data['product_volume'] = Product::unitValue($item->volume ?? null, $product['volume'] ?? 0);
                         $data['product_shipped'] = $product['shipped'] ?? 0;
                         $data['product_output_count'] = $product['output_count'] ?? null;
+                        if (\App\Services\ProductionService::isEntity($request->order_entity)) {
+                            $data[\App\Services\ProductionService::SPEC_KEY] = \App\Services\ProductionService::specificationCell($product['specification_id'] ?? null);
+                            $data[\App\Services\ProductionService::PRODUCED_KEY] = $product['produced'] ?? 0;
+                        }
                         $line_nds = $product['nds'] ?? null;
                         $line_nds_included = $product['nds_included'] ?? null;
                         if ($line_nds === null && isset($item->nds)) {
@@ -2331,6 +2341,8 @@ class EntityObject
                             'product_total' => round(\App\Services\ShipmentService::lineParts($product, \App\Services\ShipmentService::linePriceKey((string) ($request->order_entity ?? '')))['gross'], 2),
                             'product_shipped' => $product['shipped'] ?? 0,
                             'product_output_count' => $product['output_count'] ?? null,
+                            \App\Services\ProductionService::SPEC_KEY => \App\Services\ProductionService::specificationCell($product['specification_id'] ?? null),
+                            \App\Services\ProductionService::PRODUCED_KEY => $product['produced'] ?? 0,
                             'product_nds' => $product['nds'] ?? null,
                             'product_nds_included' => ($product['nds_included'] ?? null) === null || ($product['nds_included'] ?? null) === '' ? '1' : (string) $product['nds_included'],
                             'sort' => $num,

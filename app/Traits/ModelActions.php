@@ -173,7 +173,7 @@ trait ModelActions
                 if(!array_key_exists($field->field, $data) && $field->type != 'text_group') {
                     $value = $item->{$field->field};
                     $data[$field->field] = array(
-                        'value' => is_array($value) && ValueHelper::isJson($value) && $field->field != 'products' && is_array(json_decode($value, true)) ? json_decode($value, true) : $value,
+                        'value' => is_array($value) && ValueHelper::isJson($value) && !in_array($field->field, ['products', 'materials'], true) && is_array(json_decode($value, true)) ? json_decode($value, true) : $value,
                         'type' => $field->type,
                         'read_only' => $field->only_read,
                         'can_edit' => $field->only_read ? 0 : 1,//!$settings[$params['slug']]['perms'][$field->field]['write'] ? 1 : 0,
@@ -302,9 +302,11 @@ trait ModelActions
                 $list_values = array();
                 if(isset($settings['list_values'][$field->id]))
                     $list_values = $settings['list_values'][$field->id];
-                $field_value = !is_array($value) && ValueHelper::isJson($value) && $field->field != 'products' && is_array(json_decode($value, true)) ? json_decode($value, true) : $value;
+                $field_value = !is_array($value) && ValueHelper::isJson($value) && !in_array($field->field, ['products', 'materials'], true) && is_array(json_decode($value, true)) ? json_decode($value, true) : $value;
                 if($field->field == 'products') {
                     $field_value = $this->getHtmlProducts();
+                } elseif($field->field == 'materials' && method_exists($this, 'getHtmlMaterials')) {
+                    $field_value = $this->getHtmlMaterials();
                 }
 
                 if($field->type == 'relation' && $field->is_plural && $field->relation_table) {
@@ -428,9 +430,11 @@ trait ModelActions
                 $created_data[$field->field] = $this->{$field->field};
                 if(/*!$field->group_id && */isset($settings[$slug]['field_data'][$field->field])) {
                     $fields_data = $settings[$slug]['field_data'][$field->field];
-                    $field_value = !is_array($this->{$field->field}) && ValueHelper::isJson($this->{$field->field}) && $field->field != 'products' && is_array(json_decode($this->{$field->field}, true)) ? json_decode($this->{$field->field}, true) : $this->{$field->field};
+                    $field_value = !is_array($this->{$field->field}) && ValueHelper::isJson($this->{$field->field}) && !in_array($field->field, ['products', 'materials'], true) && is_array(json_decode($this->{$field->field}, true)) ? json_decode($this->{$field->field}, true) : $this->{$field->field};
                     if($field->field == 'products') {
                         $field_value = $this->getHtmlProducts();
+                    } elseif($field->field == 'materials' && method_exists($this, 'getHtmlMaterials')) {
+                        $field_value = $this->getHtmlMaterials();
                     }
                     if($field->type == 'relation' && $field->is_plural && $field->relation_table) {
                         $relation_table = $field->relation_table;

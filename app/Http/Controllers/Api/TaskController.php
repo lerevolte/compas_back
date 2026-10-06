@@ -64,18 +64,94 @@ class TaskController extends Controller
         return $this->saveProductsFor('supplier_orders', \App\Models\SupplierOrder::class, $id, $request);
     }
 
-    private function saveProductsFor($slug, $class, $id, Request $request)
+    public function set_production_order_products($id, Request $request)
+    {
+        return $this->saveProductsFor(\App\Services\ProductionService::ORDER, \App\Models\ProductionOrder::class, $id, $request);
+    }
+
+    public function set_production_products($id, Request $request)
+    {
+        return $this->saveProductsFor(\App\Services\ProductionService::DOC, \App\Models\Production::class, $id, $request);
+    }
+
+    public function set_production_order_materials($id, Request $request)
+    {
+        return $this->saveMaterialsFor(\App\Services\ProductionService::ORDER, $id, $request);
+    }
+
+    public function set_production_materials($id, Request $request)
+    {
+        return $this->saveMaterialsFor(\App\Services\ProductionService::DOC, $id, $request);
+    }
+
+    public function fill_production_materials($slug, $id)
+    {
+        if (!\App\Services\ProductionService::isEntity($slug)) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+        if (!$this->canWriteComposition($slug, \App\Services\ProductionService::MATERIALS_FIELD)) {
+            return response()->json(['message' => 'Нет прав на изменение материалов'], 403);
+        }
+        $lines = \App\Services\ProductionService::fillMaterials($slug, (int) $id);
+        if ($lines === null) {
+            return response()->json(['message' => 'Не найдено'], 404);
+        }
+
+        return response()->json(['success' => true, 'count' => count($lines)]);
+    }
+
+    private function canWriteComposition(string $slug, string $field): bool
     {
         $user = Auth::user();
-        if (!$user || !$user->is_admin) {
-            $settings = app('settings');
-            $perms = $settings[$slug]['perms']['products'] ?? null;
-            if (!$user || ($perms && (!$perms['read'] || !$perms['write']))) {
-                return response()->json(['message' => 'Нет прав на изменение состава'], 403);
-            }
+        if (!$user) {
+            return false;
         }
+        if ($user->is_admin) {
+            return true;
+        }
+        $settings = app('settings');
+        $perms = $settings[$slug]['perms'][$field] ?? null;
+
+        return !$perms || ($perms['read'] && $perms['write']);
+    }
+
+    private function saveMaterialsFor(string $slug, $id, Request $request)
+    {
+        if (!$this->canWriteComposition($slug, \App\Services\ProductionService::MATERIALS_FIELD)) {
+            return response()->json(['message' => 'Нет прав на изменение материалов'], 403);
+        }
+        $class = \App\Services\ProductionService::MODELS[$slug];
+        $materials = $this->compositionLines($slug, (array) ($request->products ?? []));
+        $errors = \App\Services\ShipmentService::withFamilyLock($slug, (int) $id, function () use ($class, $slug, $id, $materials) {
+            $object = $class::find($id);
+            if (!$object) {
+                return null;
+            }
+            $errors = \App\Services\ProductionService::materialErrors($slug, (int) $id, $materials);
+            if (count($errors)) {
+                return $errors;
+            }
+            $object->setMaterials($materials);
+
+            return [];
+        });
+        if ($errors === null) {
+            return response()->json(['error' => 404, 'text' => 'Не найдено'], 404);
+        }
+        if (count($errors)) {
+            return response()->json([
+                'message' => 'Материалы не соответствуют спецификациям продукции — сохранение запрещено',
+                'errors' => $errors,
+            ], 422);
+        }
+
+        return response()->json(['success' => true]);
+    }
+
+    private function compositionLines($slug, array $rows): array
+    {
         $products = array();
-        foreach ($request->products as $product) {
+        foreach ($rows as $product) {
             $count = $product['product_count'] ?? null;
             if (is_string($count)) {
                 $count = str_replace(',', '.', trim($count));
@@ -99,12 +175,33 @@ class TaskController extends Controller
             if ($outputCount !== null && $outputCount !== '') {
                 $line['output_count'] = is_string($outputCount) ? str_replace(',', '.', trim($outputCount)) : $outputCount;
             }
+            if (\App\Services\ProductionService::isEntity((string) $slug)) {
+                $specificationId = \App\Services\ProductionService::specificationId($product[\App\Services\ProductionService::SPEC_KEY] ?? null);
+                if ($specificationId) {
+                    $line['specification_id'] = $specificationId;
+                }
+            }
             $parts = \App\Services\ShipmentService::lineParts($line, \App\Services\ShipmentService::linePriceKey((string) $slug));
             $line['sum'] = round($parts['net'], 2);
             $line['nds_sum'] = round($parts['vat'], 2);
             $line['total'] = round($parts['gross'], 2);
             $products[] = $line;
         }
+
+        return $products;
+    }
+
+    private function saveProductsFor($slug, $class, $id, Request $request)
+    {
+        $user = Auth::user();
+        if (!$user || !$user->is_admin) {
+            $settings = app('settings');
+            $perms = $settings[$slug]['perms']['products'] ?? null;
+            if (!$user || ($perms && (!$perms['read'] || !$perms['write']))) {
+                return response()->json(['message' => 'Нет прав на изменение состава'], 403);
+            }
+        }
+        $products = $this->compositionLines($slug, (array) ($request->products ?? []));
         $errors = \App\Services\ShipmentService::withFamilyLock($slug, (int) $id, function () use ($class, $slug, $id, $products) {
             $object = $class::find($id);
             if (!$object) {
@@ -126,6 +223,12 @@ class TaskController extends Controller
             }
             if ($slug === \App\Services\ShipmentService::SUPPLIER) {
                 \App\Services\ShipmentService::recalcSupplierReceived((int) $id);
+            }
+            if ($slug === \App\Services\ProductionService::ORDER) {
+                \App\Services\ProductionService::recalcOrder((int) $id);
+            }
+            if ($slug === \App\Services\ProductionService::DOC) {
+                \App\Services\ProductionService::recalcForDocument((int) $id);
             }
 
             return [];

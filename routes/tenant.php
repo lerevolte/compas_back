@@ -528,6 +528,15 @@ Route::middleware([
             [App\Http\Controllers\Api\TaskController::class, 'set_supplier_order_products']
         );
 
+        Route::put('production_orders/{id}/set_products', [App\Http\Controllers\Api\TaskController::class, 'set_production_order_products']);
+        Route::put('productions/{id}/set_products', [App\Http\Controllers\Api\TaskController::class, 'set_production_products']);
+        Route::put('production_orders_materials/{id}/set_products', [App\Http\Controllers\Api\TaskController::class, 'set_production_order_materials']);
+        Route::put('productions_materials/{id}/set_products', [App\Http\Controllers\Api\TaskController::class, 'set_production_materials']);
+        Route::post('production/{slug}/{id}/fill_materials', [App\Http\Controllers\Api\TaskController::class, 'fill_production_materials'])
+            ->whereIn('slug', ['production_orders', 'productions']);
+        Route::get('production/{slug}/{id}/materials', [App\Http\Controllers\Api\ObjectController::class, 'production_materials'])
+            ->whereIn('slug', ['production_orders', 'productions']);
+
         Route::get('{model}/upd', [App\Http\Controllers\Api\UpdController::class, 'print'])
             ->whereIn('model', ['logistic_tasks', 'pickups'])
             ->name('upd.print');

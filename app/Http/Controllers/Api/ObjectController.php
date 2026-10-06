@@ -416,7 +416,7 @@ class ObjectController extends Controller
         $products = [];
         $tableKeys = [];
 
-        if (in_array($slug, ['logistic_tasks', 'pickups', 'deals', 'supplier_orders', 'payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices', 'addresses', 'specifications'], true)) {
+        if (in_array($slug, ['logistic_tasks', 'pickups', 'deals', 'supplier_orders', 'payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices', 'addresses', 'specifications', 'production_orders', 'productions'], true)) {
             $productsPerms = $this->getProductsFieldPerms($user, $entity->id, $isExternalAccess, $slug);
             if ($productsPerms['read']) {
                 $tableKeys = Table::get_order_products($slug);
@@ -430,6 +430,11 @@ class ObjectController extends Controller
                     $products = EntityObject::list('products', new Request(['order_id' => $id, 'order_entity' => $slug]));
                 }
             }
+        }
+
+        $materialsTable = null;
+        if (\App\Services\ProductionService::isEntity($slug)) {
+            $materialsTable = $this->materialsTable($user, $entity->id, $isExternalAccess, $slug, $id);
         }
 
         $eventsVisibility = self::eventsVisibilitySettings($slug);
@@ -452,6 +457,7 @@ class ObjectController extends Controller
                 'tableKeys' => $tableKeys,
                 'tableBody' => $products
             ],
+            'materials_table' => $materialsTable,
             'history_events' => $history_events,
             'history_fields' => $history_fields,
             'tabs'           => Menu::get($slug),
@@ -872,6 +878,7 @@ class ObjectController extends Controller
             'logistic_tasks' => ['expense_invoices', 'product_returns', 'receipt_invoices'],
             'pickups' => ['expense_invoices', 'product_returns'],
             'addresses' => ['logistic_tasks'],
+            'production_orders' => ['productions'],
         ][$slug] ?? null;
         if ($targets === null) {
             return null;
@@ -899,7 +906,43 @@ class ObjectController extends Controller
         return $result;
     }
 
-    private function getProductsFieldPerms($user, $entityId, $isExternalAccess = false, $slug = 'logistic_tasks'): array
+    private function materialsTable($user, $entityId, $isExternalAccess, string $slug, $id): array
+    {
+        $perms = $this->getProductsFieldPerms($user, $entityId, $isExternalAccess, $slug, \App\Services\ProductionService::MATERIALS_FIELD);
+        if (!$perms['read']) {
+            return ['tableKeys' => [], 'tableBody' => []];
+        }
+        $virtual = \App\Services\ProductionService::materialsSlug($slug);
+        $keys = Table::get_order_products($virtual);
+        if (!$perms['write']) {
+            foreach ($keys as $k => $key) {
+                $keys[$k]['read_only'] = 1;
+                $keys[$k]['can_edit'] = 0;
+            }
+        }
+        $body = $id ? EntityObject::list('products', new Request(['order_id' => $id, 'order_entity' => $virtual])) : [];
+
+        return ['tableKeys' => $keys, 'tableBody' => $body];
+    }
+
+    public function production_materials($slug, $id, Request $request): JsonResponse
+    {
+        if (!\App\Services\ProductionService::isEntity($slug)) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+        $entity = DB::table('data_types')->where('slug', $slug)->first();
+        if (!$entity) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+        $user = \Auth::user();
+        if ($user && !$user->is_admin && DB::table('permissions')->where('role_id', $user->role_id)->where('entity_id', $entity->id)->value('read_p') === 'N') {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        return response()->json($this->materialsTable(\Auth::user(), $entity->id, false, $slug, (int) $id));
+    }
+
+    private function getProductsFieldPerms($user, $entityId, $isExternalAccess = false, $slug = 'logistic_tasks', $field = 'products'): array
     {
         if ($user && $user->is_admin) {
             return ['read' => true, 'write' => true];
@@ -907,13 +950,13 @@ class ObjectController extends Controller
         if ($isExternalAccess || !$user) {
             $rolesRead = DB::table('data_rows')
                 ->where('data_type_id', $entityId)
-                ->where('field', 'products')
+                ->where('field', $field)
                 ->value('roles_read');
             $restricted = $rolesRead && !in_array(trim((string) $rolesRead), ['', '[]', '0'], true);
             return ['read' => !$restricted, 'write' => false];
         }
         $settings = app('settings');
-        $perms = $settings[$slug]['perms']['products'] ?? null;
+        $perms = $settings[$slug]['perms'][$field] ?? null;
         if (!$perms) {
             return ['read' => true, 'write' => true];
         }

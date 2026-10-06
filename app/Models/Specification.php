@@ -15,6 +15,8 @@ class Specification extends Model
 
     protected $guarded = ['id'];
 
+    public const PRODUCT_FIELD = 'specification_id';
+
     public static function boot()
     {
         parent::boot();
@@ -24,6 +26,26 @@ class Specification extends Model
             if (!$model->user_id && $user) {
                 $model->user_id = $user->id;
             }
+        });
+
+        static::saved(function ($model) {
+            if ($model->wasRecentlyCreated || $model->wasChanged('finished_product_id')) {
+                \App\Services\ReverseLinkService::sync(
+                    'products',
+                    self::PRODUCT_FIELD,
+                    (int) $model->id,
+                    $model->wasRecentlyCreated ? [] : \App\Services\ReverseLinkService::ids($model->getOriginal('finished_product_id')),
+                    \App\Services\ReverseLinkService::ids($model->finished_product_id)
+                );
+            }
+        });
+
+        static::deleted(function ($model) {
+            \App\Services\ReverseLinkService::sync('products', self::PRODUCT_FIELD, (int) $model->id, \App\Services\ReverseLinkService::ids($model->finished_product_id), []);
+        });
+
+        static::restored(function ($model) {
+            \App\Services\ReverseLinkService::sync('products', self::PRODUCT_FIELD, (int) $model->id, [], \App\Services\ReverseLinkService::ids($model->finished_product_id));
         });
     }
 

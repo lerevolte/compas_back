@@ -73,6 +73,8 @@ class ObjectRelationController extends Controller
             );
         }
 
+        \App\Services\ProductionService::afterLink((string) $data['source_slug'], (int) $data['source_id'], (string) $data['target_slug'], (int) $data['target_id']);
+
         if ($data['target_slug'] === \App\Services\ShipmentService::DOCUMENT) {
             \App\Services\ShipmentService::recalcForDocument((int) $data['target_id']);
         }

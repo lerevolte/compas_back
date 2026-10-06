@@ -62,6 +62,7 @@ class UninstallSpecificationsEntity extends Command
             $db->table('field_sections')->whereIn('id', $sectionIds)->delete();
         }
         $db->table('settings')->where('entity', $slug)->delete();
+        \App\Services\ReverseLinkService::removeField($db, 'products', \App\Models\Specification::PRODUCT_FIELD);
         if ($sb->hasTable('sidebar_items')) {
             $db->table('sidebar_items')->where('slug', $slug)->delete();
         }
