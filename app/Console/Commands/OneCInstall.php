@@ -14,11 +14,13 @@ class OneCInstall extends Command
         {target=avixo : <tenant_id>}
         {--token= : секретный токен для запросов 1С (если не задан и токена ещё нет — будет сгенерирован)}
         {--since= : с какой даты создания отдавать накладные, Y-m-d или Y-m-d H:i:s (по умолчанию — с момента установки)}
+        {--storehouse=* : внешний идентификатор склада в 1С, <id склада>:<1c_id>, можно несколько раз}
         {--disable : выключить обмен}';
 
     protected $description = 'Обмен с 1С: выгрузка расходных и приходных накладных (номер cmps-, дата, продавец, заказ, склад, строки) по GET-запросу и подтверждение обработки';
 
     public const NUMBER_TITLE = 'Номер';
+    public const STOREHOUSE_1C_TITLE = 'ID 1С';
 
     public function handle(): int
     {
@@ -32,8 +34,16 @@ class OneCInstall extends Command
             $this->error('Некорректная дата в --since');
             return self::FAILURE;
         }
+        $storehouseCodes = [];
+        foreach ((array) $this->option('storehouse') as $pair) {
+            if (!preg_match('/^\s*(\d+)\s*[:=]\s*(.+?)\s*$/u', (string) $pair, $m)) {
+                $this->error("Некорректное значение --storehouse={$pair}, нужно <id склада>:<1c_id>");
+                return self::FAILURE;
+            }
+            $storehouseCodes[(int) $m[1]] = $m[2];
+        }
 
-        $tenant->run(function () use ($tenant, $since) {
+        $tenant->run(function () use ($tenant, $since, $storehouseCodes) {
             $db = \DB::connection();
             $sb = $db->getSchemaBuilder();
             OneCExportService::ensureTables($db);
@@ -89,6 +99,8 @@ class OneCInstall extends Command
                 }
             }
 
+            $this->installStorehouseField($db, $sb, (string) $tenant->id, $storehouseCodes);
+
             $row = $db->table(OneCExportService::CONFIG_TABLE)->orderBy('id')->first();
             $attrs = ['updated_at' => now(), 'enabled' => $this->option('disable') ? 0 : 1];
             $token = trim((string) $this->option('token'));
@@ -121,5 +133,42 @@ class OneCInstall extends Command
         });
 
         return self::SUCCESS;
+    }
+
+    private function installStorehouseField($db, $sb, string $tenantId, array $codes): void
+    {
+        $field = OneCExportService::STOREHOUSE_1C_FIELD;
+        $typeId = $db->table('data_types')->where('slug', 'storehouses')->value('id');
+        if (!$typeId || !$sb->hasTable('storehouses')) {
+            $this->warn("    [{$tenantId}] storehouses: сущности нет, пропуск");
+            return;
+        }
+        if (!$sb->hasColumn('storehouses', $field)) {
+            $db->statement('ALTER TABLE `storehouses` ADD COLUMN `' . $field . '` VARCHAR(191) NULL');
+        }
+        if (!$db->table('data_rows')->where('data_type_id', $typeId)->where('field', $field)->exists()) {
+            $sectionId = (int) $db->table('field_sections')
+                ->where('page', 'storehouses')
+                ->where(fn ($q) => $q->whereNull('module')->orWhere('module', ''))
+                ->orderBy('sort')
+                ->value('id');
+            $maxSort = (int) $db->table('data_rows')->where('data_type_id', $typeId)->max('sort');
+            $db->table('data_rows')->insert(array_merge(InstallSaleDocsEntities::baseRow((int) $typeId, $sectionId), [
+                'field' => $field,
+                'type' => 'text',
+                'title' => self::STOREHOUSE_1C_TITLE,
+                'sort' => $maxSort + 1,
+            ]));
+        }
+        foreach ($codes as $id => $code) {
+            $updated = $db->table('storehouses')->where('id', $id)->update([$field => $code]);
+            $this->line("    [{$tenantId}] склад {$id}: " . ($updated ? "1c_id = {$code}" : 'не найден или без изменений'));
+        }
+        try {
+            if ($sb->hasTable('local_cache')) {
+                $db->table('local_cache')->where('url', 'fields/storehouses')->update(['updated_at' => now()]);
+            }
+        } catch (\Throwable $e) {
+        }
     }
 }

@@ -21,6 +21,7 @@ class OneCExportService
         'expense_invoices' => 'storehouse_id',
         'receipt_invoices' => 'receipt_storehouse_id',
     ];
+    public const STOREHOUSE_1C_FIELD = 'id_1c';
     public const LIMIT = 100;
     public const SETTLE_SECONDS = 30;
 
@@ -252,6 +253,8 @@ SQL);
             $productId = (int) ($line['id'] ?? 0);
             $name = ShipmentService::plainName($line['name'] ?? '');
             $product = $products[$productId] ?? null;
+            $priceKey = isset($line['price']) && is_numeric($line['price']) ? 'price' : 'purchase_price';
+            $parts = ShipmentService::lineParts($line, $priceKey);
             $items[] = [
                 'row' => $index + 1,
                 'order_row' => $orderRows['id'][$productId] ?? ($orderRows['name'][ShipmentService::nameKey($name)] ?? null),
@@ -260,6 +263,12 @@ SQL);
                 'product_1c_id' => $product['id_1c'] ?? null,
                 'product_b24_id' => $product['id_b24'] ?? null,
                 'name' => $name,
+                'price' => self::money(is_numeric($line[$priceKey] ?? null) ? (float) $line[$priceKey] : 0),
+                'vat_rate' => self::money($parts['rate']),
+                'vat_included' => $parts['included'],
+                'sum' => self::money($parts['net']),
+                'vat_sum' => self::money($parts['vat']),
+                'total' => self::money($parts['gross']),
             ];
         }
 
@@ -382,9 +391,21 @@ SQL);
         if (!$id || !Schema::hasTable('storehouses')) {
             return null;
         }
-        $storehouse = DB::table('storehouses')->where('id', $id)->first(['id', 'name']);
+        $columns = Schema::hasColumn('storehouses', self::STOREHOUSE_1C_FIELD) ? ['id', 'name', self::STOREHOUSE_1C_FIELD] : ['id', 'name'];
+        $storehouse = DB::table('storehouses')->where('id', $id)->first($columns);
 
-        return $storehouse ? ['id' => (int) $storehouse->id, 'name' => self::text($storehouse->name ?? '')] : null;
+        return $storehouse ? [
+            'id' => (int) $storehouse->id,
+            'name' => self::text($storehouse->name ?? ''),
+            '1c_id' => trim((string) ($storehouse->{self::STOREHOUSE_1C_FIELD} ?? '')) ?: null,
+        ] : null;
+    }
+
+    private static function money(float $value)
+    {
+        $value = round($value, 2);
+
+        return $value == (int) $value ? (int) $value : $value;
     }
 
     private static function ids($raw): array
