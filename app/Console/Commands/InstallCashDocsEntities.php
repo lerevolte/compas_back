@@ -29,7 +29,7 @@ class InstallCashDocsEntities extends Command
                 'category_id' => 'TEXT NULL',
             ],
             'fields' => [
-                'article_type' => ['type' => 'select_dropdown', 'title' => 'Тип', 'details' => self::ARTICLE_TYPES, 'is_default' => 1],
+                'article_type' => ['type' => 'select_dropdown', 'title' => 'Тип', 'details' => self::ARTICLE_TYPES, 'is_plural' => 1, 'is_default' => 1],
                 'category_id' => ['type' => 'relation', 'title' => 'Категория', 'details' => '{"table":"expense_article_categories"}', 'relation_table' => 'expense_article_categories', 'is_default' => 1],
                 'comment' => ['type' => 'text', 'title' => 'Примечание', 'is_plural' => 1],
             ],
@@ -278,6 +278,13 @@ SQL);
                         '_lft' => $maxRgt + 1, '_rgt' => $maxRgt + 2, 'parent_id' => null,
                         'is_hidden' => 0, 'enabled' => 1,
                     ]);
+                }
+            }
+
+            if ($slug === 'expense_articles' && $sb->hasColumn($slug, 'article_type')) {
+                $converted = $db->table($slug)->whereIn('article_type', ['income', 'expense'])->update(['article_type' => $db->raw('JSON_ARRAY(article_type)')]);
+                if ($converted) {
+                    $this->line("    [{$label}] {$slug}: тип переведён в множественный у {$converted}");
                 }
             }
 

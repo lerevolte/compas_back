@@ -582,6 +582,16 @@ class Table
 
         }
 
+        if($slug == \App\Services\CashDocumentService::SLUG && isset($table_columns[\App\Services\CashDocumentService::SUM_FIELD])) {
+            $sum_colors = \App\Services\CashDocumentService::sumColors();
+            if(count($sum_colors)) {
+                $table_columns[\App\Services\CashDocumentService::SUM_FIELD]['color_by'] = [
+                    'field' => \App\Services\CashDocumentService::KIND_FIELD,
+                    'colors' => $sum_colors,
+                ];
+            }
+        }
+
         if($slug == 'balance_operations') {
             unset($table_columns['isChoose']);
             unset($table_columns['actions']);

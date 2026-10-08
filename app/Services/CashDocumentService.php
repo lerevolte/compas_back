@@ -9,9 +9,11 @@ class CashDocumentService
 {
     public const SLUG = 'cash_documents';
     public const OPERATIONS = [
-        'cash_incomes' => ['sign' => 1, 'kind' => 'income', 'model' => \App\Models\CashIncome::class],
-        'cash_expenses' => ['sign' => -1, 'kind' => 'expense', 'model' => \App\Models\CashExpense::class],
+        'cash_incomes' => ['kind' => 'income', 'model' => \App\Models\CashIncome::class],
+        'cash_expenses' => ['kind' => 'expense', 'model' => \App\Models\CashExpense::class],
     ];
+    public const KIND_FIELD = 'operation_kind';
+    public const SUM_FIELD = 'sum';
 
     private static array $ready = [];
     private static bool $cascading = false;
@@ -111,6 +113,29 @@ class CashDocumentService
         self::cascade($document, true);
     }
 
+    public static function sumColors(): array
+    {
+        $colors = [];
+        try {
+            $rows = DB::table('data_rows as r')
+                ->join('data_types as t', 't.id', '=', 'r.data_type_id')
+                ->whereIn('t.slug', array_keys(self::OPERATIONS))
+                ->where('r.field', self::SUM_FIELD)
+                ->where('r.set_color', 1)
+                ->get(['t.slug', 'r.label_color']);
+            foreach ($rows as $row) {
+                $color = trim((string) $row->label_color);
+                if ($color !== '') {
+                    $colors[self::OPERATIONS[$row->slug]['kind']] = $color;
+                }
+            }
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        return $colors;
+    }
+
     public static function rebuild(): array
     {
         $result = ['synced' => 0, 'legacy_removed' => 0];
@@ -179,7 +204,7 @@ class CashDocumentService
         $attrs = [
             'name' => self::text($operation->name ?? null),
             'date' => $operation->date ? substr((string) $operation->date, 0, 10) : ($operation->created_at ? substr((string) $operation->created_at, 0, 10) : null),
-            'sum' => self::format($config['sign'] * $amount),
+            'sum' => self::format(abs($amount)),
             'operation_kind' => $config['kind'],
             'comment' => $operation->comment ?? null,
             'user_id' => $operation->user_id ?? null,

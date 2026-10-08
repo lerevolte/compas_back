@@ -11,6 +11,8 @@ class Field extends Model
 {
     protected $table = 'data_rows';
 
+    public const STAGE_BAR_TYPES = ['status', 'deal_stages'];
+
     public static function list($slug)
     {
         $settings = app('settings');
@@ -649,11 +651,41 @@ class Field extends Model
             }
         }
 
-        if ($this->type == 'deal_stages') {
-            $data['show_stage_bar'] = isset($details['show_stage_bar']) && !$details['show_stage_bar'] ? 0 : 1;
+        if (in_array($this->type, self::STAGE_BAR_TYPES, true)) {
+            $data['show_stage_bar'] = self::showsStageBar($this->type, $details) ? 1 : 0;
         }
 
         return $data;
+    }
+
+    public static function showsStageBar(?string $type, $details): bool
+    {
+        if (is_string($details)) {
+            $details = json_decode($details, true);
+        }
+        $details = is_array($details) ? $details : array();
+        if (!array_key_exists('show_stage_bar', $details)) {
+            return $type === 'deal_stages';
+        }
+
+        return (bool) $details['show_stage_bar'];
+    }
+
+    public static function stageBarField(int $dataTypeId, int $exceptId = 0): ?object
+    {
+        $rows = \DB::table('data_rows')
+            ->where('data_type_id', $dataTypeId)
+            ->whereIn('type', self::STAGE_BAR_TYPES)
+            ->where('id', '!=', $exceptId)
+            ->where(fn ($q) => $q->whereNull('is_remove')->orWhere('is_remove', 0))
+            ->get(['id', 'title', 'type', 'details']);
+        foreach ($rows as $row) {
+            if (self::showsStageBar($row->type, $row->details)) {
+                return $row;
+            }
+        }
+
+        return null;
     }
 
     public static function stageOverrides(array $options, array $items): array

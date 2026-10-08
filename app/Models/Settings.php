@@ -893,13 +893,14 @@ class Settings extends Model
             if (is_string($value) && strlen($value) && in_array($value[0], ['[', '{'], true)) {
                 $decoded = json_decode($value, true);
                 if (is_array($decoded)) {
-                    $value = array_key_exists('value', $decoded) ? $decoded['value'] : (count($decoded) ? reset($decoded) : null);
+                    $value = array_key_exists('value', $decoded) ? $decoded['value'] : $decoded;
                 }
             }
-            if ($value === null || $value === '') {
-                continue;
-            }
-            if (!in_array((string) $value, array_map('strval', (array) $allowed), true)) {
+            $values = array_values(array_filter(array_map(
+                fn ($item) => is_scalar($item) ? trim((string) $item) : '',
+                is_array($value) ? $value : [$value]
+            ), fn ($item) => $item !== ''));
+            if (!count(array_intersect($values, array_map('strval', (array) $allowed)))) {
                 return false;
             }
         }

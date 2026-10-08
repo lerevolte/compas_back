@@ -24,6 +24,16 @@ class SabyOrderService extends SabyWaybillService
         '9' => 'Отклонён перевозчиком',
     ];
 
+    public static function stateCode(object $order): string
+    {
+        $code = trim((string) ($order->state_code ?? ''));
+        if (($code === '' || $code === '0') && preg_match('/отправ|роуминг|доставлен|получен/iu', (string) ($order->last_event ?? ''))) {
+            return '4';
+        }
+
+        return $code === '' ? '0' : $code;
+    }
+
     public static function make(): ?self
     {
         $client = SabyClient::make();
@@ -57,7 +67,7 @@ class SabyOrderService extends SabyWaybillService
             if (Schema::hasTable('saby_orders')) {
                 $orders = DB::table('saby_orders')->where('task_id', $taskId)->orderByDesc('id')->get();
                 foreach ($orders as $order) {
-                    $code = (string) ($order->state_code ?? '0');
+                    $code = self::stateCode($order);
                     $item = [
                         'type' => 'order',
                         'id' => (int) $order->id,

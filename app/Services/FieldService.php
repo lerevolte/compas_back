@@ -331,9 +331,6 @@ class FieldService
                 $details['stage_overrides'] = \App\Models\Field::stageOverrides($stage_options, $dto->options);
                 $details['options'] = \App\Models\Field::stageOptions($stage_options, $details['stage_overrides']);
             }
-            if(isset($dto->show_stage_bar)) {
-                $details['show_stage_bar'] = $dto->show_stage_bar ? 1 : 0;
-            }
             $data['details'] = json_encode($details, JSON_UNESCAPED_UNICODE);
         } elseif($dto->options && $field->type != 'text_group' && $field->type != 'relation' && $field->field != 'is_admin') {
             $details['options'] = array();
@@ -352,6 +349,21 @@ class FieldService
             $existingDetails['can_create'] = $dto->can_create ? true : false;
             $data['details'] = json_encode($existingDetails, JSON_UNESCAPED_UNICODE);
         };
+
+        if(in_array($field->type, \App\Models\Field::STAGE_BAR_TYPES, true) && isset($dto->show_stage_bar)) {
+            $barDetails = json_decode((string) ($data['details'] ?? $field->details), true);
+            $barDetails = is_array($barDetails) ? $barDetails : array();
+            if($dto->show_stage_bar) {
+                $other = \App\Models\Field::stageBarField((int) $field->data_type_id, (int) $field->id);
+                if($other) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'show_stage_bar' => "Плашка стадий уже выводится полем «{$other->title}». Сначала отключите её там.",
+                    ]);
+                }
+            }
+            $barDetails['show_stage_bar'] = $dto->show_stage_bar ? 1 : 0;
+            $data['details'] = json_encode($barDetails, JSON_UNESCAPED_UNICODE);
+        }
 
         $data['set_color'] = isset($dto->set_color) ? $dto->set_color : $field->set_color;
         $data['label_color'] = isset($dto->color) ? $dto->color : $field->label_color;

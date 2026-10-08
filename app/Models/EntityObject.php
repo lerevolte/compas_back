@@ -1872,6 +1872,10 @@ class EntityObject
                 'productions_materials' => \App\Models\ProductionMaterials::class,
             ][$request->order_entity] ?? \App\Models\Task::class;
             $order = $order_class::withTrashed()->where(['id' => $request->order_id])->first();
+            $products_override = is_array($request->products_override) ? $request->products_override : null;
+            if($order && $products_override !== null) {
+                $order->products = json_encode($products_override, JSON_UNESCAPED_UNICODE);
+            }
 
             if($order) {
                 $products = json_decode($order->products, true);
@@ -1899,7 +1903,7 @@ class EntityObject
                             $product_ids[] = $product['id'];
                         }
                     }
-                    if($fix_order) {
+                    if($fix_order && $products_override === null) {
                         $order->products = json_encode($products, JSON_UNESCAPED_UNICODE);
                         $order->saveQuietly();
                     }
@@ -2266,7 +2270,7 @@ class EntityObject
                                     'is_hidden' => 0,
                                     'field_id' => 0,
                                     'color' => isset($item->color) ? $item->color : '',
-                                    'text' => isset($product['name']) && !is_array($product['name']) ? $product['name'] : $item->name
+                                    'text' => isset($product['name']) && !is_array($product['name']) ? \App\Services\ShipmentService::plainName($product['name']) : $item->name
                                 ]
                             ]]
                         );
@@ -2281,7 +2285,7 @@ class EntityObject
                             }
                         }
 
-                        $data['product_name'] = isset($product['name']) && !is_array($product['name']) ? $product['name'] : $item->name;
+                        $data['product_name'] = isset($product['name']) && !is_array($product['name']) ? \App\Services\ShipmentService::plainName($product['name']) : $item->name;
 
                         $data['product_price'] = $product['price'];
                         $data['product_purchase_price'] = $product['purchase_price'] ?? null;
@@ -2311,7 +2315,7 @@ class EntityObject
                         $data['sort'] = $num;
                         $products_objects[] = $data;
                     } elseif(empty($product['id'])) {
-                        $custom_name = isset($product['name']) && !is_array($product['name']) ? $product['name'] : '';
+                        $custom_name = isset($product['name']) && !is_array($product['name']) ? \App\Services\ShipmentService::plainName($product['name']) : '';
                         $products_objects[] = array(
                             'id' => null,
                             'name' => $custom_name,

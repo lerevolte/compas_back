@@ -242,7 +242,7 @@ class SabyOrderController extends Controller
 
     private function present(SabyOrder $order): array
     {
-        $code = (string) ($order->state_code ?? '0');
+        $code = SabyOrderService::stateCode($order);
         $waybill = null;
         if ($order->waybill_doc_id) {
             $row = \Schema::hasTable('saby_waybills') ? SabyWaybill::where('doc_id', $order->waybill_doc_id)->first() : null;

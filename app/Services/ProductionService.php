@@ -196,6 +196,17 @@ class ProductionService
         return $lines;
     }
 
+    public static function previewMaterials(string $slug, int $id): ?array
+    {
+        $class = self::MODELS[$slug] ?? null;
+        $object = $class ? $class::find($id) : null;
+        if (!$object) {
+            return null;
+        }
+
+        return self::materialLines(self::requiredMaterials(self::decode($object->products)));
+    }
+
     public static function materialErrors(string $slug, int $id, array $materials): array
     {
         if ($slug !== self::DOC || !count($materials)) {

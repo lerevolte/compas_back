@@ -1467,6 +1467,12 @@ class ShipmentService
 
     public static function plainName($name): string
     {
+        if (is_string($name) && str_starts_with(ltrim($name), '{')) {
+            $decoded = json_decode($name, true);
+            if (is_array($decoded) && (array_key_exists('value', $decoded) || array_key_exists('text', $decoded))) {
+                $name = $decoded;
+            }
+        }
         if (is_array($name)) {
             $name = $name['value'] ?? ($name['text'] ?? (reset($name) ?: ''));
         }

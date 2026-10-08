@@ -92,12 +92,17 @@ class TaskController extends Controller
         if (!$this->canWriteComposition($slug, \App\Services\ProductionService::MATERIALS_FIELD)) {
             return response()->json(['message' => 'Нет прав на изменение материалов'], 403);
         }
-        $lines = \App\Services\ProductionService::fillMaterials($slug, (int) $id);
+        $lines = \App\Services\ProductionService::previewMaterials($slug, (int) $id);
         if ($lines === null) {
             return response()->json(['message' => 'Не найдено'], 404);
         }
+        $rows = count($lines) ? \App\Models\EntityObject::list('products', new Request([
+            'order_id' => (int) $id,
+            'order_entity' => \App\Services\ProductionService::materialsSlug($slug),
+            'products_override' => $lines,
+        ])) : [];
 
-        return response()->json(['success' => true, 'count' => count($lines)]);
+        return response()->json(['success' => true, 'count' => count($lines), 'rows' => $rows['data'] ?? []]);
     }
 
     private function canWriteComposition(string $slug, string $field): bool
