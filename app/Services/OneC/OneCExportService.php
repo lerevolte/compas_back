@@ -397,7 +397,7 @@ SQL);
         return $storehouse ? [
             'id' => (int) $storehouse->id,
             'name' => self::text($storehouse->name ?? ''),
-            '1c_id' => trim((string) ($storehouse->{self::STOREHOUSE_1C_FIELD} ?? '')) ?: null,
+            'id_1c' => trim((string) ($storehouse->{self::STOREHOUSE_1C_FIELD} ?? '')) ?: null,
         ] : null;
     }
 

@@ -14,7 +14,7 @@ class OneCInstall extends Command
         {target=avixo : <tenant_id>}
         {--token= : секретный токен для запросов 1С (если не задан и токена ещё нет — будет сгенерирован)}
         {--since= : с какой даты создания отдавать накладные, Y-m-d или Y-m-d H:i:s (по умолчанию — с момента установки)}
-        {--storehouse=* : внешний идентификатор склада в 1С, <id склада>:<1c_id>, можно несколько раз}
+        {--storehouse=* : внешний идентификатор склада в 1С, <id склада>:<id_1c>, можно несколько раз}
         {--disable : выключить обмен}';
 
     protected $description = 'Обмен с 1С: выгрузка расходных и приходных накладных (номер cmps-, дата, продавец, заказ, склад, строки) по GET-запросу и подтверждение обработки';
@@ -37,7 +37,7 @@ class OneCInstall extends Command
         $storehouseCodes = [];
         foreach ((array) $this->option('storehouse') as $pair) {
             if (!preg_match('/^\s*(\d+)\s*[:=]\s*(.+?)\s*$/u', (string) $pair, $m)) {
-                $this->error("Некорректное значение --storehouse={$pair}, нужно <id склада>:<1c_id>");
+                $this->error("Некорректное значение --storehouse={$pair}, нужно <id склада>:<id_1c>");
                 return self::FAILURE;
             }
             $storehouseCodes[(int) $m[1]] = $m[2];
@@ -162,7 +162,7 @@ class OneCInstall extends Command
         }
         foreach ($codes as $id => $code) {
             $updated = $db->table('storehouses')->where('id', $id)->update([$field => $code]);
-            $this->line("    [{$tenantId}] склад {$id}: " . ($updated ? "1c_id = {$code}" : 'не найден или без изменений'));
+            $this->line("    [{$tenantId}] склад {$id}: " . ($updated ? "id_1c = {$code}" : 'не найден или без изменений'));
         }
         try {
             if ($sb->hasTable('local_cache')) {
