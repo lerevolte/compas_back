@@ -21,6 +21,7 @@ class OneCInstall extends Command
 
     public const NUMBER_TITLE = 'Номер';
     public const STOREHOUSE_1C_TITLE = 'ID 1С';
+    public const STATUS_TITLE = OneCExportService::STATUS_TITLE;
 
     public function handle(): int
     {
@@ -91,6 +92,7 @@ class OneCInstall extends Command
                     $numbered++;
                 }
                 $this->line("    [{$tenant->id}] {$slug}: номеров присвоено {$numbered}");
+                $this->installStatusField($db, $sb, (string) $tenant->id, $slug, (int) $typeId);
                 try {
                     if ($sb->hasTable('local_cache')) {
                         $db->table('local_cache')->where('url', 'fields/' . $slug)->update(['updated_at' => now()]);
@@ -133,6 +135,63 @@ class OneCInstall extends Command
         });
 
         return self::SUCCESS;
+    }
+
+    private function installStatusField($db, $sb, string $tenantId, string $slug, int $typeId): void
+    {
+        $field = OneCExportService::STATUS_FIELD;
+        if (!$sb->hasColumn($slug, $field)) {
+            $db->statement('ALTER TABLE `' . $slug . '` ADD COLUMN `' . $field . '` TEXT NULL');
+        }
+        OneCExportService::forget();
+        $attrs = [
+            'type' => 'status',
+            'title' => self::STATUS_TITLE,
+            'required' => 0,
+            'only_read' => 1,
+            'is_program' => 1,
+            'is_default' => 1,
+            'is_permanent' => 1,
+            'is_remove' => 0,
+            'hide' => 0,
+        ];
+        $row = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', $field)->first();
+        if ($row) {
+            $db->table('data_rows')->where('id', $row->id)->update($attrs);
+            $fieldId = (int) $row->id;
+        } else {
+            $sectionId = (int) $db->table('field_sections')
+                ->where('page', $slug)
+                ->where(fn ($q) => $q->whereNull('module')->orWhere('module', ''))
+                ->orderBy('sort')
+                ->value('id');
+            $maxSort = (int) $db->table('data_rows')->where('data_type_id', $typeId)->max('sort');
+            $fieldId = (int) $db->table('data_rows')->insertGetId(array_merge(InstallSaleDocsEntities::baseRow($typeId, $sectionId), $attrs, [
+                'field' => $field,
+                'sort' => $maxSort + 1,
+            ]));
+            $this->line("    [{$tenantId}] {$slug}: создано поле {$field} (id {$fieldId})");
+        }
+        foreach (OneCExportService::STATUS_VALUES as $sort => $def) {
+            $value = $db->table('field_values')->where('field_id', $fieldId)->where('value', $def['value'])->first();
+            if ($value) {
+                $db->table('field_values')->where('id', $value->id)->update(['sort' => $sort, 'is_hidden' => 0]);
+            } else {
+                $db->table('field_values')->insert([
+                    'field_id' => $fieldId, 'value' => $def['value'], 'color' => $def['color'], 'sort' => $sort, 'is_hidden' => 0,
+                ]);
+            }
+        }
+        $ids = [];
+        foreach (OneCExportService::STATUS_VALUES as $def) {
+            $ids[] = (string) $db->table('field_values')->where('field_id', $fieldId)->where('value', $def['value'])->orderBy('id')->value('id');
+        }
+        $confirmedIds = $db->table(OneCExportService::STATE_TABLE)->where('slug', $slug)->whereNotNull('confirmed_at')->pluck('document_id')->all();
+        $confirmed = count($confirmedIds)
+            ? $db->table($slug)->whereIn('id', $confirmedIds)->where(fn ($q) => $q->whereNull($field)->orWhere($field, '!=', $ids[1]))->update([$field => $ids[1]])
+            : 0;
+        $filled = $db->table($slug)->where(fn ($q) => $q->whereNull($field)->orWhere($field, ''))->update([$field => $ids[0]]);
+        $this->line("    [{$tenantId}] {$slug}: статус 1С — проведено {$confirmed}, не заполнено {$filled}");
     }
 
     private function installStorehouseField($db, $sb, string $tenantId, array $codes): void

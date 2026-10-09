@@ -10,9 +10,9 @@ class OneCUninstall extends Command
 {
     protected $signature = 'onec:uninstall
         {target=avixo : <tenant_id>}
-        {--purge : удалить также номера накладных и журнал обмена}';
+        {--purge : удалить также номера, статус 1С накладных и журнал обмена}';
 
-    protected $description = 'Снять обмен с 1С: настройки и поле «Номер» у накладных (номера и журнал сохраняются, --purge удаляет и их)';
+    protected $description = 'Снять обмен с 1С: настройки и поля «Номер» и «Статус 1С» у накладных (номера, статусы и журнал сохраняются, --purge удаляет и их)';
 
     public function handle(): int
     {
@@ -28,16 +28,19 @@ class OneCUninstall extends Command
             foreach (array_keys(OneCExportService::DOCUMENTS) as $slug) {
                 $typeId = $db->table('data_types')->where('slug', $slug)->value('id');
                 if ($typeId) {
-                    $ids = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', OneCExportService::NUMBER_FIELD)->pluck('id');
+                    $ids = $db->table('data_rows')->where('data_type_id', $typeId)->whereIn('field', [OneCExportService::NUMBER_FIELD, OneCExportService::STATUS_FIELD])->pluck('id');
                     if ($ids->count()) {
                         if ($sb->hasTable('section_fields_sort')) {
                             $db->table('section_fields_sort')->whereIn('field_id', $ids)->delete();
                         }
+                        $db->table('field_values')->whereIn('field_id', $ids)->delete();
                         $db->table('data_rows')->whereIn('id', $ids)->delete();
                     }
                 }
-                if ($this->option('purge') && $sb->hasTable($slug) && $sb->hasColumn($slug, OneCExportService::NUMBER_FIELD)) {
-                    $db->statement('ALTER TABLE `' . $slug . '` DROP COLUMN `' . OneCExportService::NUMBER_FIELD . '`');
+                foreach ([OneCExportService::NUMBER_FIELD, OneCExportService::STATUS_FIELD] as $column) {
+                    if ($this->option('purge') && $sb->hasTable($slug) && $sb->hasColumn($slug, $column)) {
+                        $db->statement('ALTER TABLE `' . $slug . '` DROP COLUMN `' . $column . '`');
+                    }
                 }
                 try {
                     if ($sb->hasTable('local_cache')) {

@@ -8,12 +8,17 @@ use Illuminate\Support\Facades\Schema;
 class ProductPriceService
 {
     public const DOCUMENT_SLUGS = ['logistic_tasks', 'pickups'];
+    public const PURCHASE_DOCUMENT_SLUGS = ['supplier_orders'];
+    public const KINDS = [
+        'price' => ['slugs' => self::DOCUMENT_SLUGS, 'line_key' => 'price'],
+        'purchase_price' => ['slugs' => self::PURCHASE_DOCUMENT_SLUGS, 'line_key' => 'purchase_price'],
+    ];
     public const LIMIT = 30;
 
-    public static function ready(): bool
+    public static function ready(string $column = 'price'): bool
     {
         try {
-            return Schema::hasTable('products') && Schema::hasColumn('products', 'price');
+            return Schema::hasTable('products') && Schema::hasColumn('products', $column);
         } catch (\Throwable $e) {
             return false;
         }
@@ -33,21 +38,21 @@ class ProductPriceService
         return array_keys($ids);
     }
 
-    public static function recalcFromChange($newProducts, $oldProducts = null): void
+    public static function recalcFromChange($newProducts, $oldProducts = null, string $column = 'price'): void
     {
         try {
             $ids = self::productIds($newProducts, $oldProducts);
             if (count($ids)) {
-                self::recalc($ids);
+                self::recalc($ids, $column);
             }
         } catch (\Throwable $e) {
-            \Log::warning('product sale price recalc failed: ' . $e->getMessage());
+            \Log::warning('product ' . $column . ' recalc failed: ' . $e->getMessage());
         }
     }
 
-    public static function recalc(array $productIds): int
+    public static function recalc(array $productIds, string $column = 'price'): int
     {
-        if (!self::ready()) {
+        if (!isset(self::KINDS[$column]) || !self::ready($column)) {
             return 0;
         }
         $updated = 0;
@@ -55,24 +60,25 @@ class ProductPriceService
             if ($productId <= 0) {
                 continue;
             }
-            $average = self::averagePrice($productId);
+            $average = self::averagePrice($productId, $column);
             if ($average === null) {
                 continue;
             }
             $formatted = rtrim(rtrim(number_format($average, 2, '.', ''), '0'), '.');
             $updated += DB::table('products')
                 ->where('id', $productId)
-                ->where(fn ($q) => $q->whereNull('price')->orWhereRaw('CAST(price AS DECIMAL(20,2)) <> CAST(? AS DECIMAL(20,2))', [$formatted]))
-                ->update(['price' => $formatted]);
+                ->where(fn ($q) => $q->whereNull($column)->orWhereRaw('CAST(`' . $column . '` AS DECIMAL(20,2)) <> CAST(? AS DECIMAL(20,2))', [$formatted]))
+                ->update([$column => $formatted]);
         }
 
         return $updated;
     }
 
-    public static function averagePrice(int $productId): ?float
+    public static function averagePrice(int $productId, string $column = 'price'): ?float
     {
+        $kind = self::KINDS[$column] ?? self::KINDS['price'];
         $entries = [];
-        foreach (self::DOCUMENT_SLUGS as $slug) {
+        foreach ($kind['slugs'] as $slug) {
             if (!Schema::hasTable($slug) || !Schema::hasColumn($slug, 'products')) {
                 continue;
             }
@@ -89,7 +95,7 @@ class ProductPriceService
                 $query->whereNull('deleted_at');
             }
             foreach ($query->get(['id', 'created_at', 'products']) as $row) {
-                $price = self::linePrice($row->products, $productId);
+                $price = self::linePrice($row->products, $productId, $kind['line_key']);
                 if ($price !== null) {
                     $entries[] = ['at' => (string) $row->created_at, 'price' => $price];
                 }
@@ -104,14 +110,14 @@ class ProductPriceService
         return array_sum(array_column($entries, 'price')) / count($entries);
     }
 
-    private static function linePrice($raw, int $productId): ?float
+    private static function linePrice($raw, int $productId, string $key = 'price'): ?float
     {
         $prices = [];
         foreach (ShipmentService::decode($raw) as $product) {
             if (!is_array($product) || (int) ($product['id'] ?? 0) !== $productId) {
                 continue;
             }
-            $price = $product['price'] ?? null;
+            $price = $product[$key] ?? null;
             if ($price === null || $price === '' || !is_numeric($price)) {
                 continue;
             }

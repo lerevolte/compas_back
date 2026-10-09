@@ -208,6 +208,7 @@ class CashDocumentService
             'operation_kind' => $config['kind'],
             'comment' => $operation->comment ?? null,
             'user_id' => $operation->user_id ?? null,
+            'photo' => $operation->photo ?? null,
         ];
         if (Schema::hasColumn(self::SLUG, 'expense_article_id')) {
             $attrs['expense_article_id'] = property_exists($operation, 'expense_article_id') ? $operation->expense_article_id : null;

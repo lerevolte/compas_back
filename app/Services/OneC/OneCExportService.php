@@ -22,10 +22,18 @@ class OneCExportService
         'receipt_invoices' => 'receipt_storehouse_id',
     ];
     public const STOREHOUSE_1C_FIELD = 'id_1c';
+    public const STATUS_FIELD = 'onec_status';
+    public const STATUS_TITLE = 'Статус 1С';
+    public const STATUS_VALUES = [
+        ['value' => 'Не заполнено', 'color' => '#A8A8A8'],
+        ['value' => 'Проведено в 1С', 'color' => '#34C759'],
+    ];
     public const LIMIT = 100;
     public const SETTLE_SECONDS = 30;
 
     private static array $numberColumn = [];
+    private static array $statusColumn = [];
+    private static array $statusValues = [];
 
     public static function ensureTables($db): void
     {
@@ -92,9 +100,78 @@ SQL);
         return self::$numberColumn[$key];
     }
 
+    public static function hasStatusColumn(string $table): bool
+    {
+        $key = (string) (function_exists('tenant') ? tenant('id') : '') . ':' . $table;
+        if (!array_key_exists($key, self::$statusColumn)) {
+            try {
+                self::$statusColumn[$key] = Schema::hasColumn($table, self::STATUS_FIELD);
+            } catch (\Throwable $e) {
+                self::$statusColumn[$key] = false;
+            }
+        }
+
+        return self::$statusColumn[$key];
+    }
+
     public static function forget(): void
     {
         self::$numberColumn = [];
+        self::$statusColumn = [];
+        self::$statusValues = [];
+    }
+
+    public static function statusValueId(string $slug, int $index): ?string
+    {
+        $key = (string) (function_exists('tenant') ? tenant('id') : '') . ':' . $slug . ':' . $index;
+        if (array_key_exists($key, self::$statusValues)) {
+            return self::$statusValues[$key];
+        }
+        $id = null;
+        try {
+            $typeId = DB::table('data_types')->where('slug', $slug)->value('id');
+            $fieldId = $typeId ? DB::table('data_rows')->where('data_type_id', $typeId)->where('field', self::STATUS_FIELD)->value('id') : null;
+            if ($fieldId) {
+                $id = DB::table('field_values')->where('field_id', $fieldId)->where('value', self::STATUS_VALUES[$index]['value'])->value('id');
+                if (!$id) {
+                    $ordered = DB::table('field_values')->where('field_id', $fieldId)->where('is_hidden', '!=', 1)->orderBy('sort')->orderBy('id')->pluck('id')->all();
+                    $id = $ordered[$index] ?? null;
+                }
+            }
+        } catch (\Throwable $e) {
+            $id = null;
+        }
+
+        return self::$statusValues[$key] = ($id ? (string) $id : null);
+    }
+
+    public static function assignStatus($model): void
+    {
+        $table = $model->getTable();
+        if (!isset(self::DOCUMENTS[$table]) || !self::hasStatusColumn($table)) {
+            return;
+        }
+        if (trim((string) $model->getAttribute(self::STATUS_FIELD)) !== '') {
+            return;
+        }
+        $value = self::statusValueId($table, 0);
+        if ($value !== null) {
+            $model->setAttribute(self::STATUS_FIELD, $value);
+        }
+    }
+
+    public static function markConfirmed(string $slug, int $id): void
+    {
+        if (!self::hasStatusColumn($slug)) {
+            return;
+        }
+        $value = self::statusValueId($slug, 1);
+        if ($value === null) {
+            return;
+        }
+        DB::table($slug)->where('id', $id)
+            ->where(fn ($q) => $q->whereNull(self::STATUS_FIELD)->orWhere(self::STATUS_FIELD, '!=', $value))
+            ->update([self::STATUS_FIELD => $value]);
     }
 
     public static function assignNumber($model): void
@@ -220,6 +297,7 @@ SQL);
                     'created_at' => $now,
                 ]);
             }
+            self::markConfirmed($found[0], $found[1]);
             $confirmed[] = $number;
         }
 

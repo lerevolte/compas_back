@@ -27,6 +27,7 @@ class ExpenseInvoice extends Model
                 $model->user_id = $user->id;
             }
             \App\Services\OneC\OneCExportService::assignNumber($model);
+            \App\Services\OneC\OneCExportService::assignStatus($model);
         });
 
         static::saving(function ($model) {

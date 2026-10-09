@@ -8,27 +8,30 @@ use Illuminate\Console\Command;
 
 class InstallProductPriceFields extends Command
 {
-    public const SALE_TITLE = 'Цена продажи';
-    public const OLD_SALE_TITLES = ['Цена', 'Цена, руб', 'Цена, руб.'];
+    public const SALE_TITLE = 'Средняя цена продажи';
+    public const OLD_SALE_TITLES = ['Цена', 'Цена, руб', 'Цена, руб.', 'Цена продажи'];
     public const PURCHASE_FIELD = 'purchase_price';
-    public const PURCHASE_TITLE = 'Цена закупки';
+    public const PURCHASE_TITLE = 'Средняя цена закупки';
+    public const OLD_PURCHASE_TITLES = ['Цена закупки'];
 
     protected $signature = 'products:install-price-fields
-        {target=avixo : seeds | all-tenants | <tenant_id>}
-        {--recalc : пересчитать «Цену продажи» по последним 30 задачам логистики и самовывозам}';
+        {target=all : seeds | all-tenants | all (all-tenants + seeds) | <tenant_id>}
+        {--recalc : пересчитать средние цены по последним 30 документам (продажа — задачи логистики и самовывозы, закупка — заказы поставщикам)}';
 
-    protected $description = 'Поля цен у товаров: «Цена» → «Цена продажи», новое поле «Цена закупки»; опционально пересчёт цены продажи по документам';
+    protected $description = 'Поля цен у товаров: «Средняя цена продажи» и «Средняя цена закупки» только для чтения; опционально пересчёт средних цен по документам';
 
     public function handle(): int
     {
         $target = $this->argument('target');
 
-        if ($target === 'seeds') {
+        if ($target === 'seeds' || $target === 'all') {
             $this->install(\DB::connection('seeds'), 'admin_seeds', false);
-            return self::SUCCESS;
+            if ($target === 'seeds') {
+                return self::SUCCESS;
+            }
         }
 
-        if ($target === 'all-tenants') {
+        if ($target === 'all-tenants' || $target === 'all') {
             foreach (Tenant::get() as $tenant) {
                 try {
                     $tenant->run(fn () => $this->install(\DB::connection(), (string) $tenant->id, true));
@@ -67,9 +70,13 @@ class InstallProductPriceFields extends Command
         }
 
         $priceRow = $db->table('data_rows')->where('data_type_id', $dataType->id)->where('field', 'price')->first();
-        if ($priceRow && in_array(trim((string) $priceRow->title), self::OLD_SALE_TITLES, true)) {
-            $db->table('data_rows')->where('id', $priceRow->id)->update(['title' => self::SALE_TITLE]);
-            $this->line("    [{$label}] поле price переименовано в «" . self::SALE_TITLE . '»');
+        if ($priceRow) {
+            $patch = ['only_read' => 1];
+            if (in_array(trim((string) $priceRow->title), self::OLD_SALE_TITLES, true)) {
+                $patch['title'] = self::SALE_TITLE;
+                $this->line("    [{$label}] поле price переименовано в «" . self::SALE_TITLE . '»');
+            }
+            $db->table('data_rows')->where('id', $priceRow->id)->update($patch);
         }
 
         if (!$sb->hasColumn('products', self::PURCHASE_FIELD)) {
@@ -78,11 +85,11 @@ class InstallProductPriceFields extends Command
 
         $existing = $db->table('data_rows')->where('data_type_id', $dataType->id)->where('field', self::PURCHASE_FIELD)->first();
         if ($existing) {
-            $db->table('data_rows')->where('id', $existing->id)->update([
-                'type' => 'number',
-                'title' => self::PURCHASE_TITLE,
-                'hide' => 0,
-            ]);
+            $patch = ['type' => 'number', 'hide' => 0, 'only_read' => 1];
+            if (in_array(trim((string) $existing->title), array_merge(self::OLD_PURCHASE_TITLES, [self::PURCHASE_TITLE, '']), true)) {
+                $patch['title'] = self::PURCHASE_TITLE;
+            }
+            $db->table('data_rows')->where('id', $existing->id)->update($patch);
             $this->line("    [{$label}] поле " . self::PURCHASE_FIELD . " обновлено (id {$existing->id})");
         } else {
             $sectionId = $priceRow && $priceRow->section_id
@@ -111,7 +118,7 @@ class InstallProductPriceFields extends Command
                 'is_plural' => 0,
                 'is_permanent' => 1,
                 'is_default' => 1,
-                'only_read' => 0,
+                'only_read' => 1,
                 'unit' => $priceRow->unit ?? '',
             ]);
             $this->line("    [{$label}] создано поле " . self::PURCHASE_FIELD . " (id {$id})");
@@ -135,11 +142,13 @@ class InstallProductPriceFields extends Command
 
         if ($this->option('recalc')) {
             $ids = $db->table('products')->whereNull('deleted_at')->pluck('id')->map(fn ($v) => (int) $v)->all();
-            $updated = 0;
-            foreach (array_chunk($ids, 200) as $chunk) {
-                $updated += ProductPriceService::recalc($chunk);
+            foreach (array_keys(ProductPriceService::KINDS) as $column) {
+                $updated = 0;
+                foreach (array_chunk($ids, 200) as $chunk) {
+                    $updated += ProductPriceService::recalc($chunk, $column);
+                }
+                $this->line("    [{$label}] {$column}: пересчитано по документам, обновлено товаров {$updated} из " . count($ids));
             }
-            $this->line("    [{$label}] цена продажи пересчитана по документам: обновлено товаров {$updated} из " . count($ids));
         }
     }
 }
