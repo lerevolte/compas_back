@@ -456,11 +456,12 @@ class B24ProductSync
         $started = now()->format('Y-m-d\TH:i:sP');
 
         $products = $this->pullProducts($since, $since ? $chunk : 0);
+        $created = $since ? $this->pullProducts($since, 0, 'DATE_CREATE') : ['count' => 0];
         $write('b24_products_synced_at', ($products['more'] && $products['last_modify']) ? $products['last_modify'] : $started);
 
         return [
             'categories' => $categories,
-            'products'   => $products['count'],
+            'products'   => $products['count'] + $created['count'],
             'more'       => $products['more'],
         ];
     }
@@ -525,12 +526,12 @@ class B24ProductSync
         }
     }
 
-    public function pullProducts(?string $since = null, int $limit = 0): array
+    public function pullProducts(?string $since = null, int $limit = 0, string $dateField = 'TIMESTAMP_X'): array
     {
         $catalogId = $this->catalogId();
         $filter = $catalogId ? ['CATALOG_ID' => $catalogId] : [];
         if ($since) {
-            $filter['>TIMESTAMP_X'] = $since;
+            $filter['>' . $dateField] = $since;
         }
         $rows = $this->b24All('crm.product.list', [
             'filter' => $filter,
@@ -540,7 +541,7 @@ class B24ProductSync
                 self::LINK_PROPERTY, self::WEIGHT_PROPERTY, self::TYPE_PROPERTY, self::ARTICLE_PROPERTY,
                 ...$this->extraSelect(),
             ],
-            'order'  => $since ? ['TIMESTAMP_X' => 'ASC'] : ['ID' => 'ASC'],
+            'order'  => $since ? [$dateField => 'ASC'] : ['ID' => 'ASC'],
         ], $limit);
         $more = $limit > 0 && count($rows) >= $limit;
         if ($limit > 0) {
@@ -629,6 +630,52 @@ class B24ProductSync
         }
 
         return $result;
+    }
+
+    public function pullMissing(bool $dryRun = false): array
+    {
+        $catalogId = $this->catalogId();
+        $filter = ['ACTIVE' => 'Y'];
+        if ($catalogId) {
+            $filter['CATALOG_ID'] = $catalogId;
+        }
+        $rows = $this->b24All('crm.product.list', [
+            'filter' => $filter,
+            'select' => ['ID', 'NAME'],
+            'order'  => ['ID' => 'ASC'],
+        ]);
+        $local = DB::table('products')->whereNotNull('id_b24')->get(['id_b24', 'deleted_at'])
+            ->keyBy(fn ($row) => (string) $row->id_b24);
+        $missing = [];
+        $trashed = [];
+        foreach ($rows as $row) {
+            $b24Id = (string) ($row['ID'] ?? '');
+            if ($b24Id === '') {
+                continue;
+            }
+            $known = $local->get($b24Id);
+            if (!$known) {
+                $missing[] = $b24Id;
+            } elseif ($known->deleted_at) {
+                $trashed[] = $b24Id;
+            }
+        }
+        $pulled = 0;
+        $failed = [];
+        if (!$dryRun) {
+            foreach ($missing as $b24Id) {
+                try {
+                    if ($this->pullProductById($b24Id)) {
+                        $pulled++;
+                    }
+                } catch (\Throwable $e) {
+                    $failed[] = $b24Id;
+                    Log::channel('bitrix24')->warning('product-sync: pull missing failed', ['product_id' => $b24Id, 'error' => $e->getMessage()]);
+                }
+            }
+        }
+
+        return ['total' => count($rows), 'missing' => $missing, 'trashed' => $trashed, 'pulled' => $pulled, 'failed' => $failed];
     }
 
     public function pullProductById($productId): ?Product
