@@ -428,16 +428,21 @@ class ObjectRelationController extends Controller
         if (!$typeId) {
             return $result;
         }
-        $fields = DB::table('data_rows')->where('data_type_id', $typeId)->whereIn('field', ['delivery_date', 'status'])->get(['id', 'field', 'title'])->keyBy('field');
-        $date = $fields['delivery_date'] ?? null;
-        if ($date && property_exists($row, 'delivery_date')) {
-            $time = $row->delivery_date ? strtotime((string) $row->delivery_date) : false;
-            $result[] = ['key' => 'delivery_date', 'label' => $date->title ?: 'Дата доставки', 'value' => $time ? date('d.m.Y', $time) : '—'];
-        }
-        $status = $fields['status'] ?? null;
-        if ($status && property_exists($row, 'status')) {
-            $value = DB::table('field_values')->where('field_id', $status->id)->where('id', (int) $row->status)->first(['value', 'color']);
-            $result[] = ['key' => 'status', 'label' => $status->title ?: 'Статус', 'value' => $value->value ?? '—', 'color' => $value->color ?? null];
+        $fields = DB::table('data_rows')->where('data_type_id', $typeId)
+            ->where(fn ($q) => $q->where('field', 'delivery_date')->orWhere('type', 'status'))
+            ->orderBy('sort')
+            ->get(['id', 'field', 'type', 'title']);
+        foreach ($fields as $field) {
+            if (!property_exists($row, $field->field)) {
+                continue;
+            }
+            if ($field->field === 'delivery_date') {
+                $time = $row->delivery_date ? strtotime((string) $row->delivery_date) : false;
+                $result[] = ['key' => 'delivery_date', 'label' => $field->title ?: 'Дата доставки', 'value' => $time ? date('d.m.Y', $time) : '—'];
+                continue;
+            }
+            $value = DB::table('field_values')->where('field_id', $field->id)->where('id', (int) $row->{$field->field})->first(['value', 'color']);
+            $result[] = ['key' => 'status', 'field' => $field->field, 'label' => $field->title ?: 'Статус', 'value' => $value->value ?? '—', 'color' => $value->color ?? null];
         }
 
         return $result;
