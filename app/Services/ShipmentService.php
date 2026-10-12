@@ -930,7 +930,11 @@ class ShipmentService
             $count = (float) ($product['count'] ?? 0);
             $price = (float) ($product['price'] ?? 0);
             if (in_array((int) ($product['id'] ?? 0), $services, true)) {
+                $usedCount = self::lookup($used, $product);
                 $rest = max(0, $price - self::lookupPrice($used, $product));
+                if (($count > 0 && $usedCount >= $count) || ($price > 0 && $rest <= 0)) {
+                    continue;
+                }
                 $product['price'] = $rest == (int) $rest ? (int) $rest : round($rest, 2);
                 $product['sum'] = round($product['price'] * $count, 2);
                 $result[] = $product;

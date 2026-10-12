@@ -77,21 +77,8 @@ class OneCInstall extends Command
                         'sort' => $maxSort + 1,
                     ]));
                 }
-                $numbered = 0;
-                $rows = $db->table($slug)
-                    ->where(fn ($q) => $q->whereNull(OneCExportService::NUMBER_FIELD)->orWhere(OneCExportService::NUMBER_FIELD, ''))
-                    ->orderBy('created_at')
-                    ->orderBy('id')
-                    ->pluck('id');
-                foreach ($rows as $id) {
-                    $number = DocumentNumber::next();
-                    if (!$number) {
-                        break;
-                    }
-                    $db->table($slug)->where('id', $id)->update([OneCExportService::NUMBER_FIELD => $number]);
-                    $numbered++;
-                }
-                $this->line("    [{$tenant->id}] {$slug}: номеров присвоено {$numbered}");
+                $numbered = OneCExportService::renumber($db, $slug);
+                $this->line("    [{$tenant->id}] {$slug}: номеров cmps-<id> присвоено {$numbered}");
                 $this->installStatusField($db, $sb, (string) $tenant->id, $slug, (int) $typeId);
                 try {
                     if ($sb->hasTable('local_cache')) {
@@ -131,7 +118,7 @@ class OneCInstall extends Command
             $this->info("  ✓ {$tenant->id}: обмен с 1С " . ($config->enabled ? 'включён' : 'выключен') . ", накладные с {$config->since}");
             $this->line("    токен: {$config->token}");
             $this->line("    GET  https://{$tenant->id}.compas.pro/api/1c/documents?token=<токен>");
-            $this->line("    POST https://{$tenant->id}.compas.pro/api/1c/documents/confirm?token=<токен>  {\"numbers\": [\"cmps-…\"]}");
+            $this->line("    POST https://{$tenant->id}.compas.pro/api/1c/documents/confirm?token=<токен>  {\"documents\": [{\"number\": \"cmps-<id>\", \"type\": \"expense_invoice\", \"ref\": \"<GUID>\", \"status\": \"created|posted|deleted\"}]}");
         });
 
         return self::SUCCESS;
@@ -174,8 +161,11 @@ class OneCInstall extends Command
         }
         foreach (OneCExportService::STATUS_VALUES as $sort => $def) {
             $value = $db->table('field_values')->where('field_id', $fieldId)->where('value', $def['value'])->first();
+            if (!$value && isset($def['legacy'])) {
+                $value = $db->table('field_values')->where('field_id', $fieldId)->where('value', $def['legacy'])->first();
+            }
             if ($value) {
-                $db->table('field_values')->where('id', $value->id)->update(['sort' => $sort, 'is_hidden' => 0]);
+                $db->table('field_values')->where('id', $value->id)->update(['value' => $def['value'], 'color' => $def['color'], 'sort' => $sort, 'is_hidden' => 0]);
             } else {
                 $db->table('field_values')->insert([
                     'field_id' => $fieldId, 'value' => $def['value'], 'color' => $def['color'], 'sort' => $sort, 'is_hidden' => 0,
@@ -188,10 +178,11 @@ class OneCInstall extends Command
         }
         $confirmedIds = $db->table(OneCExportService::STATE_TABLE)->where('slug', $slug)->whereNotNull('confirmed_at')->pluck('document_id')->all();
         $confirmed = count($confirmedIds)
-            ? $db->table($slug)->whereIn('id', $confirmedIds)->where(fn ($q) => $q->whereNull($field)->orWhere($field, '!=', $ids[1]))->update([$field => $ids[1]])
+            ? $db->table($slug)->whereIn('id', $confirmedIds)->where(fn ($q) => $q->whereNull($field)->orWhere($field, '')->orWhere($field, $ids[OneCExportService::STATUS_NONE]))->update([$field => $ids[OneCExportService::STATUS_CREATED]])
             : 0;
-        $filled = $db->table($slug)->where(fn ($q) => $q->whereNull($field)->orWhere($field, ''))->update([$field => $ids[0]]);
-        $this->line("    [{$tenantId}] {$slug}: статус 1С — проведено {$confirmed}, не заполнено {$filled}");
+        $filled = $db->table($slug)->where(fn ($q) => $q->whereNull($field)->orWhere($field, ''))->update([$field => $ids[OneCExportService::STATUS_NONE]]);
+        $this->line("    [{$tenantId}] {$slug}: статус 1С — создана {$confirmed}, не создана {$filled}");
+        OneCExportService::forget();
     }
 
     private function installStorehouseField($db, $sb, string $tenantId, array $codes): void

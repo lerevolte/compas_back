@@ -300,4 +300,104 @@ class RelationFieldsService
 
         return array_values(array_filter($pairs, fn ($pair) => self::isEntity($pair[0])));
     }
+
+    public static function writeLinkHistory(string $slugA, int $idA, string $slugB, int $idB, bool $added = true): void
+    {
+        if (!$idA || !$idB) {
+            return;
+        }
+        $items = [];
+        foreach ([[$slugA, $idA, $slugB, $idB], [$slugB, $idB, $slugA, $idA]] as [$slug, $id, $target, $targetId]) {
+            try {
+                $item = self::linkHistoryFor($slug, $id, $target, $targetId, $added);
+                if ($item) {
+                    $items[] = $item;
+                }
+            } catch (\Throwable $e) {
+                \Log::warning('relations: не удалось записать историю связи', ['object' => $slug . '#' . $id, 'target' => $target . '#' . $targetId, 'error' => $e->getMessage()]);
+            }
+        }
+        if (count($items)) {
+            try {
+                \App\Events\ObjectUpdated::dispatch('HistoryUpdated', \App\Models\History::getDataList($items));
+            } catch (\Throwable $e) {
+            }
+        }
+    }
+
+    private static function linkHistoryFor(string $slug, int $id, string $target, int $targetId, bool $added): ?\App\Models\History
+    {
+        if (!DB::getSchemaBuilder()->hasTable($slug) || !DB::getSchemaBuilder()->hasTable($target)) {
+            return null;
+        }
+        $typeId = DB::table('data_types')->where('slug', $slug)->value('id');
+        if (!$typeId) {
+            return null;
+        }
+        $fieldName = self::field($slug, $target);
+        $field = DB::table('data_rows')->where('data_type_id', $typeId)->where('field', $fieldName)->first(['title']);
+        $targetType = DB::table('data_types')->where('slug', $target)->first(['title_singular', 'title_plural']);
+        $title = trim((string) ($field->title ?? '')) ?: (trim((string) ($targetType->title_plural ?? '')) ?: $target);
+        $singular = trim((string) ($targetType->title_singular ?? '')) ?: $target;
+
+        $ids = self::relatedIds($slug, $id, $target);
+        $others = array_values(array_filter($ids, fn ($v) => $v !== $targetId));
+        $before = $added ? $others : array_values(array_unique(array_merge($others, [$targetId])));
+        $after = $added ? array_values(array_unique(array_merge($others, [$targetId]))) : $others;
+        $names = self::linkNames($target, array_values(array_unique(array_merge($before, $after))), $singular);
+        $link = fn (int $v) => "<span data-slug='{$target}' data-id='{$v}'>" . ($names[$v] ?? ($singular . ' #' . $v)) . '</span>';
+        $plain = fn (array $list) => implode(', ', array_map(fn ($v) => $names[$v] ?? ($singular . ' #' . $v), $list));
+        $links = fn (array $list) => implode(', ', array_map($link, $list));
+
+        $base = [
+            'entity' => $slug,
+            'entity_id' => $id,
+            'user_id' => \App\Models\History::currentUserId() ?: 1,
+            'field' => $fieldName,
+            'old_value' => $plain($before),
+            'new_value' => $plain($after),
+            'is_relation' => 1,
+        ];
+        $history = new \App\Models\History($base + [
+            'text' => $title . ': ' . $links($before) . ' -> ' . $links($after),
+            'event' => 'FIELD_UPDATED',
+        ]);
+        $history->saveQuietly();
+
+        $history = new \App\Models\History($base + [
+            'text' => $title . ', ' . ($added ? 'добавлена связь: ' : 'удалена связь: ') . $link($targetId),
+            'event' => $added ? 'RELATION_ADDED' : 'RELATION_DELETED',
+            'color' => $added ? '#23704B' : '#C74822',
+        ]);
+        $history->saveQuietly();
+
+        return $history;
+    }
+
+    private static function linkNames(string $slug, array $ids, string $singular): array
+    {
+        $result = [];
+        if (!count($ids)) {
+            return $result;
+        }
+        $columns = ['id'];
+        foreach (['name', 'last_name', 'middle_name'] as $column) {
+            if (DB::getSchemaBuilder()->hasColumn($slug, $column)) {
+                $columns[] = $column;
+            }
+        }
+        foreach (DB::table($slug)->whereIn('id', $ids)->get($columns) as $row) {
+            $name = $row->name ?? '';
+            if (is_string($name) && $name !== '' && ($name[0] === '{' || $name[0] === '[')) {
+                $decoded = json_decode($name, true);
+                if (is_array($decoded)) {
+                    $name = (string) ($decoded['value'] ?? reset($decoded));
+                }
+            }
+            $name = trim(implode(' ', array_filter([trim((string) $name), trim((string) ($row->last_name ?? '')), trim((string) ($row->middle_name ?? ''))])));
+            $result[(int) $row->id] = $name !== '' ? $name : $singular . ' #' . $row->id;
+        }
+
+        return $result;
+    }
 }

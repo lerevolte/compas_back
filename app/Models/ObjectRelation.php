@@ -51,6 +51,36 @@ class ObjectRelation extends Model
         \App\Services\RelationFieldsService::refresh($targetSlug, (int) $targetId);
     }
 
+    public static function exists(string $slugA, int $idA, string $slugB, int $idB): bool
+    {
+        if (!self::ready()) {
+            return false;
+        }
+        try {
+            return self::where(function ($q) use ($slugA, $idA, $slugB, $idB) {
+                $q->where(['source_slug' => $slugA, 'source_id' => $idA, 'target_slug' => $slugB, 'target_id' => $idB]);
+            })->orWhere(function ($q) use ($slugA, $idA, $slugB, $idB) {
+                $q->where(['source_slug' => $slugB, 'source_id' => $idB, 'target_slug' => $slugA, 'target_id' => $idA]);
+            })->exists();
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    public static function linkWithHistory(string $sourceSlug, $sourceId, string $targetSlug, $targetId): bool
+    {
+        if (!self::ready() || !$sourceId || !$targetId) {
+            return false;
+        }
+        if (self::exists($sourceSlug, (int) $sourceId, $targetSlug, (int) $targetId)) {
+            return false;
+        }
+        self::link($sourceSlug, $sourceId, $targetSlug, $targetId);
+        \App\Services\RelationFieldsService::writeLinkHistory($sourceSlug, (int) $sourceId, $targetSlug, (int) $targetId, true);
+
+        return true;
+    }
+
     public static function afterLink(string $sourceSlug, int $sourceId, string $targetSlug, int $targetId): void
     {
         \App\Services\ProductionService::afterLink($sourceSlug, $sourceId, $targetSlug, $targetId);

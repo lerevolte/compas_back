@@ -46,7 +46,7 @@ class ObjectRelationController extends Controller
                 'errors' => $storehouseErrors,
             ], 422);
         }
-        ObjectRelation::link($data['source_slug'], $data['source_id'], $data['target_slug'], $data['target_id']);
+        ObjectRelation::linkWithHistory($data['source_slug'], $data['source_id'], $data['target_slug'], $data['target_id']);
         \App\Services\StorehouseService::inheritOnLink($data['source_slug'], (int) $data['source_id'], $data['target_slug'], (int) $data['target_id']);
         if ($data['source_slug'] === 'deals' && \App\Services\ShipmentService::isSource($data['target_slug'])) {
             \App\Services\ShipmentService::setDealColumn($data['target_slug'], (int) $data['target_id'], (int) $data['source_id']);
@@ -176,7 +176,14 @@ class ObjectRelationController extends Controller
             }
         }
 
-        $parent = \App\Services\ShipmentService::parentOf($slug, $id);
+        $parent = $id ? \App\Services\ShipmentService::parentOf($slug, $id) : null;
+        if (!$id) {
+            $draftSlug = (string) request()->query('parent_slug', '');
+            $draftId = (int) request()->query('parent_id', 0);
+            if ($draftSlug !== '' && $draftId > 0 && preg_match('/^[a-z0-9_]+$/', $draftSlug) && Schema::hasTable($draftSlug)) {
+                $parent = [$draftSlug, $draftId];
+            }
+        }
         $limits = [];
         $parentInfo = null;
         if ($parent) {
@@ -410,7 +417,30 @@ class ObjectRelationController extends Controller
                     : date('d.m.Y H:i:s', strtotime($row->created_at)))
                 : null,
             'products' => in_array($slug, array_merge(['deals', \App\Services\ShipmentService::DOCUMENT, \App\Services\ShipmentService::RETURN_DOC, \App\Services\ShipmentService::RECEIPT_DOC, \App\Services\ShipmentService::SUPPLIER], \App\Services\ShipmentService::SOURCES), true) ? $this->productsOf($row) : [],
+            'extra' => \App\Services\ShipmentService::isSource($slug) ? $this->extraOf($slug, $row) : [],
         ];
+    }
+
+    private function extraOf(string $slug, $row): array
+    {
+        $result = [];
+        $typeId = DB::table('data_types')->where('slug', $slug)->value('id');
+        if (!$typeId) {
+            return $result;
+        }
+        $fields = DB::table('data_rows')->where('data_type_id', $typeId)->whereIn('field', ['delivery_date', 'status'])->get(['id', 'field', 'title'])->keyBy('field');
+        $date = $fields['delivery_date'] ?? null;
+        if ($date && property_exists($row, 'delivery_date')) {
+            $time = $row->delivery_date ? strtotime((string) $row->delivery_date) : false;
+            $result[] = ['key' => 'delivery_date', 'label' => $date->title ?: 'Дата доставки', 'value' => $time ? date('d.m.Y', $time) : '—'];
+        }
+        $status = $fields['status'] ?? null;
+        if ($status && property_exists($row, 'status')) {
+            $value = DB::table('field_values')->where('field_id', $status->id)->where('id', (int) $row->status)->first(['value', 'color']);
+            $result[] = ['key' => 'status', 'label' => $status->title ?: 'Статус', 'value' => $value->value ?? '—', 'color' => $value->color ?? null];
+        }
+
+        return $result;
     }
 
     private function productsOf($row): array

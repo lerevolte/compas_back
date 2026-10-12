@@ -24,9 +24,30 @@ class OneCExportService
     public const STOREHOUSE_1C_FIELD = 'id_1c';
     public const STATUS_FIELD = 'onec_status';
     public const STATUS_TITLE = 'Статус 1С';
+    public const STATUS_NONE = 0;
+    public const STATUS_CREATED = 1;
+    public const STATUS_POSTED = 2;
+    public const STATUS_DELETED = 3;
     public const STATUS_VALUES = [
-        ['value' => 'Не заполнено', 'color' => '#A8A8A8'],
-        ['value' => 'Проведено в 1С', 'color' => '#34C759'],
+        self::STATUS_NONE => ['value' => 'Не создана', 'color' => '#A8A8A8', 'legacy' => 'Не заполнено'],
+        self::STATUS_CREATED => ['value' => 'Создана, не проведена', 'color' => '#2F8CFF', 'legacy' => 'Проведено в 1С'],
+        self::STATUS_POSTED => ['value' => 'Создана, проведена', 'color' => '#34C759'],
+        self::STATUS_DELETED => ['value' => 'Удалена', 'color' => '#C74822'],
+    ];
+    public const STATUS_CODES = [
+        self::STATUS_CREATED => 'created',
+        self::STATUS_POSTED => 'posted',
+        self::STATUS_DELETED => 'deleted',
+    ];
+    public const STATUS_ALIASES = [
+        'created' => self::STATUS_CREATED, 'create' => self::STATUS_CREATED, 'new' => self::STATUS_CREATED, 'saved' => self::STATUS_CREATED, 'unposted' => self::STATUS_CREATED,
+        'создана' => self::STATUS_CREATED, 'создан' => self::STATUS_CREATED, 'записана' => self::STATUS_CREATED, 'записан' => self::STATUS_CREATED,
+        'не проведена' => self::STATUS_CREATED, 'не проведен' => self::STATUS_CREATED, 'не проведён' => self::STATUS_CREATED, 'создана, не проведена' => self::STATUS_CREATED,
+        'posted' => self::STATUS_POSTED, 'post' => self::STATUS_POSTED, 'conducted' => self::STATUS_POSTED,
+        'проведена' => self::STATUS_POSTED, 'проведен' => self::STATUS_POSTED, 'проведён' => self::STATUS_POSTED, 'проведено' => self::STATUS_POSTED, 'создана, проведена' => self::STATUS_POSTED,
+        'deleted' => self::STATUS_DELETED, 'delete' => self::STATUS_DELETED, 'removed' => self::STATUS_DELETED, 'marked' => self::STATUS_DELETED,
+        'удалена' => self::STATUS_DELETED, 'удален' => self::STATUS_DELETED, 'удалён' => self::STATUS_DELETED, 'удалено' => self::STATUS_DELETED,
+        'помечен на удаление' => self::STATUS_DELETED, 'помечена на удаление' => self::STATUS_DELETED, 'пометка удаления' => self::STATUS_DELETED,
     ];
     public const LIMIT = 100;
     public const SETTLE_SECONDS = 30;
@@ -133,6 +154,9 @@ SQL);
             $fieldId = $typeId ? DB::table('data_rows')->where('data_type_id', $typeId)->where('field', self::STATUS_FIELD)->value('id') : null;
             if ($fieldId) {
                 $id = DB::table('field_values')->where('field_id', $fieldId)->where('value', self::STATUS_VALUES[$index]['value'])->value('id');
+                if (!$id && isset(self::STATUS_VALUES[$index]['legacy'])) {
+                    $id = DB::table('field_values')->where('field_id', $fieldId)->where('value', self::STATUS_VALUES[$index]['legacy'])->value('id');
+                }
                 if (!$id) {
                     $ordered = DB::table('field_values')->where('field_id', $fieldId)->where('is_hidden', '!=', 1)->orderBy('sort')->orderBy('id')->pluck('id')->all();
                     $id = $ordered[$index] ?? null;
@@ -154,39 +178,87 @@ SQL);
         if (trim((string) $model->getAttribute(self::STATUS_FIELD)) !== '') {
             return;
         }
-        $value = self::statusValueId($table, 0);
+        $value = self::statusValueId($table, self::STATUS_NONE);
         if ($value !== null) {
             $model->setAttribute(self::STATUS_FIELD, $value);
         }
     }
 
-    public static function markConfirmed(string $slug, int $id): void
+    public static function normalizeStatus($raw): ?int
+    {
+        if (is_int($raw) && isset(self::STATUS_CODES[$raw])) {
+            return $raw;
+        }
+        if (is_bool($raw)) {
+            return null;
+        }
+        $key = mb_strtolower(trim((string) $raw));
+        if ($key === '') {
+            return null;
+        }
+        if (isset(self::STATUS_ALIASES[$key])) {
+            return self::STATUS_ALIASES[$key];
+        }
+        if (is_numeric($key) && isset(self::STATUS_CODES[(int) $key])) {
+            return (int) $key;
+        }
+        foreach (self::STATUS_ALIASES as $alias => $index) {
+            if (mb_strpos($key, $alias) !== false) {
+                return $index;
+            }
+        }
+
+        return null;
+    }
+
+    public static function markStatus(string $slug, int $id, int $index, bool $onlyIfNone = false): void
     {
         if (!self::hasStatusColumn($slug)) {
             return;
         }
-        $value = self::statusValueId($slug, 1);
+        $value = self::statusValueId($slug, $index);
         if ($value === null) {
             return;
         }
-        DB::table($slug)->where('id', $id)
-            ->where(fn ($q) => $q->whereNull(self::STATUS_FIELD)->orWhere(self::STATUS_FIELD, '!=', $value))
-            ->update([self::STATUS_FIELD => $value]);
+        $query = DB::table($slug)->where('id', $id)
+            ->where(fn ($q) => $q->whereNull(self::STATUS_FIELD)->orWhere(self::STATUS_FIELD, '!=', $value));
+        if ($onlyIfNone) {
+            $none = self::statusValueId($slug, self::STATUS_NONE);
+            $query->where(fn ($q) => $q->whereNull(self::STATUS_FIELD)->orWhere(self::STATUS_FIELD, '')->orWhere(self::STATUS_FIELD, (string) $none));
+        }
+        $query->update([self::STATUS_FIELD => $value]);
+    }
+
+    public static function numberFor(int $id): string
+    {
+        return DocumentNumber::PREFIX . $id;
     }
 
     public static function assignNumber($model): void
     {
         $table = $model->getTable();
-        if (!isset(self::DOCUMENTS[$table]) || !self::hasNumberColumn($table)) {
+        if (!isset(self::DOCUMENTS[$table]) || !self::hasNumberColumn($table) || !$model->id) {
             return;
         }
-        if (trim((string) $model->getAttribute(self::NUMBER_FIELD)) !== '') {
+        $number = self::numberFor((int) $model->id);
+        if ((string) $model->getAttribute(self::NUMBER_FIELD) === $number) {
             return;
         }
-        $number = DocumentNumber::next();
-        if ($number) {
-            $model->setAttribute(self::NUMBER_FIELD, $number);
+        $model->setAttribute(self::NUMBER_FIELD, $number);
+        $model->syncOriginalAttribute(self::NUMBER_FIELD);
+        DB::table($table)->where('id', (int) $model->id)->update([self::NUMBER_FIELD => $number]);
+    }
+
+    public static function renumber($db, string $slug): int
+    {
+        if (!$db->getSchemaBuilder()->hasColumn($slug, self::NUMBER_FIELD)) {
+            return 0;
         }
+        $prefix = DocumentNumber::PREFIX;
+
+        return $db->table($slug)
+            ->where(fn ($q) => $q->whereNull(self::NUMBER_FIELD)->orWhereRaw('`' . self::NUMBER_FIELD . '` != CONCAT(?, id)', [$prefix]))
+            ->update([self::NUMBER_FIELD => DB::raw("CONCAT('" . $prefix . "', id)")]);
     }
 
     public static function pending(object $config): array
@@ -263,24 +335,15 @@ SQL);
             if ($number === '') {
                 continue;
             }
-            $found = null;
-            foreach (array_keys(self::DOCUMENTS) as $slug) {
-                if (!Schema::hasTable($slug) || !self::hasNumberColumn($slug)) {
-                    continue;
-                }
-                $id = DB::table($slug)->where(self::NUMBER_FIELD, $number)->value('id');
-                if ($id) {
-                    $found = [$slug, (int) $id];
-                    break;
-                }
-            }
+            $found = self::findByNumber($number, $item['type'] ?? null);
             if (!$found) {
                 $unknown[] = $number;
                 continue;
             }
             $ref = trim((string) ($item['ref'] ?? '')) ?: null;
+            $status = $item['status'] ?? null;
             $state = DB::table(self::STATE_TABLE)->where('slug', $found[0])->where('document_id', $found[1])->first(['id', 'confirmed_at']);
-            $update = ['number' => $number, 'updated_at' => $now];
+            $update = ['number' => self::numberFor($found[1]), 'updated_at' => $now];
             if ($ref !== null) {
                 $update['onec_ref'] = mb_substr($ref, 0, 191);
             }
@@ -297,11 +360,59 @@ SQL);
                     'created_at' => $now,
                 ]);
             }
-            self::markConfirmed($found[0], $found[1]);
+            if ($status === null) {
+                self::markStatus($found[0], $found[1], self::STATUS_CREATED, true);
+            } else {
+                self::markStatus($found[0], $found[1], $status);
+            }
             $confirmed[] = $number;
         }
 
         return ['confirmed' => $confirmed, 'unknown' => $unknown];
+    }
+
+    public static function findByNumber(string $number, $type = null): ?array
+    {
+        $slugs = array_keys(self::DOCUMENTS);
+        $typeKey = mb_strtolower(trim((string) $type));
+        if ($typeKey !== '') {
+            foreach (self::DOCUMENTS as $slug => $code) {
+                $isExpense = $slug === 'expense_invoices';
+                $aliases = $isExpense
+                    ? [$code, $slug, 'expense', 'расходная', 'расходная накладная', 'реализация']
+                    : [$code, $slug, 'receipt', 'приходная', 'приходная накладная', 'поступление'];
+                if (in_array($typeKey, $aliases, true)) {
+                    $slugs = [$slug];
+                    break;
+                }
+            }
+        }
+        $matches = [];
+        foreach ($slugs as $slug) {
+            if (!Schema::hasTable($slug) || !self::hasNumberColumn($slug)) {
+                continue;
+            }
+            $id = DB::table($slug)->where(self::NUMBER_FIELD, $number)->value('id');
+            if ($id) {
+                $matches[] = [$slug, (int) $id];
+            }
+        }
+        if (!count($matches)) {
+            $state = DB::table(self::STATE_TABLE)->where('number', $number)->whereIn('slug', $slugs)->orderByDesc('sent_at')->first(['slug', 'document_id']);
+            if ($state && Schema::hasTable($state->slug) && DB::table($state->slug)->where('id', $state->document_id)->exists()) {
+                $matches[] = [(string) $state->slug, (int) $state->document_id];
+            }
+        }
+        if (count($matches) > 1) {
+            foreach ($matches as $match) {
+                $pending = DB::table(self::STATE_TABLE)->where('slug', $match[0])->where('document_id', $match[1])->whereNotNull('sent_at')->whereNull('confirmed_at')->exists();
+                if ($pending) {
+                    return $match;
+                }
+            }
+        }
+
+        return $matches[0] ?? null;
     }
 
     public static function present(string $slug, object $row): array
