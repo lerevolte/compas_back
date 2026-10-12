@@ -342,6 +342,7 @@ class UpdService
                 : '',
             'seller_director' => $seller ? self::plain($seller->director ?? '') : '',
             'seller_accountant' => $seller ? self::plain($seller->accountant ?? '') : '',
+            'status' => $buyerCompany ? 1 : 2,
             'buyer_name' => $buyerName,
             'buyer_address' => $buyerAddress,
             'buyer_inn_kpp' => $buyerInnKpp,

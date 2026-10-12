@@ -43,7 +43,7 @@
                         <img src="{{ $doc['qr'] }}" class="qr" alt="">
                     @endif
                     <div class="badge">Универсальный передаточный документ</div>
-                    <div class="legend" style="margin-top: 2px;">Статус: <span class="status">1</span></div>
+                    <div class="legend" style="margin-top: 2px;">Статус: <span class="status">{{ $doc['status'] ?? 1 }}</span></div>
                     <div class="legend" style="margin-top: 2px;">
                         1 – счет-фактура и передаточный документ (акт)<br>
                         2 – передаточный документ (акт)
