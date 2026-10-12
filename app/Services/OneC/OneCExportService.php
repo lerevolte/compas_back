@@ -17,6 +17,7 @@ class OneCExportService
         'expense_invoices' => 'expense_invoice',
         'receipt_invoices' => 'receipt_invoice',
     ];
+    public const EXPORTED = ['expense_invoices'];
     public const STOREHOUSE_FIELDS = [
         'expense_invoices' => 'storehouse_id',
         'receipt_invoices' => 'receipt_storehouse_id',
@@ -266,7 +267,7 @@ SQL);
         $documents = [];
         $settled = now()->subSeconds(self::SETTLE_SECONDS);
         foreach (self::DOCUMENTS as $slug => $type) {
-            if (!Schema::hasTable($slug) || !self::hasNumberColumn($slug)) {
+            if (!in_array($slug, self::EXPORTED, true) || !Schema::hasTable($slug) || !self::hasNumberColumn($slug)) {
                 continue;
             }
             $query = DB::table($slug . ' as d')
@@ -373,7 +374,7 @@ SQL);
 
     public static function findByNumber(string $number, $type = null): ?array
     {
-        $slugs = array_keys(self::DOCUMENTS);
+        $slugs = self::EXPORTED;
         $typeKey = mb_strtolower(trim((string) $type));
         if ($typeKey !== '') {
             foreach (self::DOCUMENTS as $slug => $code) {
