@@ -383,6 +383,7 @@ class EntityObject
         } else {
             $data['title'] = ['name' => $data['title'], 'key' => 'name'];
         }
+        $data['title']['ordinal'] = \App\Models\ObjectRelation::ordinalOf($slug, (int) $id);
 
         if ($request->is_copy) {
             $data['title'] = [

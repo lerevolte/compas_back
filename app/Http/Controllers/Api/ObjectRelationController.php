@@ -478,7 +478,7 @@ class ObjectRelationController extends Controller
         if ($field->field === 'products' || $field->type === 'json') {
             $products = $this->productsOf($row);
 
-            return count($products) ? $base + ['type' => 'products', 'value' => $products] : null;
+            return count($products) ? array_merge($base, ['type' => 'products', 'value' => $products]) : null;
         }
         if ($field->type === 'date') {
             $time = $raw ? strtotime((string) $raw) : false;

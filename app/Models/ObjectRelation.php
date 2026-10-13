@@ -51,6 +51,33 @@ class ObjectRelation extends Model
         \App\Services\RelationFieldsService::refresh($targetSlug, (int) $targetId);
     }
 
+    public static function ordinalOf(string $slug, int $id): ?int
+    {
+        if (!$id || !self::ready()) {
+            return null;
+        }
+        $parent = self::where('target_slug', $slug)->where('target_id', $id)->orderBy('id')->first(['source_slug', 'source_id']);
+        if (!$parent) {
+            return null;
+        }
+        $ordinal = 0;
+        $targets = self::where('source_slug', $parent->source_slug)->where('source_id', $parent->source_id)
+            ->where('target_slug', $slug)->orderBy('id')->pluck('target_id');
+        foreach ($targets as $targetId) {
+            if ((int) $targetId === $id) {
+                return $ordinal + 1;
+            }
+            try {
+                if (\DB::table($slug)->where('id', $targetId)->exists()) {
+                    $ordinal++;
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+
+        return null;
+    }
+
     public static function exists(string $slugA, int $idA, string $slugB, int $idB): bool
     {
         if (!self::ready()) {
