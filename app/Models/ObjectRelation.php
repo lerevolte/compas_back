@@ -141,6 +141,9 @@ class ObjectRelation extends Model
             }
 
             $products = self::decodeProducts($source->products);
+            if ($targetSlug === \App\Services\ShipmentService::RETURN_DOC) {
+                $products = \App\Services\ShipmentService::withoutServices($products);
+            }
             if (!$products) {
                 return false;
             }

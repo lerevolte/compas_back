@@ -52,10 +52,13 @@ class OneCExportService
     ];
     public const LIMIT = 100;
     public const SETTLE_SECONDS = 30;
+    public const CHANGED_FIELD = 'changed_at';
+    public const RESYNC_FIELDS = ['products', 'sum', 'company_id', 'shipment_company_id', 'storehouse_id', 'receipt_storehouse_id', 'created_at', 'deal_id'];
 
     private static array $numberColumn = [];
     private static array $statusColumn = [];
     private static array $statusValues = [];
+    private static ?bool $changedColumn = null;
 
     public static function ensureTables($db): void
     {
@@ -87,6 +90,60 @@ CREATE TABLE IF NOT EXISTS `onec_exports` (
   KEY `onec_exports_number_index` (`number`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL);
+        if (!$db->getSchemaBuilder()->hasColumn(self::STATE_TABLE, self::CHANGED_FIELD)) {
+            $db->statement('ALTER TABLE `' . self::STATE_TABLE . '` ADD `' . self::CHANGED_FIELD . '` datetime DEFAULT NULL AFTER `confirmed_at`');
+        }
+        self::$changedColumn = null;
+    }
+
+    public static function hasChangedColumn(): bool
+    {
+        if (self::$changedColumn === null) {
+            try {
+                self::$changedColumn = Schema::hasTable(self::STATE_TABLE) && Schema::hasColumn(self::STATE_TABLE, self::CHANGED_FIELD);
+            } catch (\Throwable $e) {
+                self::$changedColumn = false;
+            }
+        }
+
+        return self::$changedColumn;
+    }
+
+    public static function markChanged($model): void
+    {
+        $slug = $model->getTable();
+        if (!isset(self::DOCUMENTS[$slug]) || !$model->id) {
+            return;
+        }
+        try {
+            if (!Schema::hasTable(self::STATE_TABLE)) {
+                return;
+            }
+            $state = DB::table(self::STATE_TABLE)->where('slug', $slug)->where('document_id', (int) $model->id)->first(['id', 'confirmed_at']);
+            if (!$state || !$state->confirmed_at) {
+                return;
+            }
+            $update = ['confirmed_at' => null, 'updated_at' => now()];
+            if (self::hasChangedColumn()) {
+                $update[self::CHANGED_FIELD] = now();
+            }
+            DB::table(self::STATE_TABLE)->where('id', $state->id)->update($update);
+        } catch (\Throwable $e) {
+        }
+    }
+
+    public static function touched($model): bool
+    {
+        if ($model->wasRecentlyCreated) {
+            return false;
+        }
+        foreach (array_keys($model->getChanges()) as $key) {
+            if (in_array($key, self::RESYNC_FIELDS, true) || str_starts_with((string) $key, 'related_')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public static function config(): ?object
@@ -141,6 +198,7 @@ SQL);
         self::$numberColumn = [];
         self::$statusColumn = [];
         self::$statusValues = [];
+        self::$changedColumn = null;
     }
 
     public static function statusValueId(string $slug, int $index): ?string
@@ -221,13 +279,54 @@ SQL);
         if ($value === null) {
             return;
         }
-        $query = DB::table($slug)->where('id', $id)
-            ->where(fn ($q) => $q->whereNull(self::STATUS_FIELD)->orWhere(self::STATUS_FIELD, '!=', $value));
+        $row = DB::table($slug)->where('id', $id)->first(['id', self::STATUS_FIELD]);
+        if (!$row) {
+            return;
+        }
+        $current = trim((string) $row->{self::STATUS_FIELD});
+        if ($current === (string) $value) {
+            return;
+        }
         if ($onlyIfNone) {
             $none = self::statusValueId($slug, self::STATUS_NONE);
-            $query->where(fn ($q) => $q->whereNull(self::STATUS_FIELD)->orWhere(self::STATUS_FIELD, '')->orWhere(self::STATUS_FIELD, (string) $none));
+            if ($current !== '' && $current !== (string) $none) {
+                return;
+            }
         }
-        $query->update([self::STATUS_FIELD => $value]);
+        DB::table($slug)->where('id', $id)->update([self::STATUS_FIELD => $value, 'updated_at' => now()]);
+        self::writeStatusHistory($slug, $id, $current, (string) $value);
+    }
+
+    private static function writeStatusHistory(string $slug, int $id, string $old, string $new): void
+    {
+        try {
+            $typeId = DB::table('data_types')->where('slug', $slug)->value('id');
+            $field = $typeId ? DB::table('data_rows')->where('data_type_id', $typeId)->where('field', self::STATUS_FIELD)->first(['id', 'title']) : null;
+            if (!$field) {
+                return;
+            }
+            $names = DB::table('field_values')->where('field_id', $field->id)->whereIn('id', array_values(array_filter([$old, $new])))->pluck('value', 'id');
+            $label = fn (string $v) => $v === '' ? '' : (string) ($names[(int) $v] ?? $v);
+            $history = new \App\Models\History([
+                'entity' => $slug,
+                'entity_id' => $id,
+                'user_id' => \App\Models\History::currentUserId() ?: 1,
+                'event' => 'FIELD_UPDATED',
+                'field' => self::STATUS_FIELD,
+                'text' => (trim((string) $field->title) ?: self::STATUS_TITLE) . ': ' . $label($old) . ' -> ' . $label($new),
+                'old_value' => $label($old),
+                'new_value' => $label($new),
+            ]);
+            $history->saveQuietly();
+        } catch (\Throwable $e) {
+            \Log::warning('1C: не удалось записать историю статуса', ['document' => $slug . '#' . $id, 'error' => $e->getMessage()]);
+
+            return;
+        }
+        try {
+            \App\Events\ObjectUpdated::dispatch('HistoryUpdated', \App\Models\History::getDataList([$history]));
+        } catch (\Throwable $e) {
+        }
     }
 
     public static function numberFor(int $id): string
@@ -284,7 +383,11 @@ SQL);
             if ($config->since) {
                 $query->where('d.created_at', '>=', $config->since);
             }
-            foreach ($query->orderBy('d.created_at')->orderBy('d.id')->limit(self::LIMIT)->get(['d.*']) as $row) {
+            $columns = ['d.*', 's.onec_ref as onec_export_ref'];
+            if (self::hasChangedColumn()) {
+                $columns[] = 's.' . self::CHANGED_FIELD . ' as onec_export_changed_at';
+            }
+            foreach ($query->orderBy('d.created_at')->orderBy('d.id')->limit(self::LIMIT)->get($columns) as $row) {
                 $document = self::present($slug, $row);
                 if (!count($document['items'])) {
                     continue;
@@ -345,6 +448,9 @@ SQL);
             $status = $item['status'] ?? null;
             $state = DB::table(self::STATE_TABLE)->where('slug', $found[0])->where('document_id', $found[1])->first(['id', 'confirmed_at']);
             $update = ['number' => self::numberFor($found[1]), 'updated_at' => $now];
+            if (self::hasChangedColumn()) {
+                $update[self::CHANGED_FIELD] = null;
+            }
             if ($ref !== null) {
                 $update['onec_ref'] = mb_substr($ref, 0, 191);
             }
@@ -462,18 +568,64 @@ SQL);
             ];
         }
 
+        $shipment = self::shipment($slug, $row);
+
         return [
             'type' => self::DOCUMENTS[$slug],
             'id' => (int) $row->id,
             'number' => (string) $row->{self::NUMBER_FIELD},
+            'ref' => trim((string) ($row->onec_export_ref ?? '')) ?: null,
+            'is_update' => !empty($row->onec_export_changed_at),
+            'changed_at' => self::date($row->onec_export_changed_at ?? null),
             'date' => self::date($row->created_at ?? null),
             'updated_at' => self::date($row->updated_at ?? null),
+            'delivery_date' => $shipment['date'],
+            'shipment' => $shipment['source'],
             'seller' => self::company($isExpense ? $ownId : $partnerId),
             'buyer' => self::company($isExpense ? $partnerId : $ownId),
             'order_number' => $order ? (string) $order['number'] : null,
             'order' => $order ? ['type' => $order['type'], 'id' => $order['id'], 'b24_id' => $order['b24_id'], 'name' => $order['name']] : null,
             'storehouse' => self::storehouse($storehouseId),
             'items' => $items,
+        ];
+    }
+
+    private static function shipment(string $slug, object $row): array
+    {
+        $empty = ['date' => null, 'source' => null];
+        $found = null;
+        try {
+            $parent = ShipmentService::parentOf($slug, (int) $row->id);
+            if ($parent && ShipmentService::isSource($parent[0])) {
+                $found = $parent;
+            }
+        } catch (\Throwable $e) {
+            $found = null;
+        }
+        if (!$found) {
+            foreach (ShipmentService::SOURCES as $sourceSlug) {
+                $id = self::ids($row->{'related_' . $sourceSlug} ?? null)[0] ?? null;
+                if ($id) {
+                    $found = [$sourceSlug, $id];
+                    break;
+                }
+            }
+        }
+        if (!$found || !Schema::hasTable($found[0]) || !Schema::hasColumn($found[0], 'delivery_date')) {
+            return $empty;
+        }
+        $source = DB::table($found[0])->where('id', $found[1])->first(['id', 'name', 'delivery_date']);
+        if (!$source) {
+            return $empty;
+        }
+
+        return [
+            'date' => self::date($source->delivery_date ?? null),
+            'source' => [
+                'type' => $found[0] === 'pickups' ? 'pickup' : 'logistic_task',
+                'id' => (int) $source->id,
+                'name' => self::text($source->name ?? ''),
+            ],
         ];
     }
 

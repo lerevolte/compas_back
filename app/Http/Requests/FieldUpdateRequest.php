@@ -45,6 +45,7 @@ final class FieldUpdateRequest extends FormRequest
             $this->has('set_default') ? (int)$this->get('set_default') : null,
             $this->has('mask') ? $this->get('mask') : null,
             $this->has('show_stage_bar') ? (int)$this->get('show_stage_bar') : null,
+            $this->has('show_in_relations') ? (int)$this->get('show_in_relations') : null,
         );
     }
 

@@ -130,6 +130,13 @@ class FieldService
             });
 
 
+        if($dto->show_in_relations) {
+            $createdDetails = json_decode((string) \DB::table('data_rows')->where('id', $field_id)->value('details'), true);
+            $createdDetails = is_array($createdDetails) ? $createdDetails : array();
+            $createdDetails['show_in_relations'] = 1;
+            \DB::table('data_rows')->where('id', $field_id)->update(['details' => json_encode($createdDetails, JSON_UNESCAPED_UNICODE)]);
+        }
+
         \App\Models\Settings::clear_cache();
         $field = \DB::table('data_rows')->where('id', $field_id)->first();
 
@@ -363,6 +370,13 @@ class FieldService
             }
             $barDetails['show_stage_bar'] = $dto->show_stage_bar ? 1 : 0;
             $data['details'] = json_encode($barDetails, JSON_UNESCAPED_UNICODE);
+        }
+
+        if(isset($dto->show_in_relations)) {
+            $relDetails = json_decode((string) ($data['details'] ?? $field->details), true);
+            $relDetails = is_array($relDetails) ? $relDetails : array();
+            $relDetails['show_in_relations'] = $dto->show_in_relations ? 1 : 0;
+            $data['details'] = json_encode($relDetails, JSON_UNESCAPED_UNICODE);
         }
 
         $data['set_color'] = isset($dto->set_color) ? $dto->set_color : $field->set_color;

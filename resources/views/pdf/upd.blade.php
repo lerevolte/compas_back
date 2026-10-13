@@ -31,10 +31,16 @@
         .half { width: 50%; vertical-align: top; }
         .footer-table td { padding: 1px 4px; vertical-align: bottom; }
         .section-line { border-bottom: 1px solid #000; }
+@include('pdf.partials.goods_receipt_style')
     </style>
 </head>
 <body>
 @foreach($documents as $doc)
+    @if(($doc['kind'] ?? 'upd') === 'receipt')
+    <div class="doc">
+        @include('pdf.partials.goods_receipt_doc', ['doc' => $doc])
+    </div>
+    @else
     <div class="doc">
         <table>
             <tr>
@@ -290,6 +296,7 @@
             </tr>
         </table>
     </div>
+    @endif
 @endforeach
 </body>
 </html>

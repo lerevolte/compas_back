@@ -46,6 +46,9 @@ class ExpenseInvoice extends Model
             if ($model->wasRecentlyCreated || array_key_exists('products', $model->getChanges())) {
                 \App\Services\ShipmentService::recalcForDocument((int) $model->id);
             }
+            if (\App\Services\OneC\OneCExportService::touched($model)) {
+                \App\Services\OneC\OneCExportService::markChanged($model);
+            }
         });
 
         static::deleted(function ($model) {
@@ -89,6 +92,7 @@ class ExpenseInvoice extends Model
             true
         );
         $this->saveQuietly();
+        \App\Services\OneC\OneCExportService::markChanged($this);
         $this->regeneratePdf();
         \App\Services\ShipmentService::recalcForDocument((int) $this->id);
     }

@@ -21,18 +21,38 @@ class UpdService
         if (!count($ids)) {
             return null;
         }
+        $receiptIds = array_values(array_filter($ids, fn ($id) => self::isReceipt($slug, $id)));
+        $updIds = array_values(array_diff($ids, $receiptIds));
 
         if (!$withDocs) {
-            $pdf = self::pdf($slug, $ids);
+            if (!count($receiptIds)) {
+                $pdf = self::pdf($slug, $updIds);
 
-            return $pdf ? $pdf->output() : null;
+                return $pdf ? $pdf->output() : null;
+            }
+            if (!count($updIds)) {
+                $pdf = self::receiptPdf($slug, $receiptIds);
+
+                return $pdf ? $pdf->output() : null;
+            }
         }
 
         $parts = [];
         $temp = [];
         foreach ($ids as $id) {
-            foreach (self::linkedDocumentFiles($slug, [$id], $docKeys) as $file) {
-                $parts[] = $file;
+            if (in_array($id, $receiptIds, true)) {
+                $pdf = self::receiptPdf($slug, [$id]);
+                $path = $pdf ? self::writeTemp($pdf->output()) : null;
+                if ($path !== null) {
+                    $temp[] = $path;
+                    $parts[] = $path;
+                }
+                continue;
+            }
+            if ($withDocs) {
+                foreach (self::linkedDocumentFiles($slug, [$id], $docKeys) as $file) {
+                    $parts[] = $file;
+                }
             }
             if (!$includeUpd) {
                 continue;
@@ -52,15 +72,15 @@ class UpdService
 
         try {
             if (!count($parts)) {
-                return $includeUpd ? self::fallbackUpd($slug, $ids) : null;
+                return $includeUpd || count($receiptIds) ? self::fallbackUpd($slug, $includeUpd ? $updIds : [], $receiptIds) : null;
             }
             if (count($parts) === 1) {
                 $bytes = @file_get_contents($parts[0]);
 
-                return $bytes === false ? self::fallbackUpd($slug, $ids) : $bytes;
+                return $bytes === false ? self::fallbackUpd($slug, $updIds, $receiptIds) : $bytes;
             }
 
-            return self::mergeFiles($parts) ?? ($includeUpd ? self::fallbackUpd($slug, $ids) : null);
+            return self::mergeFiles($parts) ?? ($includeUpd || count($receiptIds) ? self::fallbackUpd($slug, $includeUpd ? $updIds : [], $receiptIds) : null);
         } finally {
             foreach ($temp as $path) {
                 @unlink($path);
@@ -68,9 +88,190 @@ class UpdService
         }
     }
 
-    private static function fallbackUpd(string $slug, array $ids): ?string
+    public static function isReceipt(string $slug, int $id): bool
     {
-        $pdf = self::pdf($slug, $ids);
+        if (!in_array($slug, self::SLUGS, true) || !Schema::hasTable($slug)) {
+            return false;
+        }
+        $object = DB::table($slug)->where('id', $id)->first();
+
+        return $object && !self::firstId($object->company_id ?? null);
+    }
+
+    public static function receiptPdf(string $slug, array $ids)
+    {
+        if (!in_array($slug, self::SLUGS, true) || !Schema::hasTable($slug)) {
+            return null;
+        }
+        $documents = [];
+        foreach (array_values(array_filter(array_map('intval', $ids))) as $id) {
+            $document = self::buildReceipt($slug, $id);
+            if ($document) {
+                $documents[] = $document;
+            }
+        }
+        if (!count($documents)) {
+            return null;
+        }
+
+        return \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.goods_receipt', ['documents' => $documents])
+            ->setPaper('a4', 'portrait');
+    }
+
+    private static function buildReceipt(string $slug, int $id): ?array
+    {
+        $object = DB::table($slug)->where('id', $id)->first();
+        if (!$object) {
+            return null;
+        }
+        $date = $object->delivery_date ? strtotime($object->delivery_date) : ($object->created_at ? strtotime($object->created_at) : time());
+        $dateHuman = date('j', $date) . ' ' . self::MONTHS[(int) date('n', $date)] . ' ' . date('Y', $date) . ' г.';
+
+        $consignee = '';
+        $contact = self::contactById(self::firstId($object->contact_id ?? null));
+        if ($contact) {
+            $consignee = isset($contact->last_name)
+                ? \App\Helpers\ValueHelper::personName($contact->name ?? '', $contact->last_name)
+                : self::plainName($contact->name ?? '');
+        }
+        if ($consignee === '') {
+            $company = self::companyById(self::firstId($object->company_id ?? null));
+            $consignee = $company ? (self::plain($company->full_name ?? '') ?: self::plainName($company->name ?? '')) : '';
+        }
+        if ($consignee === '') {
+            $consignee = 'физ. лицо';
+        }
+
+        $products = json_decode((string) ($object->products ?? ''), true);
+        $products = is_array($products) ? array_values(array_filter($products, 'is_array')) : [];
+        $codes = self::productCodes(array_map(fn ($p) => (int) ($p['id'] ?? 0), $products));
+        $rows = [];
+        $total = 0.0;
+        $num = 0;
+        foreach ($products as $product) {
+            $count = (float) ($product['count'] ?? 0);
+            if ($count <= 0) {
+                continue;
+            }
+            $price = (float) ($product['price'] ?? 0);
+            $productId = (int) ($product['id'] ?? 0);
+            $sum = $price * $count;
+            $rows[] = [
+                'num' => ++$num,
+                'code' => $codes[$productId] ?? ($productId ?: '--'),
+                'name' => ShipmentService::plainName($product['name'] ?? ''),
+                'count' => rtrim(rtrim(number_format($count, 3, ',', ''), '0'), ','),
+                'unit' => trim((string) ($product['unit'] ?? ($product['measure'] ?? ''))) ?: 'шт',
+                'price' => number_format($price, 2, ',', ' '),
+                'sum' => number_format($sum, 2, ',', ' '),
+            ];
+            $total += $sum;
+        }
+        $number = (string) $object->id;
+
+        return [
+            'kind' => 'receipt',
+            'number' => $number,
+            'date' => $dateHuman,
+            'consignee' => $consignee,
+            'order_number' => self::orderNumber($slug, $id),
+            'rows' => $rows,
+            'total' => number_format($total, 2, ',', ' '),
+            'qr' => self::qrDataUri($slug, $id),
+            'pay_qr' => self::paymentQrDataUri($total, 'Оплата по товарному чеку № ' . $number . ' от ' . date('d.m.Y', $date)),
+        ];
+    }
+
+    private static function orderNumber(string $slug, int $id): string
+    {
+        try {
+            $parent = ShipmentService::parentOf($slug, $id);
+            if ($parent && $parent[0] === 'deals' && Schema::hasTable('deals')) {
+                $deal = DB::table('deals')->where('id', $parent[1])->first(['id', 'b24_id']);
+                if ($deal) {
+                    return trim((string) ($deal->b24_id ?? '')) ?: (string) $deal->id;
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return '—';
+    }
+
+    private static function productCodes(array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter($ids)));
+        if (!count($ids) || !Schema::hasTable('products') || !Schema::hasColumn('products', 'id_1c')) {
+            return [];
+        }
+        $codes = [];
+        foreach (DB::table('products')->whereIn('id', $ids)->get(['id', 'id_1c']) as $row) {
+            $code = trim((string) ($row->id_1c ?? ''));
+            if ($code !== '') {
+                $codes[(int) $row->id] = $code;
+            }
+        }
+
+        return $codes;
+    }
+
+    private static function paymentQrDataUri(float $sum, string $purpose): ?string
+    {
+        if ($sum <= 0 || !class_exists(\TCPDF2DBarcode::class) || !Schema::hasTable('requisites')) {
+            return null;
+        }
+        $org = DB::table('requisites')
+            ->whereNull('deleted_at')
+            ->orderByRaw('choosed_at IS NULL')
+            ->orderByDesc('choosed_at')
+            ->orderBy('id')
+            ->first();
+        if (!$org) {
+            return null;
+        }
+        $inn = self::digits($org->inn ?? '');
+        $bank = null;
+        if ($inn !== '' && Schema::hasTable('bank_requisites') && Schema::hasColumn('companies', 'inn')) {
+            $companyId = DB::table('companies')->whereNull('deleted_at')->where('inn', $inn)->value('id');
+            if ($companyId) {
+                $bank = DB::table('bank_requisites')->where('company_id', $companyId)->orderByRaw("is_default = '1' DESC")->orderBy('id')->first();
+            }
+        }
+        $account = self::digits($bank->account ?? '') ?: self::digits($org->account ?? '');
+        $bic = self::digits($bank->bic ?? '');
+        if ($account === '' || $bic === '') {
+            return null;
+        }
+        $clean = fn ($value) => trim(str_replace('|', ' ', (string) self::plain($value)));
+        $fields = [
+            'Name' => $clean($org->name ?? ''),
+            'PersonalAcc' => $account,
+            'BankName' => $clean($bank->bank_name ?? ''),
+            'BIC' => $bic,
+            'CorrespAcc' => self::digits($bank->corr_account ?? ''),
+            'PayeeINN' => $inn,
+            'KPP' => self::digits($org->kpp ?? ''),
+            'Sum' => (string) (int) round($sum * 100),
+            'Purpose' => $clean($purpose),
+        ];
+        $parts = ['ST00012'];
+        foreach ($fields as $key => $value) {
+            if ($value !== '') {
+                $parts[] = $key . '=' . $value;
+            }
+        }
+        try {
+            $png = (new \TCPDF2DBarcode(implode('|', $parts), 'QRCODE,M'))->getBarcodePngData(6, 6, [0, 0, 0]);
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        return is_string($png) && $png !== '' ? 'data:image/png;base64,' . base64_encode($png) : null;
+    }
+
+    private static function fallbackUpd(string $slug, array $ids, array $receiptIds = []): ?string
+    {
+        $pdf = self::pdf($slug, $ids, $receiptIds);
 
         return $pdf ? $pdf->output() : null;
     }
@@ -213,19 +414,26 @@ class UpdService
         return $result;
     }
 
-    public static function pdf(string $slug, array $ids)
+    public static function pdf(string $slug, array $ids, array $receiptIds = [])
     {
         if (!in_array($slug, self::SLUGS, true) || !Schema::hasTable($slug)) {
             return null;
         }
         $ids = array_values(array_filter(array_map('intval', $ids)));
-        if (!count($ids)) {
+        $receiptIds = array_values(array_filter(array_map('intval', $receiptIds)));
+        if (!count($ids) && !count($receiptIds)) {
             return null;
         }
 
         $documents = [];
         foreach ($ids as $id) {
             $document = self::buildDocument($slug, $id);
+            if ($document) {
+                $documents[] = $document;
+            }
+        }
+        foreach ($receiptIds as $id) {
+            $document = self::buildReceipt($slug, $id);
             if ($document) {
                 $documents[] = $document;
             }

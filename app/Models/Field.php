@@ -654,8 +654,18 @@ class Field extends Model
         if (in_array($this->type, self::STAGE_BAR_TYPES, true)) {
             $data['show_stage_bar'] = self::showsStageBar($this->type, $details) ? 1 : 0;
         }
+        $data['show_in_relations'] = self::showsInRelations($details) ? 1 : 0;
 
         return $data;
+    }
+
+    public static function showsInRelations($details): bool
+    {
+        if (is_string($details)) {
+            $details = json_decode($details, true);
+        }
+
+        return is_array($details) && !empty($details['show_in_relations']);
     }
 
     public static function showsStageBar(?string $type, $details): bool

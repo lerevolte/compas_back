@@ -28,6 +28,7 @@ final class FieldUpdateDto
         public readonly ?int $set_default = null,
         public readonly ?string $mask = null,
         public readonly ?int $show_stage_bar = null,
+        public readonly ?int $show_in_relations = null,
     )
     {
     }

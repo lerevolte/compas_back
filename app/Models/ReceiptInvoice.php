@@ -43,6 +43,9 @@ class ReceiptInvoice extends Model
             if (array_key_exists('products', $model->getChanges())) {
                 self::recalcParentShipments((int) $model->id);
             }
+            if (\App\Services\OneC\OneCExportService::touched($model)) {
+                \App\Services\OneC\OneCExportService::markChanged($model);
+            }
         });
 
         static::deleted(function ($model) {
@@ -94,6 +97,7 @@ class ReceiptInvoice extends Model
             true
         );
         $this->saveQuietly();
+        \App\Services\OneC\OneCExportService::markChanged($this);
         self::recalcParentShipments((int) $this->id);
     }
 

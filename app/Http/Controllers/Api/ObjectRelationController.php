@@ -233,10 +233,14 @@ class ObjectRelationController extends Controller
             }
         }
 
+        $ownRow = $id && Schema::hasTable($slug) ? DB::table($slug)->where('id', $id)->first(['products']) : null;
+        $ownProducts = array_filter(\App\Services\ShipmentService::decode($ownRow->products ?? null), 'is_array');
+
         return response()->json([
             'parent' => $parentInfo,
             'limits' => $limits,
             'usage' => $usage,
+            'services' => \App\Services\ShipmentService::serviceIds(array_map(fn ($p) => (int) ($p['id'] ?? 0), $ownProducts)),
             'loading' => $loading,
             'neutral' => \App\Services\ShipmentService::isNeutralAction($slug, $id),
         ]);
@@ -376,15 +380,19 @@ class ObjectRelationController extends Controller
         }
 
         $children = [];
+        $ordinals = [];
         foreach (ObjectRelation::where('source_slug', $slug)->where('source_id', $id)->orderBy('id')->get() as $relation) {
             $child = $this->buildNode($relation->target_slug, (int) $relation->target_id, $currentId, $currentSlug, $visited);
             if ($child) {
+                $ordinals[$child['slug']] = ($ordinals[$child['slug']] ?? 0) + 1;
+                $child['ordinal'] = $ordinals[$child['slug']];
                 $children[] = $child;
             }
         }
 
         return $object + [
             'is_current' => $slug === $currentSlug && $id === $currentId,
+            'ordinal' => null,
             'children' => $children,
         ];
     }
@@ -417,35 +425,97 @@ class ObjectRelationController extends Controller
                     : date('d.m.Y H:i:s', strtotime($row->created_at)))
                 : null,
             'products' => in_array($slug, array_merge(['deals', \App\Services\ShipmentService::DOCUMENT, \App\Services\ShipmentService::RETURN_DOC, \App\Services\ShipmentService::RECEIPT_DOC, \App\Services\ShipmentService::SUPPLIER], \App\Services\ShipmentService::SOURCES), true) ? $this->productsOf($row) : [],
-            'extra' => \App\Services\ShipmentService::isSource($slug) ? $this->extraOf($slug, $row) : [],
+            'rows' => $this->rowsOf($slug, $row),
         ];
     }
 
-    private function extraOf(string $slug, $row): array
+    private function rowsOf(string $slug, $row): array
     {
-        $result = [];
         $typeId = DB::table('data_types')->where('slug', $slug)->value('id');
         if (!$typeId) {
-            return $result;
+            return [];
         }
         $fields = DB::table('data_rows')->where('data_type_id', $typeId)
-            ->where(fn ($q) => $q->where('field', 'delivery_date')->orWhere('type', 'status'))
+            ->where(fn ($q) => $q->whereNull('is_remove')->orWhere('is_remove', 0))
+            ->whereNull('group_id')
             ->orderBy('sort')
-            ->get(['id', 'field', 'type', 'title']);
-        foreach ($fields as $field) {
+            ->orderBy('id')
+            ->get();
+        $flagged = $fields->filter(fn ($field) => \App\Models\Field::showsInRelations($field->details));
+        if (!$flagged->count()) {
+            $flagged = $fields->filter(fn ($field) => in_array($field->field, ['name', 'id', 'delivery_date', 'products'], true) || $field->type === 'status');
+        }
+        $result = [];
+        foreach ($flagged as $field) {
             if (!property_exists($row, $field->field)) {
                 continue;
             }
-            if ($field->field === 'delivery_date') {
-                $time = $row->delivery_date ? strtotime((string) $row->delivery_date) : false;
-                $result[] = ['key' => 'delivery_date', 'label' => $field->title ?: 'Дата доставки', 'value' => $time ? date('d.m.Y', $time) : '—'];
-                continue;
+            $item = $this->rowOf($field, $row);
+            if ($item) {
+                $result[] = $item;
             }
-            $value = DB::table('field_values')->where('field_id', $field->id)->where('id', (int) $row->{$field->field})->first(['value', 'color']);
-            $result[] = ['key' => 'status', 'field' => $field->field, 'label' => $field->title ?: 'Статус', 'value' => $value->value ?? '—', 'color' => $value->color ?? null];
         }
 
         return $result;
+    }
+
+    private function rowOf($field, $row): ?array
+    {
+        $raw = $row->{$field->field};
+        $base = ['key' => $field->field, 'label' => trim((string) $field->title) ?: $field->field, 'type' => $field->type];
+        if (in_array($field->type, ['file', 'text_group', 'redactor', 'waybills', 'route_map', 'geoposition', 'deal_stages'], true)) {
+            return null;
+        }
+        if ($field->type === 'status') {
+            $value = DB::table('field_values')->where('field_id', $field->id)->where('id', (int) $raw)->first(['value', 'color', 'file']);
+
+            return $base + [
+                'value' => $value->value ?? '—',
+                'color' => $value->color ?? null,
+                'file' => $value && trim((string) $value->file) !== '' ? $value->file : null,
+            ];
+        }
+        if ($field->field === 'products' || $field->type === 'json') {
+            $products = $this->productsOf($row);
+
+            return count($products) ? $base + ['type' => 'products', 'value' => $products] : null;
+        }
+        if ($field->type === 'date') {
+            $time = $raw ? strtotime((string) $raw) : false;
+            if (!$time) {
+                return $base + ['value' => '—'];
+            }
+
+            return $base + ['value' => date('H:i:s', $time) === '00:00:00' ? date('d.m.Y', $time) : date('d.m.Y H:i', $time)];
+        }
+        if ($field->type === 'checkbox') {
+            $checked = \App\Models\Field::checkboxValue($raw);
+
+            return $base + ['value' => $checked === null ? '—' : ($checked === '1' ? 'Да' : 'Нет')];
+        }
+        if ($field->field === 'name') {
+            return $base + ['value' => $this->nameOf($row) ?: '—'];
+        }
+        $text = '';
+        try {
+            $human = \App\Models\Field::getHumanValue($field, $raw);
+            $text = is_array($human['res'] ?? null) ? implode(', ', $human['res']) : (string) ($human['res'] ?? '');
+        } catch (\Throwable $e) {
+            $text = '';
+        }
+        if ($text === '') {
+            $text = is_scalar($raw) ? trim((string) $raw) : '';
+            if ($text !== '' && ($text[0] === '{' || $text[0] === '[')) {
+                $decoded = json_decode($text, true);
+                $text = is_array($decoded) ? (string) ($decoded['value'] ?? ($decoded['text'] ?? implode(', ', array_filter($decoded, 'is_scalar')))) : $text;
+            }
+        }
+        $text = trim(html_entity_decode(strip_tags($text)));
+        if ($field->type === 'number' && $text !== '' && trim((string) $field->unit) !== '') {
+            $text .= ' ' . trim((string) $field->unit);
+        }
+
+        return $base + ['value' => $text !== '' ? $text : '—'];
     }
 
     private function productsOf($row): array

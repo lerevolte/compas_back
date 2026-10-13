@@ -28,6 +28,7 @@ final class FieldCreateDto
         public readonly array $roles_write,
         public readonly ?string $default_value = null,
         public readonly ?int $set_default = null,
+        public readonly ?int $show_in_relations = null,
     )
     {
     }

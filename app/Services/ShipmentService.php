@@ -1366,7 +1366,7 @@ class ShipmentService
             return [];
         }
         $row = DB::table($parentSlug)->where('id', $parentId)->first();
-        $products = array_values(array_filter(self::decode($row->products ?? null), 'is_array'));
+        $products = self::withoutServices(array_values(array_filter(self::decode($row->products ?? null), 'is_array')));
         if (!count($products)) {
             return [];
         }
@@ -1398,6 +1398,16 @@ class ShipmentService
         }
 
         return $result;
+    }
+
+    public static function withoutServices(array $products): array
+    {
+        $services = self::serviceIds(array_map(fn ($p) => is_array($p) ? (int) ($p['id'] ?? 0) : 0, $products));
+        if (!count($services)) {
+            return array_values($products);
+        }
+
+        return array_values(array_filter($products, fn ($p) => !is_array($p) || !in_array((int) ($p['id'] ?? 0), $services, true)));
     }
 
     public static function serviceIds(array $ids): array
