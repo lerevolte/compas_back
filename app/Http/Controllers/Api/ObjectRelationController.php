@@ -31,6 +31,15 @@ class ObjectRelationController extends Controller
 
     private function storeLinked(array $data)
     {
+        if ($data['target_slug'] === \App\Services\ShipmentService::DOCUMENT) {
+            $singleErrors = \App\Services\ShipmentService::singleInvoiceErrors($data['source_slug'], (int) $data['source_id'], (int) $data['target_id']);
+            if (count($singleErrors)) {
+                return response()->json([
+                    'title' => 'Расходная накладная уже есть — связь не создана',
+                    'errors' => $singleErrors,
+                ], 422);
+            }
+        }
         $targetProducts = \App\Services\ShipmentService::productsOf($data['target_slug'], (int) $data['target_id']);
         if (count($targetProducts)) {
             $linkErrors = \App\Services\ShipmentService::validateAgainstPair($data['source_slug'], (int) $data['source_id'], $data['target_slug'], (int) $data['target_id'], $targetProducts);
@@ -125,6 +134,12 @@ class ObjectRelationController extends Controller
             ];
         }
 
+        if ($data['target_slug'] === \App\Services\ShipmentService::DOCUMENT) {
+            $singleErrors = \App\Services\ShipmentService::singleInvoiceErrors($data['source_slug'], (int) $data['source_id'], isset($data['target_id']) ? (int) $data['target_id'] : null);
+            if (count($singleErrors)) {
+                return response()->json(['errors' => $singleErrors]);
+            }
+        }
         $errors = \App\Services\ShipmentService::validateAgainstPair(
             $data['source_slug'],
             (int) $data['source_id'],
@@ -443,6 +458,11 @@ class ObjectRelationController extends Controller
                 $ordinals[$child['slug']] = ($ordinals[$child['slug']] ?? 0) + 1;
                 $child['ordinal'] = $ordinals[$child['slug']];
                 $children[] = $child;
+            }
+        }
+        foreach ($children as $i => $child) {
+            if (($ordinals[$child['slug']] ?? 0) < 2) {
+                $children[$i]['ordinal'] = null;
             }
         }
 

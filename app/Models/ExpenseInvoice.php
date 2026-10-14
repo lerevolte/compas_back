@@ -15,7 +15,7 @@ class ExpenseInvoice extends Model
 
     protected $guarded = ['id'];
 
-    public const REGENERATE_FIELDS = ['name', 'company_id', 'shipment_company_id', 'sum', 'products', 'created_at'];
+    public const REGENERATE_FIELDS = ['name', 'company_id', 'shipment_company_id', 'sum', 'products', 'created_at', 'number'];
 
     public static function boot()
     {

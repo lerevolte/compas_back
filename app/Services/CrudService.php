@@ -128,6 +128,14 @@ class CrudService
                         $copyRow['products'] = array_values(array_filter($row['products_draft'], 'is_array'));
                     unset($row['products_draft'], $copyRow['products_draft']);
                 }
+                $singleErrors = \App\Services\ShipmentService::singleInvoiceCopyErrors($slug, $obj);
+                if(count($singleErrors)) {
+                    return [
+                        'title' => 'Расходная накладная уже есть — копирование запрещено',
+                        'errors' => $singleErrors,
+                        'status' => 422
+                    ];
+                }
                 $copyErrors = \App\Services\ShipmentService::copyErrors($slug, $obj, $copyRow);
                 if(count($copyErrors)) {
                     return [
@@ -146,6 +154,14 @@ class CrudService
             }
 
             if(!empty($row['id'])) {
+                $singleErrors = \App\Services\ShipmentService::singleInvoiceRowErrors($slug, (int) $row['id'], $row);
+                if(count($singleErrors)) {
+                    return [
+                        'title' => 'Расходная накладная уже есть — сохранение запрещено',
+                        'errors' => $singleErrors,
+                        'status' => 422
+                    ];
+                }
                 $relationErrors = \App\Services\ShipmentService::relationChangeErrors($slug, (int) $row['id'], $row);
                 if(count($relationErrors)) {
                     return [

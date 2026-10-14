@@ -63,6 +63,16 @@ class Menu
                 
                 $details = json_decode($field->details, true);
                 $tab_slug = $field->relation_table ?: ($details['table'] ?? null);
+                if($tab_slug && self::isHiddenEntity($tab_slug)) {
+                    foreach($menu as $k => $menu_item) {
+                        if(isset($menu_item['tab']) && $menu_item['tab'] == $field->field) {
+                            unset($menu[$k]);
+                            $count_new++;
+                        }
+                    }
+                    $menu = array_values($menu);
+                    continue;
+                }
 
                 foreach($menu as $k => $menu_item) {
                     if($menu_item['tab'] == $field->field) {
@@ -132,6 +142,21 @@ class Menu
         
 
         return array_values($menu);
+    }
+
+    private static array $hiddenEntities = [];
+
+    public static function isHiddenEntity(string $slug): bool
+    {
+        if(!array_key_exists($slug, self::$hiddenEntities)) {
+            try {
+                self::$hiddenEntities[$slug] = (bool) \DB::table('data_types')->where('slug', $slug)->value('hidden');
+            } catch (\Throwable $e) {
+                self::$hiddenEntities[$slug] = false;
+            }
+        }
+
+        return self::$hiddenEntities[$slug];
     }
 
     public static function tabs($slug)

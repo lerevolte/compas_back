@@ -49,6 +49,9 @@ class ObjectRelation extends Model
 
         \App\Services\RelationFieldsService::refresh($sourceSlug, (int) $sourceId);
         \App\Services\RelationFieldsService::refresh($targetSlug, (int) $targetId);
+        if ($targetSlug === \App\Services\ShipmentService::DOCUMENT && \App\Services\ShipmentService::isSource($sourceSlug)) {
+            \App\Services\OneC\OneCExportService::refreshNumber($targetSlug, (int) $targetId);
+        }
     }
 
     public static function ordinalOf(string $slug, int $id): ?int
@@ -60,22 +63,20 @@ class ObjectRelation extends Model
         if (!$parent) {
             return null;
         }
-        $ordinal = 0;
         $targets = self::where('source_slug', $parent[0])->where('source_id', $parent[1])
-            ->where('target_slug', $slug)->orderBy('id')->pluck('target_id');
-        foreach ($targets as $targetId) {
-            if ((int) $targetId === $id) {
-                return $ordinal + 1;
-            }
-            try {
-                if (\DB::table($slug)->where('id', $targetId)->exists()) {
-                    $ordinal++;
-                }
-            } catch (\Throwable $e) {
-            }
+            ->where('target_slug', $slug)->orderBy('id')->pluck('target_id')->map(fn ($v) => (int) $v)->all();
+        try {
+            $existing = \DB::table($slug)->whereIn('id', $targets)->pluck('id')->map(fn ($v) => (int) $v)->all();
+        } catch (\Throwable $e) {
+            return null;
         }
+        $ordered = array_values(array_filter($targets, fn ($targetId) => in_array($targetId, $existing, true)));
+        if (count($ordered) < 2) {
+            return null;
+        }
+        $position = array_search($id, $ordered, true);
 
-        return null;
+        return $position === false ? null : $position + 1;
     }
 
     public static function nearestParent(string $slug, int $id): ?array
@@ -183,6 +184,11 @@ class ObjectRelation extends Model
     public static function afterUnlink(string $slugA, int $idA, string $slugB, int $idB): void
     {
         \App\Services\ProductionService::afterUnlink($slugA, $idA, $slugB, $idB);
+        foreach ([[$slugA, $idA], [$slugB, $idB]] as [$slug, $id]) {
+            if ($slug === \App\Services\ShipmentService::DOCUMENT) {
+                \App\Services\OneC\OneCExportService::refreshNumber($slug, $id);
+            }
+        }
         try {
             foreach ([[$slugA, $idA], [$slugB, $idB]] as [$slug, $id]) {
                 if (\App\Services\ShipmentService::isSource($slug)) {

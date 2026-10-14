@@ -1032,6 +1032,87 @@ class ShipmentService
         }
     }
 
+    public static function singleInvoiceErrors(string $sourceSlug, int $sourceId, ?int $exceptId = null): array
+    {
+        if (!self::isSource($sourceSlug) || !$sourceId || !ObjectRelation::ready() || !Schema::hasTable(self::DOCUMENT)) {
+            return [];
+        }
+        $ids = ObjectRelation::where('source_slug', $sourceSlug)
+            ->where('source_id', $sourceId)
+            ->where('target_slug', self::DOCUMENT)
+            ->pluck('target_id')
+            ->map(fn ($v) => (int) $v)
+            ->filter(fn ($v) => $v && $v !== (int) $exceptId)
+            ->values()
+            ->all();
+        if (!count($ids)) {
+            return [];
+        }
+        $query = DB::table(self::DOCUMENT)->whereIn('id', $ids);
+        if (Schema::hasColumn(self::DOCUMENT, 'deleted_at')) {
+            $query->whereNull('deleted_at');
+        }
+        $existing = $query->orderBy('id')->first(['id', 'name']);
+        if (!$existing) {
+            return [];
+        }
+        $sourceName = self::plainName((string) (DB::table($sourceSlug)->where('id', $sourceId)->value('name') ?? ''));
+        $sourceTitle = ($sourceSlug === 'pickups' ? 'самовывозу' : 'задаче') . ($sourceName !== '' ? ' «' . $sourceName . '»' : ' #' . $sourceId);
+
+        return ['К ' . $sourceTitle . ' уже есть расходная накладная «' . self::plainName((string) $existing->name) . '» — вторую создать нельзя'];
+    }
+
+    public static function singleInvoiceCopyErrors(string $slug, $source): array
+    {
+        if ($slug !== self::DOCUMENT || !$source) {
+            return [];
+        }
+        $errors = [];
+        foreach (self::parentsOf(self::DOCUMENT, (int) $source->id) as $parent) {
+            if (self::isSource($parent[0])) {
+                $errors = array_merge($errors, self::singleInvoiceErrors($parent[0], (int) $parent[1]));
+            }
+        }
+
+        return array_values(array_unique($errors));
+    }
+
+    public static function singleInvoiceRowErrors(string $slug, int $id, array $row): array
+    {
+        $errors = [];
+        try {
+            if (!$id || !ObjectRelation::ready()) {
+                return [];
+            }
+            foreach (RelationFieldsService::managedFieldsFor($slug) as $target => $field) {
+                if (!array_key_exists($field, $row)) {
+                    continue;
+                }
+                $current = RelationFieldsService::ids(DB::table($slug)->where('id', $id)->value($field));
+                $added = array_values(array_diff(RelationFieldsService::ids($row[$field]), $current));
+                if (!count($added)) {
+                    continue;
+                }
+                if ($slug === self::DOCUMENT && self::isSource($target)) {
+                    foreach ($added as $sourceId) {
+                        $errors = array_merge($errors, self::singleInvoiceErrors($target, (int) $sourceId, $id));
+                    }
+                } elseif (self::isSource($slug) && $target === self::DOCUMENT) {
+                    $kept = array_values(array_intersect($current, RelationFieldsService::ids($row[$field])));
+                    if (count($kept) + count($added) > 1) {
+                        $errors[] = 'У задачи может быть только одна расходная накладная';
+                    } else {
+                        $errors = array_merge($errors, self::singleInvoiceErrors($slug, $id));
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            return $errors;
+        }
+
+        return array_values(array_unique($errors));
+    }
+
     public static function copyErrors(string $slug, $source, array $row): array
     {
         if (!self::isSource($slug)) {

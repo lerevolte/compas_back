@@ -4,6 +4,7 @@ namespace App\Services\OneC;
 
 use App\Models\Route;
 use App\Services\DocumentNumber;
+use App\Models\ExpenseInvoice;
 use App\Services\ShipmentService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -329,9 +330,36 @@ SQL);
         }
     }
 
-    public static function numberFor(int $id): string
+    public static function numberFor(string $slug, int $id): string
     {
+        if ($slug === ShipmentService::DOCUMENT) {
+            $sourceId = self::sourceIdFor($id);
+            if ($sourceId) {
+                return DocumentNumber::PREFIX . $sourceId;
+            }
+        }
+
         return DocumentNumber::PREFIX . $id;
+    }
+
+    public static function sourceIdFor(int $documentId, $db = null): ?int
+    {
+        try {
+            $db = $db ?: DB::connection();
+            if (!$db->getSchemaBuilder()->hasTable('object_relations')) {
+                return null;
+            }
+            $sourceId = $db->table('object_relations')
+                ->whereIn('source_slug', ShipmentService::SOURCES)
+                ->where('target_slug', ShipmentService::DOCUMENT)
+                ->where('target_id', $documentId)
+                ->orderBy('id')
+                ->value('source_id');
+
+            return $sourceId ? (int) $sourceId : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     public static function assignNumber($model): void
@@ -340,7 +368,7 @@ SQL);
         if (!isset(self::DOCUMENTS[$table]) || !self::hasNumberColumn($table) || !$model->id) {
             return;
         }
-        $number = self::numberFor((int) $model->id);
+        $number = self::numberFor($table, (int) $model->id);
         if ((string) $model->getAttribute(self::NUMBER_FIELD) === $number) {
             return;
         }
@@ -349,16 +377,51 @@ SQL);
         DB::table($table)->where('id', (int) $model->id)->update([self::NUMBER_FIELD => $number]);
     }
 
+    public static function refreshNumber(string $slug, int $id): void
+    {
+        if ($slug !== ShipmentService::DOCUMENT || !$id || !self::hasNumberColumn($slug)) {
+            return;
+        }
+        try {
+            $model = ExpenseInvoice::withTrashed()->find($id);
+            if (!$model) {
+                return;
+            }
+            $number = self::numberFor($slug, $id);
+            if ((string) $model->getAttribute(self::NUMBER_FIELD) === $number) {
+                return;
+            }
+            $model->setAttribute(self::NUMBER_FIELD, $number);
+            $model->timestamps = false;
+            $model->save();
+            $model->timestamps = true;
+        } catch (\Throwable $e) {
+            \Log::warning('1C: номер накладной не обновлён', ['id' => $id, 'error' => $e->getMessage()]);
+        }
+    }
+
     public static function renumber($db, string $slug): int
     {
         if (!$db->getSchemaBuilder()->hasColumn($slug, self::NUMBER_FIELD)) {
             return 0;
         }
         $prefix = DocumentNumber::PREFIX;
+        $changed = 0;
+        foreach ($db->table($slug)->orderBy('id')->get(['id', self::NUMBER_FIELD]) as $row) {
+            $sourceId = $slug === ShipmentService::DOCUMENT ? self::sourceIdFor((int) $row->id, $db) : null;
+            $number = $prefix . ($sourceId ?: (int) $row->id);
+            if ((string) $row->{self::NUMBER_FIELD} === $number) {
+                continue;
+            }
+            $db->table($slug)->where('id', $row->id)->update([self::NUMBER_FIELD => $number]);
+            $changed++;
+            try {
+                \App\Services\SaleDocumentService::regenerate($slug, (int) $row->id);
+            } catch (\Throwable $e) {
+            }
+        }
 
-        return $db->table($slug)
-            ->where(fn ($q) => $q->whereNull(self::NUMBER_FIELD)->orWhereRaw('`' . self::NUMBER_FIELD . '` != CONCAT(?, id)', [$prefix]))
-            ->update([self::NUMBER_FIELD => DB::raw("CONCAT('" . $prefix . "', id)")]);
+        return $changed;
     }
 
     public static function pending(object $config): array
@@ -447,7 +510,7 @@ SQL);
             $ref = trim((string) ($item['ref'] ?? '')) ?: null;
             $status = $item['status'] ?? null;
             $state = DB::table(self::STATE_TABLE)->where('slug', $found[0])->where('document_id', $found[1])->first(['id', 'confirmed_at']);
-            $update = ['number' => self::numberFor($found[1]), 'updated_at' => $now];
+            $update = ['number' => self::numberFor($found[0], $found[1]), 'updated_at' => $now];
             if (self::hasChangedColumn()) {
                 $update[self::CHANGED_FIELD] = null;
             }

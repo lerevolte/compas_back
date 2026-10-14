@@ -895,7 +895,7 @@ class ObjectController extends Controller
         $result = [];
         foreach ($targets as $target) {
             $targetEntity = DB::table('data_types')->where('slug', $target)->where('enable', 1)->first();
-            if (!$targetEntity) {
+            if (!$targetEntity || !empty($targetEntity->hidden)) {
                 $result[$target] = false;
                 continue;
             }
