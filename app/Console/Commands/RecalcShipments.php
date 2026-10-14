@@ -13,7 +13,7 @@ class RecalcShipments extends Command
         {target=avixo : all-tenants | <tenant_id>}
         {--source= : пересчитать только один объект, формат slug:id (например logistic_tasks:2119)}';
 
-    protected $description = 'Пересчитать колонку «Отгружено» в составе задач логистики и самовывозов по связанным расходным накладным';
+    protected $description = 'Пересчитать колонку «Отгружено» в составе задач логистики и самовывозов по связанным расходным, приходным накладным и возвратам';
 
     public function handle(): int
     {
@@ -60,7 +60,7 @@ class RecalcShipments extends Command
             $sources = [[$slug, (int) $id]];
         } else {
             $sources = ObjectRelation::whereIn('source_slug', ShipmentService::SOURCES)
-                ->where('target_slug', ShipmentService::DOCUMENT)
+                ->whereIn('target_slug', [ShipmentService::DOCUMENT, ShipmentService::RETURN_DOC, ShipmentService::RECEIPT_DOC])
                 ->get(['source_slug', 'source_id'])
                 ->map(fn ($r) => [(string) $r->source_slug, (int) $r->source_id])
                 ->unique(fn ($r) => $r[0] . ':' . $r[1])

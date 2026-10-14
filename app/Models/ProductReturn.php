@@ -44,9 +44,10 @@ class ProductReturn extends Model
     public static function recalcParentShipments(int $id): void
     {
         try {
-            $parent = \App\Services\ShipmentService::parentOf('product_returns', $id);
-            if ($parent && \App\Services\ShipmentService::isSource($parent[0])) {
-                \App\Services\ShipmentService::recalcForSource($parent[0], (int) $parent[1]);
+            foreach (\App\Services\ShipmentService::parentsOf('product_returns', $id) as $parent) {
+                if (\App\Services\ShipmentService::isSource($parent[0])) {
+                    \App\Services\ShipmentService::recalcForSource($parent[0], (int) $parent[1]);
+                }
             }
         } catch (\Throwable $e) {
         }

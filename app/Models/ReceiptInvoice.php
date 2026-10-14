@@ -60,11 +60,12 @@ class ReceiptInvoice extends Model
     public static function recalcParentShipments(int $id): void
     {
         try {
-            $parent = \App\Services\ShipmentService::parentOf('receipt_invoices', $id);
-            if ($parent && \App\Services\ShipmentService::isSource($parent[0])) {
-                \App\Services\ShipmentService::recalcForSource($parent[0], (int) $parent[1]);
-            } elseif ($parent && $parent[0] === \App\Services\ShipmentService::SUPPLIER) {
-                \App\Services\ShipmentService::recalcSupplierReceived((int) $parent[1]);
+            foreach (\App\Services\ShipmentService::parentsOf('receipt_invoices', $id) as $parent) {
+                if (\App\Services\ShipmentService::isSource($parent[0])) {
+                    \App\Services\ShipmentService::recalcForSource($parent[0], (int) $parent[1]);
+                } elseif ($parent[0] === \App\Services\ShipmentService::SUPPLIER) {
+                    \App\Services\ShipmentService::recalcSupplierReceived((int) $parent[1]);
+                }
             }
         } catch (\Throwable $e) {
         }

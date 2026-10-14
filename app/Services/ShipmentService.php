@@ -662,10 +662,19 @@ class ShipmentService
         if (self::isLoading($slug, $id)) {
             return self::receiptsUsage($slug, $id);
         }
-        $shipped = self::invoicesUsage($slug, $id);
-        $returned = self::returnsUsage($slug, $id);
+        $shipped = self::subtractUsage(self::invoicesUsage($slug, $id), self::returnsUsage($slug, $id));
+        if (self::actionKind($slug, $id) === 'unloading') {
+            return $shipped;
+        }
+        $received = self::receiptsUsage($slug, $id);
+        if (!count($received['id']) && !count($received['name'])) {
+            return $shipped;
+        }
+        if (self::isTransfer($slug, $id)) {
+            return self::maxUsage($shipped, $received);
+        }
 
-        return self::subtractUsage($shipped, $returned);
+        return count($shipped['id']) || count($shipped['name']) ? $shipped : $received;
     }
 
     public static function invoicesUsage(string $slug, int $id, ?int $exceptId = null): array
@@ -804,6 +813,32 @@ class ShipmentService
             ->first(['source_slug', 'source_id']);
 
         return $relation ? [(string) $relation->source_slug, (int) $relation->source_id] : null;
+    }
+
+    public static function parentsOf(string $slug, int $id): array
+    {
+        if (!ObjectRelation::ready()) {
+            return [];
+        }
+        if (self::isSource($slug)) {
+            $parentSlugs = ['deals', self::SUPPLIER];
+        } elseif ($slug === self::DOCUMENT || $slug === self::RETURN_DOC) {
+            $parentSlugs = self::SOURCES;
+        } elseif ($slug === self::RECEIPT_DOC) {
+            $parentSlugs = array_merge(self::SOURCES, [self::SUPPLIER]);
+        } else {
+            return [];
+        }
+
+        return ObjectRelation::whereIn('source_slug', $parentSlugs)
+            ->where('target_slug', $slug)
+            ->where('target_id', $id)
+            ->orderBy('id')
+            ->get(['source_slug', 'source_id'])
+            ->map(fn ($r) => [(string) $r->source_slug, (int) $r->source_id])
+            ->unique(fn ($r) => $r[0] . ':' . $r[1])
+            ->values()
+            ->all();
     }
 
     public static function childSlugsOf(string $slug, ?int $id = null): array
