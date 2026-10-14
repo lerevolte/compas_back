@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Schema;
 
 class ObjectRelationController extends Controller
 {
+    private array $infoCache = [];
+
     public function store(Request $request)
     {
         $data = $request->validate([
@@ -305,9 +307,44 @@ class ObjectRelationController extends Controller
         }
 
         $root = $this->rootOf($slug, (int) $id);
-        $tree = $this->buildNode($root['slug'], $root['id'], (int) $id, $slug, []);
+        $depths = $this->depthsFrom($root['slug'], $root['id']);
+        $placed = [];
+        $tree = $this->buildNode($root['slug'], $root['id'], (int) $id, $slug, [], $depths, $placed);
 
         return response()->json(['data' => $tree]);
+    }
+
+    private function depthsFrom(string $slug, int $id): array
+    {
+        $rootKey = $slug . ':' . $id;
+        $depths = [$rootKey => 0];
+        $queue = [[$slug, $id, 0]];
+        $guard = 0;
+        while (count($queue) && $guard++ < 5000) {
+            [$nodeSlug, $nodeId, $depth] = array_shift($queue);
+            if ($depth >= 50) {
+                continue;
+            }
+            $relations = ObjectRelation::where('source_slug', $nodeSlug)
+                ->where('source_id', $nodeId)
+                ->orderBy('id')
+                ->get(['target_slug', 'target_id']);
+            foreach ($relations as $relation) {
+                $childSlug = (string) $relation->target_slug;
+                $childId = (int) $relation->target_id;
+                $key = $childSlug . ':' . $childId;
+                if ($key === $rootKey || ($depths[$key] ?? -1) >= $depth + 1) {
+                    continue;
+                }
+                if (!$this->objectInfo($childSlug, $childId)) {
+                    continue;
+                }
+                $depths[$key] = $depth + 1;
+                $queue[] = [$childSlug, $childId, $depth + 1];
+            }
+        }
+
+        return $depths;
     }
 
     private function ancestorDocuments(string $slug, int $id): array
@@ -317,15 +354,11 @@ class ObjectRelationController extends Controller
         $guard = 0;
         $visited = [$slug . ':' . $id];
         while ($guard++ < 20) {
-            $parent = ObjectRelation::where('target_slug', $slug)
-                ->where('target_id', $id)
-                ->orderBy('id')
-                ->first(['source_slug', 'source_id']);
+            $parent = ObjectRelation::nearestParent($slug, $id);
             if (!$parent) {
                 break;
             }
-            $slug = (string) $parent->source_slug;
-            $id = (int) $parent->source_id;
+            [$slug, $id] = $parent;
             if (in_array($slug . ':' . $id, $visited, true)) {
                 break;
             }
@@ -350,26 +383,20 @@ class ObjectRelationController extends Controller
     {
         $guard = 0;
         while ($guard++ < 20) {
-            $parent = ObjectRelation::where('target_slug', $slug)
-                ->where('target_id', $id)
-                ->orderBy('id')
-                ->first(['source_slug', 'source_id']);
-
+            $parent = ObjectRelation::nearestParent($slug, $id);
             if (!$parent) {
                 break;
             }
-
-            $slug = $parent->source_slug;
-            $id = (int) $parent->source_id;
+            [$slug, $id] = $parent;
         }
 
         return ['slug' => $slug, 'id' => $id];
     }
 
-    private function buildNode(string $slug, int $id, int $currentId, string $currentSlug, array $visited): ?array
+    private function buildNode(string $slug, int $id, int $currentId, string $currentSlug, array $visited, array $depths, array &$placed): ?array
     {
         $key = $slug . ':' . $id;
-        if (in_array($key, $visited, true) || count($visited) > 50) {
+        if (in_array($key, $visited, true) || count($visited) > 50 || isset($placed[$key])) {
             return null;
         }
         $visited[] = $key;
@@ -378,11 +405,17 @@ class ObjectRelationController extends Controller
         if (!$object) {
             return null;
         }
+        $placed[$key] = true;
+        $depth = $depths[$key] ?? count($visited) - 1;
 
         $children = [];
         $ordinals = [];
         foreach (ObjectRelation::where('source_slug', $slug)->where('source_id', $id)->orderBy('id')->get() as $relation) {
-            $child = $this->buildNode($relation->target_slug, (int) $relation->target_id, $currentId, $currentSlug, $visited);
+            $childKey = $relation->target_slug . ':' . $relation->target_id;
+            if (isset($depths[$childKey]) && $depths[$childKey] !== $depth + 1) {
+                continue;
+            }
+            $child = $this->buildNode($relation->target_slug, (int) $relation->target_id, $currentId, $currentSlug, $visited, $depths, $placed);
             if ($child) {
                 $ordinals[$child['slug']] = ($ordinals[$child['slug']] ?? 0) + 1;
                 $child['ordinal'] = $ordinals[$child['slug']];
@@ -398,6 +431,16 @@ class ObjectRelationController extends Controller
     }
 
     private function objectInfo(string $slug, int $id): ?array
+    {
+        $cacheKey = $slug . ':' . $id;
+        if (array_key_exists($cacheKey, $this->infoCache)) {
+            return $this->infoCache[$cacheKey];
+        }
+
+        return $this->infoCache[$cacheKey] = $this->loadObjectInfo($slug, $id);
+    }
+
+    private function loadObjectInfo(string $slug, int $id): ?array
     {
         if (!Schema::hasTable($slug)) {
             return null;

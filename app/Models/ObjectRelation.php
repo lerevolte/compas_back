@@ -56,12 +56,12 @@ class ObjectRelation extends Model
         if (!$id || !self::ready()) {
             return null;
         }
-        $parent = self::where('target_slug', $slug)->where('target_id', $id)->orderBy('id')->first(['source_slug', 'source_id']);
+        $parent = self::nearestParent($slug, $id);
         if (!$parent) {
             return null;
         }
         $ordinal = 0;
-        $targets = self::where('source_slug', $parent->source_slug)->where('source_id', $parent->source_id)
+        $targets = self::where('source_slug', $parent[0])->where('source_id', $parent[1])
             ->where('target_slug', $slug)->orderBy('id')->pluck('target_id');
         foreach ($targets as $targetId) {
             if ((int) $targetId === $id) {
@@ -76,6 +76,56 @@ class ObjectRelation extends Model
         }
 
         return null;
+    }
+
+    public static function nearestParent(string $slug, int $id): ?array
+    {
+        if (!$id || !self::ready()) {
+            return null;
+        }
+        $parents = self::where('target_slug', $slug)->where('target_id', $id)->orderBy('id')->get(['source_slug', 'source_id']);
+        if (!count($parents)) {
+            return null;
+        }
+        $first = [(string) $parents[0]->source_slug, (int) $parents[0]->source_id];
+        if (count($parents) === 1) {
+            return $first;
+        }
+        $ancestors = [];
+        foreach ($parents as $parent) {
+            $ancestors += self::ancestorKeys((string) $parent->source_slug, (int) $parent->source_id, [$slug . ':' . $id]);
+        }
+        foreach ($parents as $parent) {
+            if (!isset($ancestors[$parent->source_slug . ':' . $parent->source_id])) {
+                return [(string) $parent->source_slug, (int) $parent->source_id];
+            }
+        }
+
+        return $first;
+    }
+
+    private static function ancestorKeys(string $slug, int $id, array $skip = []): array
+    {
+        $result = [];
+        $seen = array_fill_keys($skip, true);
+        $seen[$slug . ':' . $id] = true;
+        $queue = [[$slug, $id]];
+        $guard = 0;
+        while (count($queue) && $guard++ < 200) {
+            [$nodeSlug, $nodeId] = array_shift($queue);
+            $parents = self::where('target_slug', $nodeSlug)->where('target_id', $nodeId)->get(['source_slug', 'source_id']);
+            foreach ($parents as $parent) {
+                $key = $parent->source_slug . ':' . $parent->source_id;
+                if (isset($seen[$key])) {
+                    continue;
+                }
+                $seen[$key] = true;
+                $result[$key] = true;
+                $queue[] = [(string) $parent->source_slug, (int) $parent->source_id];
+            }
+        }
+
+        return $result;
     }
 
     public static function exists(string $slugA, int $idA, string $slugB, int $idB): bool
