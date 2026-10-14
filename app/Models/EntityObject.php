@@ -472,6 +472,8 @@ class EntityObject
                         $field_value = $user->id;
                     } elseif ($slug == 'logistic_tasks' && $field->field == 'route_id') {
                         $field_value = null;
+                    } elseif ($field->type == 'status') {
+                        $field_value = \App\Models\Field::explicitStatusDefault($field) ?: \App\Models\Field::getDefaultStatusValue($field->id);
                     }
                 }
                 $fields_data[$field->field]['guide'] = null;
@@ -982,6 +984,8 @@ class EntityObject
                     $field_value = null;
                 } elseif($request->is_copy && $field->field == 'user_id') {
                     $field_value = \Auth::user()->id;
+                } elseif($request->is_copy && $field->type == 'status') {
+                    $field_value = \App\Models\Field::explicitStatusDefault($field) ?: \App\Models\Field::getDefaultStatusValue($field->id);
                 }
                 $fields_data[$field->field]['value'] = $field->field == 'password' ? '' : $field_value;
                 $fields_data[$field->field]['guide'] = null;
@@ -2731,6 +2735,14 @@ class EntityObject
         }
         if(isset($model_fields['products']) && !array_key_exists('products', $fields) && $source->products) {
             $object->products = $source->products;
+        }
+        foreach($model_fields as $model_field) {
+            if($model_field->type == 'status' && !array_key_exists($model_field->field, $fields)) {
+                $default_status = \App\Models\Field::explicitStatusDefault($model_field) ?: \App\Models\Field::getDefaultStatusValue($model_field->id);
+                if($default_status) {
+                    $object->{$model_field->field} = $default_status;
+                }
+            }
         }
 
         if(!$object->name) {

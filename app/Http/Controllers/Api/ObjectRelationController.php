@@ -310,8 +310,31 @@ class ObjectRelationController extends Controller
         $depths = $this->depthsFrom($root['slug'], $root['id']);
         $placed = [];
         $tree = $this->buildNode($root['slug'], $root['id'], (int) $id, $slug, [], $depths, $placed);
+        if ($tree && !($root['slug'] === $slug && $root['id'] === (int) $id)) {
+            $tree = $this->pruneToCurrent($tree);
+        }
 
         return response()->json(['data' => $tree]);
+    }
+
+    private function pruneToCurrent(array $node): ?array
+    {
+        if (!empty($node['is_current'])) {
+            return $node;
+        }
+        $children = [];
+        foreach ($node['children'] ?? [] as $child) {
+            $kept = $this->pruneToCurrent($child);
+            if ($kept) {
+                $children[] = $kept;
+            }
+        }
+        if (!count($children)) {
+            return null;
+        }
+        $node['children'] = $children;
+
+        return $node;
     }
 
     private function depthsFrom(string $slug, int $id): array
@@ -486,7 +509,7 @@ class ObjectRelationController extends Controller
             ->get();
         $flagged = $fields->filter(fn ($field) => \App\Models\Field::showsInRelations($field->details));
         if (!$flagged->count()) {
-            $flagged = $fields->filter(fn ($field) => in_array($field->field, ['name', 'id', 'delivery_date', 'products'], true) || $field->type === 'status');
+            $flagged = $fields->filter(fn ($field) => in_array($field->field, ['name', 'id', 'delivery_date', 'products'], true) || in_array($field->type, ['status', 'deal_stages'], true));
         }
         $result = [];
         foreach ($flagged as $field) {
@@ -502,12 +525,54 @@ class ObjectRelationController extends Controller
         return $result;
     }
 
+    private function statusFile($file): ?string
+    {
+        if (is_array($file)) {
+            $file = $file[0] ?? null;
+        }
+        if (is_string($file) && in_array(substr(ltrim($file), 0, 1), ['[', '{'], true)) {
+            $decoded = json_decode($file, true);
+            $file = is_array($decoded) ? ($decoded[0] ?? $decoded) : $file;
+        }
+        if (is_array($file)) {
+            $file = $file['url'] ?? ($file['download_link'] ?? ($file['src'] ?? null));
+        }
+        $file = is_string($file) ? trim($file) : '';
+        if ($file === '' || in_array($file, ['[]', '{}', 'null'], true)) {
+            return null;
+        }
+        if (!preg_match('~^(https?:)?//|^/|^data:~', $file)) {
+            $file = '/' . ltrim($file, '/');
+        }
+
+        return $file;
+    }
+
     private function rowOf($field, $row): ?array
     {
         $raw = $row->{$field->field};
         $base = ['key' => $field->field, 'label' => trim((string) $field->title) ?: $field->field, 'type' => $field->type];
-        if (in_array($field->type, ['file', 'text_group', 'redactor', 'waybills', 'route_map', 'geoposition', 'deal_stages'], true)) {
+        if (in_array($field->type, ['file', 'text_group', 'redactor', 'waybills', 'route_map', 'geoposition'], true)) {
             return null;
+        }
+        if ($field->type === 'deal_stages') {
+            $details = json_decode((string) $field->details, true);
+            $options = is_array($details) && is_array($details['options'] ?? null) ? $details['options'] : [];
+            $current = is_scalar($raw) ? trim((string) $raw) : '';
+            $option = null;
+            foreach ($options as $item) {
+                if (is_array($item) && isset($item['value']) && (string) $item['value'] === $current) {
+                    $option = $item;
+                    break;
+                }
+            }
+
+            return array_merge($base, [
+                'type' => 'status',
+                'value' => $option ? (string) ($option['label'] ?? $current) : ($current !== '' ? $current : '—'),
+                'color' => $option ? (($option['color'] ?? null) ?: ($option['b24_color'] ?? null)) : null,
+                'file' => $option ? $this->statusFile($option['file'] ?? null) : null,
+            ]);
         }
         if ($field->type === 'status') {
             $value = DB::table('field_values')->where('field_id', $field->id)->where('id', (int) $raw)->first(['value', 'color', 'file']);
@@ -515,7 +580,7 @@ class ObjectRelationController extends Controller
             return $base + [
                 'value' => $value->value ?? '—',
                 'color' => $value->color ?? null,
-                'file' => $value && trim((string) $value->file) !== '' ? $value->file : null,
+                'file' => $value ? $this->statusFile($value->file) : null,
             ];
         }
         if ($field->field === 'products' || $field->type === 'json') {

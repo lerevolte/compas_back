@@ -681,6 +681,7 @@ class Table
         return array('value' => $values, 'localOptions' => $localOptions);
     }
     public const SHIPPED_TITLE = 'Фактическое кол-во';
+    public const INVOICE_LOCKED_PRODUCT_KEYS = ['product_price', 'product_purchase_price', 'product_sum', 'product_nds', 'product_nds_included'];
     public const SALE_PRICE_TITLE = 'Цена продажи';
     public const PURCHASE_PRICE_TITLE = 'Цена закупки';
     public const PURCHASE_PRICE_KEY = 'product_purchase_price';

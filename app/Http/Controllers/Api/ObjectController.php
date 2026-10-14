@@ -426,6 +426,14 @@ class ObjectController extends Controller
                         $tableKeys[$tk]['can_edit'] = 0;
                     }
                 }
+                if (in_array($slug, [\App\Services\ShipmentService::DOCUMENT, \App\Services\ShipmentService::RECEIPT_DOC], true)) {
+                    foreach ($tableKeys as $tk => $tableKey) {
+                        if (in_array((string) ($tableKey['key'] ?? $tk), Table::INVOICE_LOCKED_PRODUCT_KEYS, true)) {
+                            $tableKeys[$tk]['read_only'] = 1;
+                            $tableKeys[$tk]['can_edit'] = 0;
+                        }
+                    }
+                }
                 if ($id) {
                     $products = EntityObject::list('products', new Request(['order_id' => $id, 'order_entity' => $slug]));
                 }

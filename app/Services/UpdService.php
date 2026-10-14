@@ -144,7 +144,6 @@ class UpdService
 
         $products = json_decode((string) ($object->products ?? ''), true);
         $products = is_array($products) ? array_values(array_filter($products, 'is_array')) : [];
-        $codes = self::productCodes(array_map(fn ($p) => (int) ($p['id'] ?? 0), $products));
         $rows = [];
         $total = 0.0;
         $num = 0;
@@ -158,7 +157,7 @@ class UpdService
             $sum = $price * $count;
             $rows[] = [
                 'num' => ++$num,
-                'code' => $codes[$productId] ?? ($productId ?: '--'),
+                'code' => $productId ?: '--',
                 'name' => ShipmentService::plainName($product['name'] ?? ''),
                 'count' => rtrim(rtrim(number_format($count, 3, ',', ''), '0'), ','),
                 'unit' => trim((string) ($product['unit'] ?? ($product['measure'] ?? ''))) ?: 'шт',
@@ -196,23 +195,6 @@ class UpdService
         }
 
         return '—';
-    }
-
-    private static function productCodes(array $ids): array
-    {
-        $ids = array_values(array_unique(array_filter($ids)));
-        if (!count($ids) || !Schema::hasTable('products') || !Schema::hasColumn('products', 'id_1c')) {
-            return [];
-        }
-        $codes = [];
-        foreach (DB::table('products')->whereIn('id', $ids)->get(['id', 'id_1c']) as $row) {
-            $code = trim((string) ($row->id_1c ?? ''));
-            if ($code !== '') {
-                $codes[(int) $row->id] = $code;
-            }
-        }
-
-        return $codes;
     }
 
     private static function paymentQrDataUri(float $sum, string $purpose): ?string
