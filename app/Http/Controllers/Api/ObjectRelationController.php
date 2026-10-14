@@ -269,7 +269,9 @@ class ObjectRelationController extends Controller
             return response()->json(['data' => []]);
         }
 
-        $tree = $this->buildNode($slug, (int) $id, (int) $id, $slug, []);
+        $depths = $this->depthsFrom($slug, (int) $id);
+        $placed = [];
+        $tree = $this->buildNode($slug, (int) $id, (int) $id, $slug, [], $depths, $placed);
 
         $flat = [];
         $walk = function ($node) use (&$walk, &$flat) {
