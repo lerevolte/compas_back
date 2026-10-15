@@ -17,7 +17,7 @@
                     <table>
                         <tr>
                             <td class="rc-qr-img"><img src="{{ $doc['pay_qr'] }}" alt=""></td>
-                            <td class="rc-qr-text">QR-код для оплаты клиентом<span class="rc-small">Сканировать камерой телефона</span></td>
+                            <td class="rc-qr-text">QR-код для оплаты клиентом</td>
                         </tr>
                     </table>
                 @endif

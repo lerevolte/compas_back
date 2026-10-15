@@ -11,7 +11,6 @@
         .rc-qr-img { width: 86px; }
         .rc-qr-img img { width: 80px; height: 80px; display: block; }
         .rc-qr-text { font-size: 12pt; font-weight: bold; line-height: 1.25; }
-        .rc-qr-text .rc-small { display: block; font-size: 6.5pt; font-weight: normal; margin-top: 3px; }
         .rc-qr-gap { width: 24%; }
         .rc-title { font-size: 13pt; font-weight: bold; margin: 8px 0 6px; }
         .rc-hr { border-bottom: 1.5px solid #000; margin: 4px 0 10px; }
