@@ -123,6 +123,50 @@ class ShipmentService
         return $result;
     }
 
+    public static function supplierSourceUsage(int $orderId, ?array $except = null): array
+    {
+        $result = self::usageByChildren(self::SUPPLIER, $orderId, self::SOURCES, $except);
+        if (!Schema::hasTable(self::RECEIPT_DOC) || !Schema::hasColumn(self::RECEIPT_DOC, 'products')) {
+            return $result;
+        }
+        $documentIds = ObjectRelation::where('source_slug', self::SUPPLIER)
+            ->where('source_id', $orderId)
+            ->where('target_slug', self::RECEIPT_DOC)
+            ->pluck('target_id')
+            ->map(fn ($v) => (int) $v)
+            ->all();
+        if (!count($documentIds)) {
+            return $result;
+        }
+        $sources = ObjectRelation::where('source_slug', self::SUPPLIER)
+            ->where('source_id', $orderId)
+            ->whereIn('target_slug', self::SOURCES)
+            ->get(['target_slug', 'target_id']);
+        $covered = [];
+        foreach ($sources->groupBy('target_slug') as $sourceSlug => $items) {
+            $covered = array_merge($covered, ObjectRelation::where('source_slug', $sourceSlug)
+                ->whereIn('source_id', $items->pluck('target_id')->all())
+                ->where('target_slug', self::RECEIPT_DOC)
+                ->whereIn('target_id', $documentIds)
+                ->pluck('target_id')
+                ->map(fn ($v) => (int) $v)
+                ->all());
+        }
+        $direct = array_values(array_diff($documentIds, $covered));
+        if (!count($direct)) {
+            return $result;
+        }
+        $query = DB::table(self::RECEIPT_DOC)->whereIn('id', $direct);
+        if (Schema::hasColumn(self::RECEIPT_DOC, 'deleted_at')) {
+            $query->whereNull('deleted_at');
+        }
+        foreach ($query->pluck('products') as $products) {
+            self::accumulate($result, $products);
+        }
+
+        return $result;
+    }
+
     public const ACTION_FIELD = 'action_type';
     public const ACTION_LOADING = 'Загрузка';
     public const ACTION_UNLOADING = 'Выгрузка';
@@ -886,6 +930,9 @@ class ShipmentService
         if ($parentSlug === self::SUPPLIER && $childSlug === self::RECEIPT_DOC) {
             return self::supplierReceivedUsage($parentId, $except && $except[0] === self::RECEIPT_DOC ? (int) $except[1] : null);
         }
+        if ($parentSlug === self::SUPPLIER && in_array($childSlug, self::SOURCES, true)) {
+            return self::supplierSourceUsage($parentId, $except);
+        }
 
         return self::usageByChildren($parentSlug, $parentId, self::siblingSlugsFor($parentSlug, $parentId, $childSlug), $except);
     }
@@ -906,6 +953,9 @@ class ShipmentService
         $childSlugs = self::childSlugsOf($slug, $id);
         if ($targetSlug !== null && in_array($targetSlug, $childSlugs, true)) {
             return self::usageBySiblings($slug, $id, $targetSlug);
+        }
+        if ($slug === self::SUPPLIER) {
+            return self::supplierSourceUsage($id);
         }
         if (self::isSource($slug) && self::isTransfer($slug, $id)) {
             $result = ['id' => [], 'name' => [], 'price_id' => [], 'price_name' => []];
