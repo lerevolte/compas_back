@@ -16,7 +16,8 @@ class OneCInstall extends Command
         {--since= : с какой даты создания отдавать накладные, Y-m-d или Y-m-d H:i:s (по умолчанию — с момента установки)}
         {--storehouse=* : внешний идентификатор склада в 1С, <id склада>:<id_1c>, можно несколько раз}
         {--disable : выключить обмен}
-        {--statuses-only : только убрать дубли значений «Статус 1С», без перенумерации и настроек обмена}';
+        {--statuses-only : только убрать дубли значений «Статус 1С», без перенумерации и настроек обмена}
+        {--fields : только поля расходных накладных: «Дата отгрузки» с заполнением и видимый «Номер»}';
 
     protected $description = 'Обмен с 1С: выгрузка расходных и приходных накладных (номер cmps-, дата, продавец, заказ, склад, строки) по GET-запросу и подтверждение обработки';
 
@@ -43,6 +44,19 @@ class OneCInstall extends Command
                 return self::FAILURE;
             }
             $storehouseCodes[(int) $m[1]] = $m[2];
+        }
+
+        if ($this->option('fields')) {
+            $tenant->run(function () use ($tenant) {
+                $db = \DB::connection();
+                $this->installShipmentDateField($db, $db->getSchemaBuilder(), (string) $tenant->id);
+                try {
+                    \App\Models\Settings::clear_cache();
+                } catch (\Throwable $e) {
+                }
+            });
+
+            return self::SUCCESS;
         }
 
         if ($this->option('statuses-only')) {
@@ -102,7 +116,7 @@ class OneCInstall extends Command
                         'title' => self::NUMBER_TITLE,
                         'only_read' => 1,
                         'is_program' => 1,
-                        'hide' => 1,
+                        'hide' => 0,
                         'sort' => $maxSort + 1,
                     ]));
                 }
@@ -118,6 +132,7 @@ class OneCInstall extends Command
             }
 
             $this->installStorehouseField($db, $sb, (string) $tenant->id, $storehouseCodes);
+            $this->installShipmentDateField($db, $sb, (string) $tenant->id);
 
             $row = $db->table(OneCExportService::CONFIG_TABLE)->orderBy('id')->first();
             $attrs = ['updated_at' => now(), 'enabled' => $this->option('disable') ? 0 : 1];
@@ -223,6 +238,53 @@ class OneCInstall extends Command
         $filled = $db->table($slug)->where(fn ($q) => $q->whereNull($field)->orWhere($field, ''))->update([$field => $ids[OneCExportService::STATUS_NONE]]);
         $this->line("    [{$tenantId}] {$slug}: статус 1С — создана {$confirmed}, не создана {$filled}");
         OneCExportService::forget();
+    }
+
+    private function installShipmentDateField($db, $sb, string $tenantId): void
+    {
+        $slug = \App\Services\ShipmentService::DOCUMENT;
+        $field = OneCExportService::SHIPMENT_DATE_FIELD;
+        $typeId = (int) $db->table('data_types')->where('slug', $slug)->value('id');
+        if (!$typeId || !$sb->hasTable($slug)) {
+            $this->warn("    [{$tenantId}] {$slug}: сущности нет, пропуск");
+            return;
+        }
+        if (!$sb->hasColumn($slug, $field)) {
+            $db->statement('ALTER TABLE `' . $slug . '` ADD COLUMN `' . $field . '` DATE NULL');
+        }
+        OneCExportService::forget();
+        if (!$db->table('data_rows')->where('data_type_id', $typeId)->where('field', $field)->exists()) {
+            $sectionId = (int) $db->table('field_sections')
+                ->where('page', $slug)
+                ->where(fn ($q) => $q->whereNull('module')->orWhere('module', ''))
+                ->orderBy('sort')
+                ->value('id');
+            $maxSort = (int) $db->table('data_rows')->where('data_type_id', $typeId)->max('sort');
+            $db->table('data_rows')->insert(array_merge(InstallSaleDocsEntities::baseRow($typeId, $sectionId), [
+                'field' => $field,
+                'type' => 'date',
+                'title' => OneCExportService::SHIPMENT_DATE_TITLE,
+                'only_read' => 1,
+                'is_default' => 1,
+                'sort' => $maxSort + 1,
+            ]));
+            $this->line("    [{$tenantId}] {$slug}: создано поле «" . OneCExportService::SHIPMENT_DATE_TITLE . '»');
+        }
+        $shown = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', OneCExportService::NUMBER_FIELD)->update(['hide' => 0, 'only_read' => 1]);
+        $this->line("    [{$tenantId}] {$slug}: поле «" . self::NUMBER_TITLE . '» ' . ($shown ? 'показано, только чтение' : 'не найдено или уже видно'));
+        $filled = 0;
+        foreach ($db->table($slug)->pluck('id') as $id) {
+            if (OneCExportService::refreshShipmentDate($slug, (int) $id)) {
+                $filled++;
+            }
+        }
+        try {
+            if ($sb->hasTable('local_cache')) {
+                $db->table('local_cache')->where('url', 'fields/' . $slug)->update(['updated_at' => now()]);
+            }
+        } catch (\Throwable $e) {
+        }
+        $this->line("    [{$tenantId}] {$slug}: дата отгрузки заполнена у {$filled}");
     }
 
     private function mergeDuplicateStatuses($db, string $slug, int $fieldId): int

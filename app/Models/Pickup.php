@@ -61,6 +61,12 @@ class Pickup extends Model
         });
 
         static::saved(function ($model) {
+            if (!$model->wasRecentlyCreated && $model->wasChanged('delivery_date')) {
+                \App\Services\OneC\OneCExportService::markChangedBySource($model->getTable(), [(int) $model->id]);
+            }
+        });
+
+        static::saved(function ($model) {
             $changes = $model->getChanges();
             if (array_key_exists('deal_id', $changes) || ($model->wasRecentlyCreated && $model->deal_id)) {
                 try {

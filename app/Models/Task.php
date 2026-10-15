@@ -26,6 +26,12 @@ class Task extends Model
                 $model->user_id = $user->id;
        });
 
+        static::saved(function ($model) {
+            if (!$model->wasRecentlyCreated && $model->wasChanged('delivery_date')) {
+                \App\Services\OneC\OneCExportService::markChangedBySource($model->getTable(), [(int) $model->id]);
+            }
+        });
+
        static::saved(function($model)
        {
             $changes = $model->getChanges();

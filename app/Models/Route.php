@@ -101,6 +101,7 @@ class Route extends Model
                     \App\Models\History::saveForObject('logistic_tasks', $rows, false);
                 }
                 $model->logistic_tasks()->update(['delivery_date' => $newDate]);
+                \App\Services\OneC\OneCExportService::markChangedBySource('logistic_tasks', array_column($rows, 'id'));
             }
 
             // 2. Привязка машины: копируем employee_requirements из Car в car_requirements Маршрута

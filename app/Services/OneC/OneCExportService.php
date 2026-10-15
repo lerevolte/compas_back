@@ -24,6 +24,8 @@ class OneCExportService
         'receipt_invoices' => 'receipt_storehouse_id',
     ];
     public const STOREHOUSE_1C_FIELD = 'id_1c';
+    public const SHIPMENT_DATE_FIELD = 'shipment_date';
+    public const SHIPMENT_DATE_TITLE = 'Дата отгрузки';
     public const STATUS_FIELD = 'onec_status';
     public const STATUS_TITLE = 'Статус 1С';
     public const STATUS_NONE = 0;
@@ -60,6 +62,7 @@ class OneCExportService
     private static array $statusColumn = [];
     private static array $statusValues = [];
     private static ?bool $changedColumn = null;
+    private static array $shipmentDateColumn = [];
 
     public static function ensureTables($db): void
     {
@@ -95,6 +98,7 @@ SQL);
             $db->statement('ALTER TABLE `' . self::STATE_TABLE . '` ADD `' . self::CHANGED_FIELD . '` datetime DEFAULT NULL AFTER `confirmed_at`');
         }
         self::$changedColumn = null;
+        self::$shipmentDateColumn = [];
     }
 
     public static function hasChangedColumn(): bool
@@ -112,15 +116,19 @@ SQL);
 
     public static function markChanged($model): void
     {
-        $slug = $model->getTable();
-        if (!isset(self::DOCUMENTS[$slug]) || !$model->id) {
+        self::markChangedById($model->getTable(), (int) $model->id);
+    }
+
+    public static function markChangedById(string $slug, int $id): void
+    {
+        if (!isset(self::DOCUMENTS[$slug]) || !$id) {
             return;
         }
         try {
             if (!Schema::hasTable(self::STATE_TABLE)) {
                 return;
             }
-            $state = DB::table(self::STATE_TABLE)->where('slug', $slug)->where('document_id', (int) $model->id)->first(['id', 'confirmed_at']);
+            $state = DB::table(self::STATE_TABLE)->where('slug', $slug)->where('document_id', $id)->first(['id', 'confirmed_at']);
             if (!$state || !$state->confirmed_at) {
                 return;
             }
@@ -129,6 +137,43 @@ SQL);
                 $update[self::CHANGED_FIELD] = now();
             }
             DB::table(self::STATE_TABLE)->where('id', $state->id)->update($update);
+        } catch (\Throwable $e) {
+        }
+    }
+
+    public static function markChangedBySource(string $sourceSlug, array $sourceIds): void
+    {
+        $sourceIds = array_values(array_unique(array_filter(array_map('intval', $sourceIds))));
+        if (!count($sourceIds) || !in_array($sourceSlug, ShipmentService::SOURCES, true)) {
+            return;
+        }
+        try {
+            if (!Schema::hasTable(self::STATE_TABLE) || !\App\Models\ObjectRelation::ready()) {
+                return;
+            }
+            foreach (self::EXPORTED as $slug) {
+                $documentIds = \App\Models\ObjectRelation::where('source_slug', $sourceSlug)
+                    ->whereIn('source_id', $sourceIds)
+                    ->where('target_slug', $slug)
+                    ->pluck('target_id')
+                    ->map(fn ($v) => (int) $v)
+                    ->all();
+                if (!count($documentIds)) {
+                    continue;
+                }
+                foreach ($documentIds as $documentId) {
+                    self::refreshShipmentDate($slug, $documentId);
+                }
+                $update = ['confirmed_at' => null, 'updated_at' => now()];
+                if (self::hasChangedColumn()) {
+                    $update[self::CHANGED_FIELD] = now();
+                }
+                DB::table(self::STATE_TABLE)
+                    ->where('slug', $slug)
+                    ->whereIn('document_id', $documentIds)
+                    ->whereNotNull('confirmed_at')
+                    ->update($update);
+            }
         } catch (\Throwable $e) {
         }
     }
@@ -200,6 +245,7 @@ SQL);
         self::$statusColumn = [];
         self::$statusValues = [];
         self::$changedColumn = null;
+        self::$shipmentDateColumn = [];
     }
 
     public static function statusValueId(string $slug, int $index): ?string
@@ -380,8 +426,49 @@ SQL);
         DB::table($table)->where('id', (int) $model->id)->update([self::NUMBER_FIELD => $number]);
     }
 
+    public static function hasShipmentDateColumn(string $slug = ShipmentService::DOCUMENT): bool
+    {
+        $key = (string) (function_exists('tenant') ? tenant('id') : '') . ':' . $slug;
+        if (!array_key_exists($key, self::$shipmentDateColumn)) {
+            try {
+                self::$shipmentDateColumn[$key] = Schema::hasTable($slug) && Schema::hasColumn($slug, self::SHIPMENT_DATE_FIELD);
+            } catch (\Throwable $e) {
+                self::$shipmentDateColumn[$key] = false;
+            }
+        }
+
+        return self::$shipmentDateColumn[$key];
+    }
+
+    public static function refreshShipmentDate(string $slug, int $id): bool
+    {
+        if ($slug !== ShipmentService::DOCUMENT || !$id || !self::hasShipmentDateColumn($slug)) {
+            return false;
+        }
+        try {
+            $row = DB::table($slug)->where('id', $id)->first();
+            if (!$row) {
+                return false;
+            }
+            $date = self::shipment($slug, $row)['date'];
+            $date = $date ? substr($date, 0, 10) : null;
+            $current = $row->{self::SHIPMENT_DATE_FIELD} ? substr((string) $row->{self::SHIPMENT_DATE_FIELD}, 0, 10) : null;
+            if ($current === $date) {
+                return false;
+            }
+            DB::table($slug)->where('id', $id)->update([self::SHIPMENT_DATE_FIELD => $date]);
+
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     public static function refreshNumber(string $slug, int $id): void
     {
+        if ($slug === ShipmentService::DOCUMENT && $id && self::refreshShipmentDate($slug, $id)) {
+            self::markChangedById($slug, $id);
+        }
         if ($slug !== ShipmentService::DOCUMENT || !$id || !self::hasNumberColumn($slug)) {
             return;
         }
@@ -645,7 +732,7 @@ SQL);
             'changed_at' => self::date($row->onec_export_changed_at ?? null),
             'date' => self::date($row->created_at ?? null),
             'updated_at' => self::date($row->updated_at ?? null),
-            'delivery_date' => $shipment['date'],
+            'delivery_date' => !empty($row->{self::SHIPMENT_DATE_FIELD}) ? self::date($row->{self::SHIPMENT_DATE_FIELD}) : $shipment['date'],
             'shipment' => $shipment['source'],
             'seller' => self::company($isExpense ? $ownId : $partnerId),
             'buyer' => self::company($isExpense ? $partnerId : $ownId),
