@@ -56,6 +56,12 @@ class OneCInstall extends Command
                     }
                     $merged = $this->mergeDuplicateStatuses($db, $slug, $fieldId);
                     $this->line("    [{$tenant->id}] {$slug}: удалено дублей статуса 1С {$merged}");
+                    try {
+                        if ($db->getSchemaBuilder()->hasTable('local_cache')) {
+                            $db->table('local_cache')->where('url', 'fields/' . $slug)->update(['updated_at' => now()]);
+                        }
+                    } catch (\Throwable $e) {
+                    }
                 }
                 OneCExportService::forget();
                 try {
