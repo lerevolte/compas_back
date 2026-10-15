@@ -15,7 +15,8 @@ class OneCInstall extends Command
         {--token= : секретный токен для запросов 1С (если не задан и токена ещё нет — будет сгенерирован)}
         {--since= : с какой даты создания отдавать накладные, Y-m-d или Y-m-d H:i:s (по умолчанию — с момента установки)}
         {--storehouse=* : внешний идентификатор склада в 1С, <id склада>:<id_1c>, можно несколько раз}
-        {--disable : выключить обмен}';
+        {--disable : выключить обмен}
+        {--statuses-only : только убрать дубли значений «Статус 1С», без перенумерации и настроек обмена}';
 
     protected $description = 'Обмен с 1С: выгрузка расходных и приходных накладных (номер cmps-, дата, продавец, заказ, склад, строки) по GET-запросу и подтверждение обработки';
 
@@ -42,6 +43,28 @@ class OneCInstall extends Command
                 return self::FAILURE;
             }
             $storehouseCodes[(int) $m[1]] = $m[2];
+        }
+
+        if ($this->option('statuses-only')) {
+            $tenant->run(function () use ($tenant) {
+                $db = \DB::connection();
+                foreach (array_keys(OneCExportService::DOCUMENTS) as $slug) {
+                    $typeId = $db->table('data_types')->where('slug', $slug)->value('id');
+                    $fieldId = $typeId ? (int) $db->table('data_rows')->where('data_type_id', $typeId)->where('field', OneCExportService::STATUS_FIELD)->value('id') : 0;
+                    if (!$fieldId) {
+                        continue;
+                    }
+                    $merged = $this->mergeDuplicateStatuses($db, $slug, $fieldId);
+                    $this->line("    [{$tenant->id}] {$slug}: удалено дублей статуса 1С {$merged}");
+                }
+                OneCExportService::forget();
+                try {
+                    \App\Models\Settings::clear_cache();
+                } catch (\Throwable $e) {
+                }
+            });
+
+            return self::SUCCESS;
         }
 
         $tenant->run(function () use ($tenant, $since, $storehouseCodes) {
@@ -172,6 +195,10 @@ class OneCInstall extends Command
                 ]);
             }
         }
+        $merged = $this->mergeDuplicateStatuses($db, $slug, $fieldId);
+        if ($merged) {
+            $this->line("    [{$tenantId}] {$slug}: удалено дублей статуса 1С {$merged}");
+        }
         $ids = [];
         foreach (OneCExportService::STATUS_VALUES as $def) {
             $ids[] = (string) $db->table('field_values')->where('field_id', $fieldId)->where('value', $def['value'])->orderBy('id')->value('id');
@@ -183,6 +210,29 @@ class OneCInstall extends Command
         $filled = $db->table($slug)->where(fn ($q) => $q->whereNull($field)->orWhere($field, ''))->update([$field => $ids[OneCExportService::STATUS_NONE]]);
         $this->line("    [{$tenantId}] {$slug}: статус 1С — создана {$confirmed}, не создана {$filled}");
         OneCExportService::forget();
+    }
+
+    private function mergeDuplicateStatuses($db, string $slug, int $fieldId): int
+    {
+        $field = OneCExportService::STATUS_FIELD;
+        $removed = 0;
+        foreach (OneCExportService::STATUS_VALUES as $def) {
+            $dupes = $db->table('field_values')
+                ->where('field_id', $fieldId)
+                ->whereRaw('LOWER(TRIM(value)) = ?', [mb_strtolower(trim($def['value']))])
+                ->orderBy('id')
+                ->pluck('id')
+                ->all();
+            if (count($dupes) < 2) {
+                continue;
+            }
+            $keep = (string) array_shift($dupes);
+            $db->table($slug)->whereIn($field, array_map('strval', $dupes))->update([$field => $keep]);
+            $db->table('field_values')->whereIn('id', $dupes)->delete();
+            $removed += count($dupes);
+        }
+
+        return $removed;
     }
 
     private function installStorehouseField($db, $sb, string $tenantId, array $codes): void

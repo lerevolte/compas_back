@@ -189,7 +189,13 @@ class SearchService
             }
         }
         $alive_route_ids = array();
+        $ordinals = array();
         if(isset($params['entity']) && $params['entity'] == 'logistic_tasks' && count($items)) {
+            try {
+                $ordinals = \App\Models\ObjectRelation::ordinalsFor('logistic_tasks', collect($items)->pluck('id')->all());
+            } catch (\Throwable $e) {
+                $ordinals = array();
+            }
             $route_ids = collect($items)->pluck('route_id')->filter()->unique()->values()->all();
             if(count($route_ids) && \Schema::hasTable('routes')) {
                 $alive_route_ids = \DB::table('routes')
@@ -276,6 +282,7 @@ class SearchService
                         $item_data['label']['text'] = $name !== '' && $name !== null
                             ? $name
                             : ('Задача #' . $item->id);
+                        $item_data['label']['ordinal'] = $ordinals[(int) $item->id] ?? null;
                     }
 
                     $data[] = $item_data;

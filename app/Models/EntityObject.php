@@ -472,6 +472,8 @@ class EntityObject
                         $field_value = $user->id;
                     } elseif ($slug == 'logistic_tasks' && $field->field == 'route_id') {
                         $field_value = null;
+                    } elseif ($field->field == 'employee_id' && $slug != 'users') {
+                        $field_value = null;
                     } elseif ($field->type == 'status') {
                         $field_value = \App\Models\Field::explicitStatusDefault($field) ?: \App\Models\Field::getDefaultStatusValue($field->id);
                     }
@@ -984,6 +986,8 @@ class EntityObject
                     $field_value = null;
                 } elseif($request->is_copy && $field->field == 'user_id') {
                     $field_value = \Auth::user()->id;
+                } elseif($request->is_copy && $field->field == 'employee_id' && $slug != 'users') {
+                    $field_value = null;
                 } elseif($request->is_copy && $field->type == 'status') {
                     $field_value = \App\Models\Field::explicitStatusDefault($field) ?: \App\Models\Field::getDefaultStatusValue($field->id);
                 }
@@ -2472,6 +2476,17 @@ class EntityObject
                         $objects[$it->id][$rc['key']] = $val;
                     }
                 }
+            }
+        }
+
+        if (count($objects)) {
+            try {
+                foreach (\App\Models\ObjectRelation::ordinalsFor($slug, array_keys($objects)) as $objectId => $ordinal) {
+                    if (isset($objects[$objectId])) {
+                        $objects[$objectId]['name_ordinal'] = $ordinal;
+                    }
+                }
+            } catch (\Throwable $e) {
             }
         }
 

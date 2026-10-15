@@ -79,6 +79,62 @@ class ObjectRelation extends Model
         return $position === false ? null : $position + 1;
     }
 
+    public static function ordinalsFor(string $slug, array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if (!count($ids) || !self::ready()) {
+            return [];
+        }
+        $parentRows = self::where('target_slug', $slug)->whereIn('target_id', $ids)->orderBy('id')->get(['source_slug', 'source_id', 'target_id']);
+        $byTarget = [];
+        foreach ($parentRows as $row) {
+            $byTarget[(int) $row->target_id][] = [(string) $row->source_slug, (int) $row->source_id];
+        }
+        $parentOf = [];
+        foreach ($byTarget as $targetId => $parents) {
+            $parentOf[$targetId] = count($parents) === 1 ? $parents[0] : self::nearestParent($slug, $targetId);
+        }
+        $bySource = [];
+        foreach ($parentOf as $parent) {
+            if ($parent) {
+                $bySource[$parent[0]][$parent[1]] = true;
+            }
+        }
+        if (!count($bySource)) {
+            return [];
+        }
+        $siblings = [];
+        foreach ($bySource as $sourceSlug => $sourceIds) {
+            $rows = self::where('source_slug', $sourceSlug)->whereIn('source_id', array_keys($sourceIds))
+                ->where('target_slug', $slug)->orderBy('id')->get(['source_id', 'target_id']);
+            foreach ($rows as $row) {
+                $siblings[$sourceSlug . ':' . (int) $row->source_id][] = (int) $row->target_id;
+            }
+        }
+        $allTargets = array_values(array_unique(array_merge(...array_values($siblings))));
+        try {
+            $existing = array_flip(\DB::table($slug)->whereIn('id', $allTargets)->pluck('id')->map(fn ($v) => (int) $v)->all());
+        } catch (\Throwable $e) {
+            return [];
+        }
+        $result = [];
+        foreach ($parentOf as $targetId => $parent) {
+            if (!$parent) {
+                continue;
+            }
+            $ordered = array_values(array_filter($siblings[$parent[0] . ':' . $parent[1]] ?? [], fn ($siblingId) => isset($existing[$siblingId])));
+            if (count($ordered) < 2) {
+                continue;
+            }
+            $position = array_search($targetId, $ordered, true);
+            if ($position !== false) {
+                $result[$targetId] = $position + 1;
+            }
+        }
+
+        return $result;
+    }
+
     public static function nearestParent(string $slug, int $id): ?array
     {
         if (!$id || !self::ready()) {

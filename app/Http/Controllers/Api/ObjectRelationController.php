@@ -265,8 +265,9 @@ class ObjectRelationController extends Controller
 
     public function printDocuments($slug, $id)
     {
+        $isReceipt = \App\Services\UpdService::isReceipt((string) $slug, (int) $id);
         if (!ObjectRelation::ready()) {
-            return response()->json(['data' => []]);
+            return response()->json(['data' => [], 'is_receipt' => $isReceipt]);
         }
 
         $depths = $this->depthsFrom($slug, (int) $id);
@@ -314,7 +315,7 @@ class ObjectRelationController extends Controller
             ];
         }
 
-        return response()->json(['data' => $docs]);
+        return response()->json(['data' => $docs, 'is_receipt' => $isReceipt]);
     }
 
     public function tree($slug, $id)

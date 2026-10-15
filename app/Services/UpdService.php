@@ -177,7 +177,7 @@ class UpdService
             'rows' => $rows,
             'total' => number_format($total, 2, ',', ' '),
             'qr' => self::qrDataUri($slug, $id),
-            'pay_qr' => self::paymentQrDataUri($total, 'Оплата по товарному чеку № ' . $number . ' от ' . date('d.m.Y', $date)),
+            'pay_qr' => self::staticPayQrDataUri() ?? self::paymentQrDataUri($total, 'Оплата по товарному чеку № ' . $number . ' от ' . date('d.m.Y', $date)),
         ];
     }
 
@@ -195,6 +195,22 @@ class UpdService
         }
 
         return '—';
+    }
+
+    private static function staticPayQrDataUri(): ?string
+    {
+        $tenant = function_exists('tenant') ? (string) tenant('id') : '';
+        if ($tenant === '' || !preg_match('/^[a-z0-9_-]+$/i', $tenant)) {
+            return null;
+        }
+        foreach (['png' => 'image/png', 'jpeg' => 'image/jpeg', 'jpg' => 'image/jpeg'] as $ext => $mime) {
+            $path = resource_path('pdf/pay_qr/' . $tenant . '.' . $ext);
+            if (is_file($path)) {
+                return 'data:' . $mime . ';base64,' . base64_encode((string) file_get_contents($path));
+            }
+        }
+
+        return null;
     }
 
     private static function paymentQrDataUri(float $sum, string $purpose): ?string

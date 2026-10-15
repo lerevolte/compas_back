@@ -213,7 +213,7 @@ SQL);
             $typeId = DB::table('data_types')->where('slug', $slug)->value('id');
             $fieldId = $typeId ? DB::table('data_rows')->where('data_type_id', $typeId)->where('field', self::STATUS_FIELD)->value('id') : null;
             if ($fieldId) {
-                $id = DB::table('field_values')->where('field_id', $fieldId)->where('value', self::STATUS_VALUES[$index]['value'])->value('id');
+                $id = DB::table('field_values')->where('field_id', $fieldId)->where('value', self::STATUS_VALUES[$index]['value'])->orderBy('id')->value('id');
                 if (!$id && isset(self::STATUS_VALUES[$index]['legacy'])) {
                     $id = DB::table('field_values')->where('field_id', $fieldId)->where('value', self::STATUS_VALUES[$index]['legacy'])->value('id');
                 }

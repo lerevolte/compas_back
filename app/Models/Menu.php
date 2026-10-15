@@ -23,7 +23,6 @@ class Menu
             $item = \DB::table('settings')->where([
                 'entity' => $slug,
                 'type' => 'menu',
-                //'user_id' => \Auth::user()->id
             ])->first();
             \DB::table('settings')->insert([
                 'key' => $item->key,
@@ -105,7 +104,7 @@ class Menu
                 }
             }
         }
-        $permissions = $user->role->permissions->keyBy('entity_id');
+        $count_new += self::ensureRelationsChild($slug, $s, $menu);
 
         $permissions = $user->role->permissions->keyBy('entity_id');
 
@@ -142,6 +141,47 @@ class Menu
         
 
         return array_values($menu);
+    }
+
+    private static function ensureRelationsChild(string $slug, $s, array &$menu): int
+    {
+        $alias = \App\Services\RelationFieldsService::MODULE;
+        if(!\App\Services\RelationFieldsService::isEntity($slug) || !isset($s['modules'][$alias]) || !$s['modules'][$alias]->enabled) {
+            return 0;
+        }
+        $modulesKey = null;
+        $maxId = 0;
+        $maxSort = 0;
+        foreach($menu as $k => $menu_item) {
+            $maxId = max($maxId, (int) ($menu_item['id'] ?? 0));
+            $maxSort = max($maxSort, (int) ($menu_item['sort'] ?? 0));
+            if(($menu_item['tab'] ?? null) === 'modules' && $modulesKey === null) {
+                $modulesKey = $k;
+            }
+        }
+        if($modulesKey !== null) {
+            foreach($menu[$modulesKey]['childs'] ?? [] as $child) {
+                if(($child['alias'] ?? null) === $alias) {
+                    return 0;
+                }
+            }
+        }
+        if(!\DB::table('field_sections')->where('page', $slug)->where('module', $alias)->exists()) {
+            return 0;
+        }
+        $child = ['title' => \App\Services\RelationFieldsService::MODULE_TITLE, 'sort' => 1, 'enabled' => 1, 'id' => 0, 'alias' => $alias];
+        if($modulesKey === null) {
+            $menu[] = [
+                'title' => 'Модули', 'tab' => 'modules', 'sort' => $maxSort + 1, 'enabled' => 1, 'id' => $maxId + 1,
+                'childs' => [$child],
+                'component' => ['name' => 'AsyncComponentWrapper'],
+                'roles_read' => [], 'has_roles_read' => false,
+            ];
+        } else {
+            $menu[$modulesKey]['childs'] = array_values(array_merge($menu[$modulesKey]['childs'] ?? [], [$child]));
+        }
+
+        return 1;
     }
 
     private static array $hiddenEntities = [];
