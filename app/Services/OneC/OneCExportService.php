@@ -218,6 +218,9 @@ SQL);
                     $id = DB::table('field_values')->where('field_id', $fieldId)->where('value', self::STATUS_VALUES[$index]['legacy'])->value('id');
                 }
                 if (!$id) {
+                    $id = DB::table('field_values')->where('field_id', $fieldId)->where('sort', $index)->where('is_hidden', '!=', 1)->orderBy('id')->value('id');
+                }
+                if (!$id) {
                     $ordered = DB::table('field_values')->where('field_id', $fieldId)->where('is_hidden', '!=', 1)->orderBy('sort')->orderBy('id')->pluck('id')->all();
                     $id = $ordered[$index] ?? null;
                 }

@@ -183,12 +183,18 @@ class OneCInstall extends Command
             $this->line("    [{$tenantId}] {$slug}: создано поле {$field} (id {$fieldId})");
         }
         foreach (OneCExportService::STATUS_VALUES as $sort => $def) {
-            $value = $db->table('field_values')->where('field_id', $fieldId)->where('value', $def['value'])->first();
+            $value = $db->table('field_values')->where('field_id', $fieldId)->where('value', $def['value'])->orderBy('id')->first();
+            $patch = ['sort' => $sort, 'is_hidden' => 0];
             if (!$value && isset($def['legacy'])) {
-                $value = $db->table('field_values')->where('field_id', $fieldId)->where('value', $def['legacy'])->first();
+                $value = $db->table('field_values')->where('field_id', $fieldId)->where('value', $def['legacy'])->orderBy('id')->first();
+                $patch += ['value' => $def['value'], 'color' => $def['color']];
+            }
+            if (!$value) {
+                $value = $db->table('field_values')->where('field_id', $fieldId)->where('sort', $sort)->where('is_hidden', '!=', 1)->orderBy('id')->first();
+                $patch = ['sort' => $sort, 'is_hidden' => 0];
             }
             if ($value) {
-                $db->table('field_values')->where('id', $value->id)->update(['value' => $def['value'], 'color' => $def['color'], 'sort' => $sort, 'is_hidden' => 0]);
+                $db->table('field_values')->where('id', $value->id)->update($patch);
             } else {
                 $db->table('field_values')->insert([
                     'field_id' => $fieldId, 'value' => $def['value'], 'color' => $def['color'], 'sort' => $sort, 'is_hidden' => 0,
@@ -199,9 +205,10 @@ class OneCInstall extends Command
         if ($merged) {
             $this->line("    [{$tenantId}] {$slug}: удалено дублей статуса 1С {$merged}");
         }
+        OneCExportService::forget();
         $ids = [];
-        foreach (OneCExportService::STATUS_VALUES as $def) {
-            $ids[] = (string) $db->table('field_values')->where('field_id', $fieldId)->where('value', $def['value'])->orderBy('id')->value('id');
+        foreach (array_keys(OneCExportService::STATUS_VALUES) as $index) {
+            $ids[] = (string) OneCExportService::statusValueId($slug, $index);
         }
         $confirmedIds = $db->table(OneCExportService::STATE_TABLE)->where('slug', $slug)->whereNotNull('confirmed_at')->pluck('document_id')->all();
         $confirmed = count($confirmedIds)
@@ -216,10 +223,11 @@ class OneCInstall extends Command
     {
         $field = OneCExportService::STATUS_FIELD;
         $removed = 0;
-        foreach (OneCExportService::STATUS_VALUES as $def) {
+        foreach (array_keys(OneCExportService::STATUS_VALUES) as $index) {
             $dupes = $db->table('field_values')
                 ->where('field_id', $fieldId)
-                ->whereRaw('LOWER(TRIM(value)) = ?', [mb_strtolower(trim($def['value']))])
+                ->where('sort', $index)
+                ->where('is_hidden', '!=', 1)
                 ->orderBy('id')
                 ->pluck('id')
                 ->all();
