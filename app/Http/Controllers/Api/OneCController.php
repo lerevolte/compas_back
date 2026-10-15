@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\OneC\OneCCashExportService;
 use App\Services\OneC\OneCExportService;
 use Illuminate\Http\Request;
 
@@ -52,6 +53,130 @@ class OneCController extends Controller
         $result = OneCExportService::confirm($items);
 
         return response()->json(['ok' => true] + $result, 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    public function articles(Request $request)
+    {
+        if ($error = $this->guard($request)) {
+            return $error;
+        }
+        $articles = OneCCashExportService::pendingArticles();
+
+        return response()->json(['ok' => true, 'count' => count($articles), 'articles' => $articles], 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    public function articlesConfirm(Request $request)
+    {
+        if ($error = $this->guard($request)) {
+            return $error;
+        }
+        $items = $this->cashItems($request, ['articles', 'статьи'], ['code', 'код', 'id_1c', 'ref', 'ссылка']);
+        if (!count($items)) {
+            return $this->cashConfirmError($request, ['articles' => [['id' => 12, 'code' => '<код статьи в 1С>']]]);
+        }
+
+        return response()->json(['ok' => true] + OneCCashExportService::confirmArticles($items), 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    public function cashDocuments(Request $request)
+    {
+        if ($error = $this->guard($request)) {
+            return $error;
+        }
+        $documents = OneCCashExportService::pendingDocuments(OneCExportService::config());
+
+        return response()->json(['ok' => true, 'count' => count($documents), 'documents' => $documents], 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    public function cashDocumentsConfirm(Request $request)
+    {
+        if ($error = $this->guard($request)) {
+            return $error;
+        }
+        $items = $this->cashItems($request, ['documents', 'документы'], ['ref', 'ссылка', 'guid']);
+        if (!count($items)) {
+            return $this->cashConfirmError($request, ['documents' => [['number' => 'cmps-k1', 'ref' => '<GUID 1С>']]]);
+        }
+
+        return response()->json(['ok' => true] + OneCCashExportService::confirmDocuments($items), 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    private function guard(Request $request)
+    {
+        $config = OneCExportService::config();
+        if (!$config) {
+            return response()->json(['ok' => false, 'error' => 'Обмен с 1С не настроен'], 404);
+        }
+        if (!OneCExportService::authorized($config, $this->token($request))) {
+            return response()->json(['ok' => false, 'error' => 'Неверный токен'], 403);
+        }
+
+        return null;
+    }
+
+    private function cashItems(Request $request, array $listKeys, array $refKeys): array
+    {
+        $payload = $request->except('token');
+        $raw = trim((string) $request->getContent());
+        if ($raw !== '') {
+            $decoded = json_decode(preg_replace('/^\xEF\xBB\xBF/', '', $raw), true);
+            if (is_array($decoded)) {
+                $payload = array_is_list($decoded) ? [$listKeys[0] => $decoded] : $decoded + $payload;
+            }
+        }
+        $list = null;
+        foreach ($payload as $key => $value) {
+            if (in_array(mb_strtolower((string) $key), array_merge($listKeys, ['items', 'data']), true) && is_array($value)) {
+                $list = $value;
+                break;
+            }
+        }
+        if ($list === null) {
+            $list = [$payload];
+        }
+        $items = [];
+        foreach ($list as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $fields = [];
+            foreach ($entry as $key => $value) {
+                $fields[mb_strtolower((string) $key)] = $value;
+            }
+            $ref = null;
+            foreach ($refKeys as $key) {
+                if (isset($fields[$key]) && is_scalar($fields[$key])) {
+                    $ref = (string) $fields[$key];
+                    break;
+                }
+            }
+            $item = [
+                'id' => $fields['id'] ?? null,
+                'number' => $fields['number'] ?? $fields['номер'] ?? null,
+                'code' => $ref,
+                'ref' => $ref,
+            ];
+            if (($item['id'] ?? null) || ($item['number'] ?? null) || $ref !== null) {
+                $items[] = $item;
+            }
+        }
+
+        return $items;
+    }
+
+    private function cashConfirmError(Request $request, array $expected)
+    {
+        \Log::warning('1C cash confirm: тело не распознано', [
+            'path' => $request->path(),
+            'body' => mb_substr((string) $request->getContent(), 0, 2000),
+        ]);
+
+        return response()->json([
+            'ok' => false,
+            'error' => 'Не переданы элементы для подтверждения',
+            'expected' => $expected,
+            'received' => mb_substr((string) $request->getContent(), 0, 500),
+        ], 422, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     private function confirmItems(Request $request): array

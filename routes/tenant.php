@@ -140,6 +140,10 @@ Route::middleware([
     ])->prefix('api/1c')->group(function () {
         Route::get('documents', [App\Http\Controllers\Api\OneCController::class, 'documents'])->name('onec.documents');
         Route::match(['get', 'post'], 'documents/confirm', [App\Http\Controllers\Api\OneCController::class, 'confirm'])->name('onec.documents.confirm');
+        Route::get('articles', [App\Http\Controllers\Api\OneCController::class, 'articles'])->name('onec.articles');
+        Route::match(['get', 'post'], 'articles/confirm', [App\Http\Controllers\Api\OneCController::class, 'articlesConfirm'])->name('onec.articles.confirm');
+        Route::get('cash-documents', [App\Http\Controllers\Api\OneCController::class, 'cashDocuments'])->name('onec.cash.documents');
+        Route::match(['get', 'post'], 'cash-documents/confirm', [App\Http\Controllers\Api\OneCController::class, 'cashDocumentsConfirm'])->name('onec.cash.documents.confirm');
 });
 
 Route::middleware([

@@ -72,6 +72,7 @@ class CashDocumentService
             if (!$operation || $operation->deleted_at) {
                 if ($document && !$document->deleted_at) {
                     DB::table(self::SLUG)->where('id', $document->id)->update(['deleted_at' => now()]);
+                    \App\Services\OneC\OneCCashExportService::markChanged((int) $document->id);
                     self::dispatch('ObjectDeleted', (int) $document->id);
                 }
                 return;
@@ -88,6 +89,7 @@ class CashDocumentService
                     return;
                 }
                 DB::table(self::SLUG)->where('id', $document->id)->update($attrs + ['deleted_at' => null, 'updated_at' => now()]);
+                \App\Services\OneC\OneCCashExportService::markChanged((int) $document->id);
                 self::dispatch($document->deleted_at ? 'ObjectCreated' : 'ObjectUpdated', (int) $document->id);
                 return;
             }
