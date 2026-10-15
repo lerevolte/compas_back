@@ -180,7 +180,10 @@ class User extends \TCG\Voyager\Models\User
 
                     if($role->menus) {
                         $menus = json_decode($role->menus, true);
-                        foreach($menus as $slug => $menu) {
+                        foreach((is_array($menus) ? $menus : []) as $slug => $menu) {
+                            if(is_array($menu)) {
+                                $menu = json_encode($menu, JSON_UNESCAPED_UNICODE);
+                            }
                             $user_menu = \DB::table('settings')->where([
                                 'entity' => $slug,
                                 'type' => 'menu',
