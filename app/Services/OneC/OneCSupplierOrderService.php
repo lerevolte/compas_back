@@ -14,7 +14,7 @@ class OneCSupplierOrderService
     public const TYPE = 'supplier_order';
     public const NUMBER_PREFIX = DocumentNumber::PREFIX . 'z';
     public const STATE_FIELD = 'onec_state';
-    public const STATE_TITLE = 'Состояние';
+    public const STATE_TITLE = 'Статус';
     public const CONTRACT_FIELD = 'contract';
     public const CONTRACT_TITLE = 'Договор';
     public const STOREHOUSE_FIELD = 'storehouse_id';
