@@ -43,6 +43,9 @@ class SupplierOrder extends Model
 
         static::saved(function ($model) {
             $changes = array_keys($model->getChanges());
+            if (\App\Services\OneC\OneCSupplierOrderService::touched($model)) {
+                \App\Services\OneC\OneCSupplierOrderService::markChanged((int) $model->id);
+            }
             if ((in_array('company_id', $changes, true) || $model->wasRecentlyCreated) && $model->company_id) {
                 try {
                     Company::addType($model->company_id, self::COMPANY_TYPE);
@@ -76,12 +79,14 @@ class SupplierOrder extends Model
         });
 
         static::deleted(function ($model) {
+            \App\Services\OneC\OneCSupplierOrderService::markChanged((int) $model->id);
             self::syncProductLinks((int) $model->id, $model->products, null);
             \App\Services\ReverseLinkService::sync('companies', self::COMPANY_FIELD, (int) $model->id, \App\Services\ReverseLinkService::ids($model->company_id), []);
             \App\Services\ProductPriceService::recalcFromChange($model->products, null, 'purchase_price');
         });
 
         static::restored(function ($model) {
+            \App\Services\OneC\OneCSupplierOrderService::markChanged((int) $model->id);
             self::syncProductLinks((int) $model->id, null, $model->products);
             \App\Services\ReverseLinkService::sync('companies', self::COMPANY_FIELD, (int) $model->id, [], \App\Services\ReverseLinkService::ids($model->company_id));
             \App\Services\ProductPriceService::recalcFromChange($model->products, null, 'purchase_price');

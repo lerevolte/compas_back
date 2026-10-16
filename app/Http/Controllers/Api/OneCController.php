@@ -5,10 +5,16 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\OneC\OneCCashExportService;
 use App\Services\OneC\OneCExportService;
+use App\Services\OneC\OneCSupplierOrderService;
 use Illuminate\Http\Request;
 
 class OneCController extends Controller
 {
+    public function callAction($method, $parameters)
+    {
+        return OneCExportService::asModuleUser(fn () => parent::callAction($method, $parameters));
+    }
+
     public function documents(Request $request)
     {
         $config = OneCExportService::config();
@@ -99,6 +105,90 @@ class OneCController extends Controller
         }
 
         return response()->json(['ok' => true] + OneCCashExportService::confirmDocuments($items), 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    public function supplierOrders(Request $request)
+    {
+        if ($error = $this->guard($request)) {
+            return $error;
+        }
+        $documents = OneCSupplierOrderService::pending(OneCExportService::config());
+
+        return response()->json(['ok' => true, 'count' => count($documents), 'documents' => $documents], 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    public function supplierOrdersConfirm(Request $request)
+    {
+        return $this->supplierOrdersUpdate($request, false);
+    }
+
+    public function supplierOrdersState(Request $request)
+    {
+        return $this->supplierOrdersUpdate($request, true);
+    }
+
+    private function supplierOrdersUpdate(Request $request, bool $stateOnly)
+    {
+        if ($error = $this->guard($request)) {
+            return $error;
+        }
+        $items = $this->supplierOrderItems($request, $stateOnly);
+        if (!count($items)) {
+            return $this->cashConfirmError($request, ['documents' => [['number' => 'cmps-z1', 'ref' => '<GUID 1С>', 'state' => 'Оплатили']]]);
+        }
+
+        return response()->json(['ok' => true] + OneCSupplierOrderService::confirm($items), 200, [], JSON_UNESCAPED_UNICODE);
+    }
+
+    private function supplierOrderItems(Request $request, bool $stateOnly): array
+    {
+        $payload = $request->except('token');
+        $raw = trim((string) $request->getContent());
+        if ($raw !== '') {
+            $decoded = json_decode(preg_replace('/^\xEF\xBB\xBF/', '', $raw), true);
+            if (is_array($decoded)) {
+                $payload = array_is_list($decoded) ? ['documents' => $decoded] : $decoded + $payload;
+            }
+        }
+        $list = null;
+        foreach ($payload as $key => $value) {
+            if (in_array(mb_strtolower((string) $key), ['documents', 'документы', 'orders', 'заказы', 'items', 'data'], true) && is_array($value)) {
+                $list = $value;
+                break;
+            }
+        }
+        $items = [];
+        foreach ($list ?? [$payload] as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $fields = [];
+            foreach ($entry as $key => $value) {
+                $fields[mb_strtolower((string) $key)] = $value;
+            }
+            $number = $fields['number'] ?? $fields['номер'] ?? null;
+            $id = $fields['id'] ?? null;
+            if (!is_scalar($number) && !is_scalar($id)) {
+                continue;
+            }
+            $ref = $fields['ref'] ?? $fields['ссылка'] ?? $fields['guid'] ?? null;
+            $state = null;
+            foreach (['state', 'состояние', 'status', 'статус'] as $key) {
+                if (array_key_exists($key, $fields) && is_scalar($fields[$key])) {
+                    $state = $fields[$key];
+                    break;
+                }
+            }
+            $items[] = [
+                'number' => is_scalar($number) ? (string) $number : null,
+                'id' => is_scalar($id) ? $id : null,
+                'ref' => is_scalar($ref) ? (string) $ref : null,
+                'state' => $state,
+                'state_only' => $stateOnly,
+            ];
+        }
+
+        return $items;
     }
 
     private function guard(Request $request)

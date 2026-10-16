@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Schema;
 
 class SaleDocumentService
 {
+    public const NOT_PRINTED = ['payment_invoices'];
+
     public const TARGETS = [
         'payment_invoices' => [
             'model' => \App\Models\PaymentInvoice::class,

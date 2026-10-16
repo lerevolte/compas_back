@@ -297,7 +297,7 @@ class ObjectRelationController extends Controller
                 continue;
             }
             $seen[$node['slug'] . '#' . $node['id']] = true;
-            if (!isset(\App\Services\SaleDocumentService::TARGETS[$node['slug']])) {
+            if (!isset(\App\Services\SaleDocumentService::TARGETS[$node['slug']]) || in_array($node['slug'], \App\Services\SaleDocumentService::NOT_PRINTED, true)) {
                 continue;
             }
             $row = DB::table($node['slug'])->where('id', $node['id'])->first();
@@ -450,7 +450,7 @@ class ObjectRelationController extends Controller
         $depth = $depths[$key] ?? count($visited) - 1;
 
         $children = [];
-        $ordinals = [];
+        $idsBySlug = [];
         foreach (ObjectRelation::where('source_slug', $slug)->where('source_id', $id)->orderBy('id')->get() as $relation) {
             $childKey = $relation->target_slug . ':' . $relation->target_id;
             if (isset($depths[$childKey]) && $depths[$childKey] !== $depth + 1) {
@@ -458,15 +458,16 @@ class ObjectRelationController extends Controller
             }
             $child = $this->buildNode($relation->target_slug, (int) $relation->target_id, $currentId, $currentSlug, $visited, $depths, $placed);
             if ($child) {
-                $ordinals[$child['slug']] = ($ordinals[$child['slug']] ?? 0) + 1;
-                $child['ordinal'] = $ordinals[$child['slug']];
+                $idsBySlug[$child['slug']][] = (int) $child['id'];
                 $children[] = $child;
             }
         }
+        $ordinals = [];
+        foreach ($idsBySlug as $childSlug => $childIds) {
+            $ordinals[$childSlug] = ObjectRelation::ordinalsFor($childSlug, $childIds);
+        }
         foreach ($children as $i => $child) {
-            if (($ordinals[$child['slug']] ?? 0) < 2) {
-                $children[$i]['ordinal'] = null;
-            }
+            $children[$i]['ordinal'] = $ordinals[$child['slug']][(int) $child['id']] ?? null;
         }
 
         return $object + [

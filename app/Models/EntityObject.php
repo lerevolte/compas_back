@@ -1746,15 +1746,15 @@ class EntityObject
                             });
 
                         } elseif($settings[$slug]['fields'][$field]->type == 'relation' && $settings[$slug]['fields'][$field]->relation_table) {
-                            if (is_array($val)) {
-                                $paginator = $paginator->where(function($query) use ($val, $field) {
-                                    foreach (array_map('intval', $val) as $v) {
-                                        $query->orWhereJsonContains($field, $v);
-                                    }
-                                });
-                            } else {
-                                $paginator = $paginator->whereJsonContains($field, (int)$val);
-                            }
+                            $vals = array_map('intval', is_array($val) ? $val : [$val]);
+                            $paginator = $paginator->where(function($query) use ($vals, $field) {
+                                foreach ($vals as $v) {
+                                    $query->orWhereRaw(
+                                        '(JSON_VALID(`'.$field.'`) AND (JSON_CONTAINS(`'.$field.'`, ?) OR JSON_CONTAINS(`'.$field.'`, ?)))',
+                                        [json_encode($v), json_encode((string) $v)]
+                                    );
+                                }
+                            });
                         } elseif($settings[$slug]['fields'][$field]->type == 'relation') {
                             $paginator = $paginator->whereJsonContains($field, (int)$val);
                         } elseif($settings[$slug]['fields'][$field]->type == 'multi_text') {

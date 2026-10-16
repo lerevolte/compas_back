@@ -153,6 +153,8 @@ class OneCInstall extends Command
                 $db->table(OneCExportService::CONFIG_TABLE)->insert($attrs + ['created_at' => now()]);
             }
             $config = $db->table(OneCExportService::CONFIG_TABLE)->orderBy('id')->first();
+            $moduleUserId = OneCExportService::moduleUserId();
+            $this->line('    пользователь «' . OneCExportService::MODULE_USER_NAME . '»: ' . ($moduleUserId ? '#' . $moduleUserId : 'не создан'));
 
             try {
                 \App\Models\Settings::clear_cache();

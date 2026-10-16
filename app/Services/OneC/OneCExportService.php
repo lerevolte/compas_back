@@ -18,7 +18,7 @@ class OneCExportService
         'expense_invoices' => 'expense_invoice',
         'receipt_invoices' => 'receipt_invoice',
     ];
-    public const EXPORTED = ['expense_invoices'];
+    public const EXPORTED = ['expense_invoices', 'receipt_invoices'];
     public const STOREHOUSE_FIELDS = [
         'expense_invoices' => 'storehouse_id',
         'receipt_invoices' => 'receipt_storehouse_id',
@@ -56,6 +56,8 @@ class OneCExportService
     public const LIMIT = 100;
     public const SETTLE_SECONDS = 30;
     public const CHANGED_FIELD = 'changed_at';
+    public const SLUG_SINCE_FIELD = 'slug_since';
+    public const OPTIONAL = ['receipt_invoices'];
     public const RESYNC_FIELDS = ['products', 'sum', 'company_id', 'shipment_company_id', 'storehouse_id', 'receipt_storehouse_id', 'created_at', 'deal_id'];
 
     private static array $numberColumn = [];
@@ -94,6 +96,9 @@ CREATE TABLE IF NOT EXISTS `onec_exports` (
   KEY `onec_exports_number_index` (`number`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 SQL);
+        if (!$db->getSchemaBuilder()->hasColumn(self::CONFIG_TABLE, self::SLUG_SINCE_FIELD)) {
+            $db->statement('ALTER TABLE `' . self::CONFIG_TABLE . '` ADD `' . self::SLUG_SINCE_FIELD . '` TEXT NULL AFTER `since`');
+        }
         if (!$db->getSchemaBuilder()->hasColumn(self::STATE_TABLE, self::CHANGED_FIELD)) {
             $db->statement('ALTER TABLE `' . self::STATE_TABLE . '` ADD `' . self::CHANGED_FIELD . '` datetime DEFAULT NULL AFTER `confirmed_at`');
         }
@@ -192,6 +197,43 @@ SQL);
         return false;
     }
 
+    public const MODULE_USER_EMAIL = '1c@module.compas.pro';
+    public const MODULE_USER_NAME = 'Модуль 1С';
+
+    public static function moduleUserId(bool $create = true): ?int
+    {
+        try {
+            if (!Schema::hasTable('users')) {
+                return null;
+            }
+            $id = DB::table('users')->where('email', self::MODULE_USER_EMAIL)->value('id');
+            if ($id || !$create) {
+                return $id ? (int) $id : null;
+            }
+            $row = [
+                'name' => self::MODULE_USER_NAME,
+                'email' => self::MODULE_USER_EMAIL,
+                'password' => bcrypt(\Illuminate\Support\Str::random(40)),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ];
+            if (Schema::hasColumn('users', 'color')) {
+                $row['color'] = '#F5C400';
+            }
+
+            return (int) DB::table('users')->insertGetId($row);
+        } catch (\Throwable $e) {
+            \Log::warning('1C: module user failed', ['error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    public static function asModuleUser(callable $callback)
+    {
+        return \App\Models\History::actingAs(self::config() ? self::moduleUserId() : null, $callback);
+    }
+
     public static function config(): ?object
     {
         try {
@@ -204,6 +246,29 @@ SQL);
         } catch (\Throwable $e) {
             return null;
         }
+    }
+
+    public static function slugSince(object $config): array
+    {
+        $bySlug = json_decode((string) ($config->{self::SLUG_SINCE_FIELD} ?? ''), true);
+
+        return is_array($bySlug) ? $bySlug : [];
+    }
+
+    public static function enabledFor(object $config, string $slug): bool
+    {
+        return array_key_exists($slug, self::slugSince($config));
+    }
+
+    public static function sinceFor(object $config, string $slug): ?string
+    {
+        $since = $config->since ?? null;
+        $own = self::slugSince($config)[$slug] ?? null;
+        if ($own && (!$since || strtotime((string) $own) > strtotime((string) $since))) {
+            return (string) $own;
+        }
+
+        return $since ? (string) $since : null;
     }
 
     public static function authorized(?object $config, ?string $token): bool
@@ -522,6 +587,9 @@ SQL);
             if (!in_array($slug, self::EXPORTED, true) || !Schema::hasTable($slug) || !self::hasNumberColumn($slug)) {
                 continue;
             }
+            if (in_array($slug, self::OPTIONAL, true) && !self::enabledFor($config, $slug)) {
+                continue;
+            }
             $query = DB::table($slug . ' as d')
                 ->leftJoin(self::STATE_TABLE . ' as s', function ($join) use ($slug) {
                     $join->on('s.document_id', '=', 'd.id')->where('s.slug', '=', $slug);
@@ -533,8 +601,9 @@ SQL);
                 ->whereNotNull('d.products')
                 ->whereNotIn('d.products', ['', '[]'])
                 ->where('d.updated_at', '<=', $settled);
-            if ($config->since) {
-                $query->where('d.created_at', '>=', $config->since);
+            $since = self::sinceFor($config, $slug);
+            if ($since) {
+                $query->where('d.created_at', '>=', $since);
             }
             $columns = ['d.*', 's.onec_ref as onec_export_ref'];
             if (self::hasChangedColumn()) {
@@ -652,7 +721,11 @@ SQL);
             if (!Schema::hasTable($slug) || !self::hasNumberColumn($slug)) {
                 continue;
             }
-            $id = DB::table($slug)->where(self::NUMBER_FIELD, $number)->value('id');
+            $query = DB::table($slug)->where(self::NUMBER_FIELD, $number);
+            if (Schema::hasColumn($slug, 'deleted_at')) {
+                $query->orderByRaw('deleted_at IS NOT NULL');
+            }
+            $id = $query->orderByDesc('id')->value('id');
             if ($id) {
                 $matches[] = [$slug, (int) $id];
             }
@@ -736,7 +809,7 @@ SQL);
             'shipment' => $shipment['source'],
             'seller' => self::company($isExpense ? $ownId : $partnerId),
             'buyer' => self::company($isExpense ? $partnerId : $ownId),
-            'order_number' => $order ? (string) $order['number'] : null,
+            'order_number' => $order ? ($order['type'] === 'supplier_order' ? OneCSupplierOrderService::numberFor((int) $order['id']) : (string) $order['number']) : null,
             'order' => $order ? ['type' => $order['type'], 'id' => $order['id'], 'b24_id' => $order['b24_id'], 'name' => $order['name']] : null,
             'storehouse' => self::storehouse($storehouseId),
             'items' => $items,

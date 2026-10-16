@@ -56,27 +56,38 @@ class ObjectRelation extends Model
 
     public static function ordinalOf(string $slug, int $id): ?int
     {
-        if (!$id || !self::ready()) {
+        if (!$id) {
             return null;
         }
-        $parent = self::nearestParent($slug, $id);
-        if (!$parent) {
-            return null;
-        }
-        $targets = self::where('source_slug', $parent[0])->where('source_id', $parent[1])
-            ->where('target_slug', $slug)->orderBy('id')->pluck('target_id')->map(fn ($v) => (int) $v)->all();
-        try {
-            $existing = \DB::table($slug)->whereIn('id', $targets)->pluck('id')->map(fn ($v) => (int) $v)->all();
-        } catch (\Throwable $e) {
-            return null;
-        }
-        $ordered = array_values(array_filter($targets, fn ($targetId) => in_array($targetId, $existing, true)));
-        if (count($ordered) < 2) {
-            return null;
-        }
-        $position = array_search($id, $ordered, true);
 
-        return $position === false ? null : $position + 1;
+        return self::ordinalsFor($slug, [$id])[$id] ?? null;
+    }
+
+    private static function aliveIds(string $slug, array $ids): array
+    {
+        $query = \DB::table($slug)->whereIn('id', $ids);
+        if (\Schema::hasColumn($slug, 'deleted_at')) {
+            $query->whereNull('deleted_at');
+        }
+
+        return $query->pluck('id')->map(fn ($v) => (int) $v)->all();
+    }
+
+    private static function parentsFor(string $slug, array $ids): array
+    {
+        $byTarget = [];
+        foreach (array_chunk($ids, 1000) as $chunk) {
+            $rows = self::where('target_slug', $slug)->whereIn('target_id', $chunk)->orderBy('id')->get(['source_slug', 'source_id', 'target_id']);
+            foreach ($rows as $row) {
+                $byTarget[(int) $row->target_id][] = [(string) $row->source_slug, (int) $row->source_id];
+            }
+        }
+        $parentOf = [];
+        foreach ($byTarget as $targetId => $parents) {
+            $parentOf[$targetId] = count($parents) === 1 ? $parents[0] : self::nearestParent($slug, $targetId);
+        }
+
+        return $parentOf;
     }
 
     public static function ordinalsFor(string $slug, array $ids): array
@@ -85,15 +96,7 @@ class ObjectRelation extends Model
         if (!count($ids) || !self::ready()) {
             return [];
         }
-        $parentRows = self::where('target_slug', $slug)->whereIn('target_id', $ids)->orderBy('id')->get(['source_slug', 'source_id', 'target_id']);
-        $byTarget = [];
-        foreach ($parentRows as $row) {
-            $byTarget[(int) $row->target_id][] = [(string) $row->source_slug, (int) $row->source_id];
-        }
-        $parentOf = [];
-        foreach ($byTarget as $targetId => $parents) {
-            $parentOf[$targetId] = count($parents) === 1 ? $parents[0] : self::nearestParent($slug, $targetId);
-        }
+        $parentOf = self::parentsFor($slug, $ids);
         $bySource = [];
         foreach ($parentOf as $parent) {
             if ($parent) {
@@ -113,16 +116,20 @@ class ObjectRelation extends Model
         }
         $allTargets = array_values(array_unique(array_merge(...array_values($siblings))));
         try {
-            $existing = array_flip(\DB::table($slug)->whereIn('id', $allTargets)->pluck('id')->map(fn ($v) => (int) $v)->all());
+            $existing = array_flip(self::aliveIds($slug, $allTargets));
         } catch (\Throwable $e) {
             return [];
         }
+        $siblingParents = $parentOf + self::parentsFor($slug, array_values(array_diff(array_keys($existing), array_keys($parentOf))));
         $result = [];
         foreach ($parentOf as $targetId => $parent) {
             if (!$parent) {
                 continue;
             }
-            $ordered = array_values(array_filter($siblings[$parent[0] . ':' . $parent[1]] ?? [], fn ($siblingId) => isset($existing[$siblingId])));
+            $ordered = array_values(array_unique(array_filter(
+                $siblings[$parent[0] . ':' . $parent[1]] ?? [],
+                fn ($siblingId) => isset($existing[$siblingId]) && ($siblingParents[$siblingId] ?? null) === $parent
+            )));
             if (count($ordered) < 2) {
                 continue;
             }

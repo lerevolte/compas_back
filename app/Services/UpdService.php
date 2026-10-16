@@ -173,7 +173,7 @@ class UpdService
             'number' => $number,
             'date' => $dateHuman,
             'consignee' => $consignee,
-            'order_number' => self::orderNumber($slug, $id),
+            'order_number' => self::orderLabel($slug, $id),
             'rows' => $rows,
             'total' => number_format($total, 2, ',', ' '),
             'qr' => self::qrDataUri($slug, $id),
@@ -195,6 +195,53 @@ class UpdService
         }
 
         return '—';
+    }
+
+    private static function orderLabel(string $slug, int $id): string
+    {
+        $order = self::orderNumber($slug, $id);
+
+        return $order === '—' ? (string) $id : $order . ' / ' . $id;
+    }
+
+    private static function basisText(string $slug, int $id): string
+    {
+        if (!\App\Models\ObjectRelation::ready() || !Schema::hasTable('payment_invoices')) {
+            return '';
+        }
+        try {
+            $ids = \App\Models\ObjectRelation::where('source_slug', $slug)
+                ->where('source_id', $id)
+                ->where('target_slug', 'payment_invoices')
+                ->pluck('target_id')
+                ->all();
+            $parent = ShipmentService::parentOf($slug, $id);
+            if ($parent && $parent[0] === 'deals') {
+                $ids = array_merge($ids, \App\Models\ObjectRelation::where('source_slug', 'deals')
+                    ->where('source_id', $parent[1])
+                    ->where('target_slug', 'payment_invoices')
+                    ->pluck('target_id')
+                    ->all());
+            }
+            $ids = array_values(array_unique(array_map('intval', $ids)));
+            if (!count($ids)) {
+                return '';
+            }
+            $query = DB::table('payment_invoices')->whereIn('id', $ids)->orderBy('id');
+            if (Schema::hasColumn('payment_invoices', 'deleted_at')) {
+                $query->whereNull('deleted_at');
+            }
+            $parts = [];
+            foreach ($query->get() as $invoice) {
+                $number = trim((string) ($invoice->number ?? '')) !== '' ? trim((string) $invoice->number) : (string) $invoice->id;
+                $date = $invoice->created_at ? date('d.m.Y', strtotime($invoice->created_at)) : '';
+                $parts[] = 'Счет-договор № ' . $number . ($date !== '' ? ' от ' . $date : '');
+            }
+
+            return implode('; ', $parts);
+        } catch (\Throwable $e) {
+            return '';
+        }
     }
 
     private static function staticPayQrDataUri(): ?string
@@ -280,7 +327,7 @@ class UpdService
         if (!count($ids) || !\App\Models\ObjectRelation::ready()) {
             return [];
         }
-        $targets = array_keys(SaleDocumentService::TARGETS);
+        $targets = array_values(array_diff(array_keys(SaleDocumentService::TARGETS), SaleDocumentService::NOT_PRINTED));
         $docs = [];
         if ($docKeys !== null) {
             foreach ($docKeys as $key) {
@@ -560,6 +607,8 @@ class UpdService
             'weight' => (float) ($object->weight ?? 0),
             'volume' => (float) ($object->volume ?? 0),
             'qr' => self::qrDataUri($slug, $id),
+            'order_number' => self::orderLabel($slug, $id),
+            'basis' => self::basisText($slug, $id),
         ];
     }
 

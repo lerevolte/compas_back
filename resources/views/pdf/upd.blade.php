@@ -12,7 +12,8 @@
         .badge { border: 1px solid #000; padding: 2px 3px; font-weight: bold; text-align: center; font-size: 5.6pt; margin-top: 3px; }
         .status { border: 1px solid #000; width: 14px; height: 11px; display: inline-block; text-align: center; font-weight: bold; font-size: 5.4pt; }
         .legend { font-size: 4.8pt; color: #333; line-height: 1.15; }
-        .qr { display: block; width: 100%; height: auto; }
+        .qr { display: block; width: 82%; height: auto; margin: 0 auto; }
+        .order-no { font-weight: bold; font-size: 7.4pt; text-align: center; margin-bottom: 2px; }
         .header-note { text-align: right; font-size: 5.4pt; }
         .head td { vertical-align: top; padding: 1px 3px; }
         .head .k { white-space: nowrap; }
@@ -45,6 +46,9 @@
         <table>
             <tr>
                 <td style="width: 13%; vertical-align: top;">
+                    @if(!empty($doc['order_number']))
+                        <div class="order-no">Номер заказа: {{ $doc['order_number'] }}</div>
+                    @endif
                     @if(!empty($doc['qr']))
                         <img src="{{ $doc['qr'] }}" class="qr" alt="">
                     @endif
@@ -129,6 +133,17 @@
                             <td class="k">Документ об отгрузке</td>
                             <td class="v">№ {{ $doc['number'] }} от {{ $doc['date'] }}</td>
                             <td class="small nb">(5а)</td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td colspan="5" style="padding-top: 2px;">К счету-фактуре (счетам-фактурам), выставленному (выставленным) при получении оплаты, частичной оплаты или иных платежей в счет предстоящих поставок товаров (выполнения работ, оказания услуг), передачи имущественных прав</td>
+                            <td></td>
+                        </tr>
+                        <tr>
+                            <td colspan="2" class="v" style="width: auto;">№ -- от --, исправление № -- от --</td>
+                            <td class="small nb">(5б)</td>
                             <td></td>
                             <td></td>
                             <td></td>
@@ -227,7 +242,7 @@
         <table class="footer-table">
             <tr>
                 <td style="width: 30%;">Основание передачи (сдачи) / получения (приемки)</td>
-                <td><div class="line">--</div><div class="cap">(договор; доверенность и др.)</div></td>
+                <td><div class="line">{{ !empty($doc['basis']) ? $doc['basis'] : '--' }}</div><div class="cap">(договор; доверенность и др.)</div></td>
                 <td class="small nb">[8]</td>
             </tr>
             <tr>
