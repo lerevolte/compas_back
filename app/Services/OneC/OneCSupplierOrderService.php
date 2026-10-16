@@ -18,7 +18,6 @@ class OneCSupplierOrderService
     public const CONTRACT_FIELD = 'contract';
     public const CONTRACT_TITLE = 'Договор';
     public const STOREHOUSE_FIELD = 'storehouse_id';
-    public const STOREHOUSE_TITLE = 'Склад';
     public const STATES = [
         1 => ['value' => 'В работе', 'color' => '#2F8CFF'],
         2 => ['value' => 'Планируемая закупка', 'color' => '#8E7CC3'],
@@ -384,34 +383,19 @@ class OneCSupplierOrderService
             }
         }
 
-        self::forget();
-        $columns = self::fieldColumns();
-        if (!$columns['contract']) {
-            if (!$sb->hasColumn(self::SLUG, self::CONTRACT_FIELD)) {
-                $db->statement('ALTER TABLE `' . self::SLUG . '` ADD COLUMN `' . self::CONTRACT_FIELD . '` TEXT NULL');
+        $extra = $db->table('data_rows')->where('data_type_id', $typeId)
+            ->where(fn ($q) => $q->where(fn ($q) => $q->where('field', self::CONTRACT_FIELD)->where('type', 'text'))
+                ->orWhere(fn ($q) => $q->where('field', self::STOREHOUSE_FIELD)->where('relation_table', 'storehouses')))
+            ->get(['id', 'field', 'title']);
+        foreach ($extra as $row) {
+            if ($sb->hasTable('section_fields_sort')) {
+                $db->table('section_fields_sort')->where('field_id', $row->id)->delete();
             }
-            $db->table('data_rows')->insert(array_merge($base(), ['field' => self::CONTRACT_FIELD, 'type' => 'text', 'title' => self::CONTRACT_TITLE, 'sort' => $nextSort()]));
-            $log('создано поле «' . self::CONTRACT_TITLE . '»');
-        } else {
-            $log('поле договора: ' . $columns['contract']);
-        }
-        if (!$columns['storehouse'] && $sb->hasTable('storehouses')) {
-            if (!$sb->hasColumn(self::SLUG, self::STOREHOUSE_FIELD)) {
-                $db->statement('ALTER TABLE `' . self::SLUG . '` ADD COLUMN `' . self::STOREHOUSE_FIELD . '` TEXT NULL');
+            $db->table('data_rows')->where('id', $row->id)->delete();
+            if ($sb->hasColumn(self::SLUG, $row->field)) {
+                $sb->table(self::SLUG, fn ($table) => $table->dropColumn($row->field));
             }
-            $db->table('data_rows')->insert(array_merge($base(), [
-                'field' => self::STOREHOUSE_FIELD,
-                'type' => 'relation',
-                'title' => self::STOREHOUSE_TITLE,
-                'details' => '{"table":"storehouses"}',
-                'relation_table' => 'storehouses',
-                'is_link' => 1,
-                'is_plural' => 0,
-                'sort' => $nextSort(),
-            ]));
-            $log('создано поле «' . self::STOREHOUSE_TITLE . '»');
-        } elseif ($columns['storehouse']) {
-            $log('поле склада: ' . $columns['storehouse']);
+            $log('удалено поле «' . $row->title . '»');
         }
         self::forget();
         try {
