@@ -9,6 +9,9 @@ class DocumentNumber
 {
     public const COUNTER = 'shipment_task';
     public const PREFIX = 'cmps-';
+    public const SHARED_ID_COUNTER = 'shipment_source_id';
+    public const SHARED_ID_START = 10000;
+    public const SHARED_ID_TABLES = ['logistic_tasks', 'pickups'];
 
     public static function ensureTable($db): void
     {
@@ -27,6 +30,32 @@ SQL);
             return Schema::hasTable('document_counters');
         } catch (\Throwable $e) {
             return false;
+        }
+    }
+
+    public static function nextSharedId($db = null): ?int
+    {
+        $db = $db ?: DB::connection();
+        try {
+            $schema = $db->getSchemaBuilder();
+            if (!$schema->hasTable('document_counters')) {
+                self::ensureTable($db);
+            }
+            $max = self::SHARED_ID_START - 1;
+            foreach (self::SHARED_ID_TABLES as $table) {
+                if ($schema->hasTable($table)) {
+                    $max = max($max, (int) $db->table($table)->max('id'));
+                }
+            }
+            $db->table('document_counters')->insertOrIgnore(['name' => self::SHARED_ID_COUNTER, 'value' => 0]);
+            $db->statement('UPDATE document_counters SET value = LAST_INSERT_ID(GREATEST(value, ?) + 1) WHERE name = ?', [$max, self::SHARED_ID_COUNTER]);
+            $value = (int) $db->getPdo()->lastInsertId();
+
+            return $value > $max ? $value : null;
+        } catch (\Throwable $e) {
+            \Log::warning('Не удалось получить сквозной id задачи/самовывоза', ['error' => $e->getMessage()]);
+
+            return null;
         }
     }
 

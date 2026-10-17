@@ -44,10 +44,8 @@ class ObjectController extends Controller
     {
         $user = Auth::user();
         
-        // 1. Получение и проверка прав (вынесено в отдельный метод)
         $permissions = $this->getPermissions($user, $slug);
         
-        // Проверка на запрет чтения
         if (!$user->is_admin && isset($permissions['read_p']) && $permissions['read_p'] === 'N') {
             return response()->json(['message' => 'Forbidden'], 403);
         }
@@ -56,13 +54,11 @@ class ObjectController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        // 2. Получение настроек таблицы
         $table = Table::get($slug);
         if (isset($table['error'])) {
             return response()->json(['message' => $table['error']['message']], $table['error']['code']);
         }
 
-        // 3. Подготовка параметров запроса
         if (isset($permissions['read_p']) && $permissions['read_p'] === 'Y' && !$user->is_admin) {
             $request->merge(['filter' => array_merge($request->input('filter', []), ['user_id' => $user->id])]);
         }
@@ -72,7 +68,6 @@ class ObjectController extends Controller
             $request->merge(['filter' => array_merge($request->input('filter', []), ['employee_id' => $employeeIds ?: -1])]);
         }
 
-        // 4. Получение списка объектов
         $list = EntityObject::list($slug, $request);
         if (isset($list['error'])) {
             return response()->json(['message' => $list['error']['message']], $list['error']['code']);
@@ -91,12 +86,8 @@ class ObjectController extends Controller
             DB::table('data_types')->where('slug', $slug)->value('id')
         );
 
-        // 5. Загрузка категорий (Замена if/else на маппинг)
         $categories = $this->getCategoriesForSlug($slug);
 
-        // 6. Сборка финального ответа
-        // Оптимизация: параллельные запросы здесь не сделать в PHP синхронно без доп. библиотек,
-        // но код стал чище.
         return response()->json([
             'list'        => $list,
             'table'       => $table,
@@ -106,8 +97,6 @@ class ObjectController extends Controller
             'categories'  => $categories,
             'permissions' => $permissions,
             'tabs'        => Menu::tabs($slug),
-            // 'sidebar' можно не передавать, если фронт запрашивает его отдельно, или раскомментировать ниже
-            // 'sidebar'     => $user->getSidebar(), 
         ]);
     }
 
@@ -177,7 +166,7 @@ class ObjectController extends Controller
 
     public function compose_show($slug, $id, Request $request): JsonResponse
     {
-        $user = Auth::guard('api')->user(); // Получаем юзера корректно для API
+        $user = Auth::guard('api')->user();
         $isExternalAccess = !$user;
 
         $entity = DB::table('data_types')->where('slug', $slug)->first();
@@ -185,7 +174,6 @@ class ObjectController extends Controller
             return response()->json(['message' => 'Entity not found'], 404);
         }
 
-        // 1. Логика прав доступа
         $permissions = [];
         if ($user && $user->role_id) {
             $permissions = $this->getPermissions($user, $slug, $entity->id);
@@ -193,12 +181,10 @@ class ObjectController extends Controller
             $permissions = $this->externalLinkPermissions($entity->id) ?? ['read_p' => 'A'];
         }
 
-        // Специфичная логика для Users
         if ($user && ($slug === 'users' && $id == $user->id || $user->is_admin)) {
             $permissions['update_p'] = 'A';
         }
 
-        // Проверка запрета
         $isForbidden = isset($permissions['read_p']) && $permissions['read_p'] === 'N';
         $isSelfUser = $slug === 'users' && $user && $user->id == $id;
 
@@ -220,7 +206,6 @@ class ObjectController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        // 2. Параметры запроса
         if ($user && isset($permissions['read_p']) && $permissions['read_p'] === 'Y' && !$user->is_admin) {
             $request->merge(['user_id' => $user->id]);
         }
@@ -228,22 +213,16 @@ class ObjectController extends Controller
             $request->merge(['is_copy' => 1]);
         }
 
-        // 3. Получение деталей
         $detail = EntityObject::detail($slug, $id, $request);
         if (isset($detail['error'])) {
             return response()->json(['message' => $detail['error']['message']], $detail['error']['code']);
         }
 
-        // Создание нового объекта: id ещё нет (0/'0') либо это копия.
         $isCreate = empty($id) || $id === '0' || $id === 0 || (bool) $request->is_copy;
 
         if ($user && !$user->is_admin) {
             $canUpdate = true;
             if ($isCreate) {
-                // При СОЗДАНИИ редактируемость зависит от права на создание
-                // (create_p), а НЕ от update_p. Иначе при «Изменение: только
-                // свои» новый объект (у него ещё нет владельца) блокировался
-                // целиком, хотя право на создание есть (8563).
                 $cp = $permissions['create_p'] ?? null;
                 $canUpdate = $cp !== 'N';
             } else {
@@ -276,8 +255,6 @@ class ObjectController extends Controller
             }
         }
 
-        // Поле «Пароль» в карточке пользователя не-админ видит только у себя.
-        // В чужих карточках поле типа password скрываем целиком (8548).
         if ($slug === 'users' && $user && !$user->is_admin && !$isSelfUser
             && isset($detail['columns']) && is_array($detail['columns'])) {
             foreach ($detail['columns'] as $ck => $col) {
@@ -401,7 +378,7 @@ class ObjectController extends Controller
             }
         }
 
-        if (in_array($slug, ['logistic_tasks', 'supplier_orders'], true)) {
+        if (in_array($slug, ['logistic_tasks', 'supplier_orders', 'deals'], true)) {
             $actionValues = \App\Services\ShipmentService::actionValueIds();
             if (count($actionValues)) {
                 if (is_array($permissions)) {
@@ -412,7 +389,6 @@ class ObjectController extends Controller
             }
         }
 
-        // 4. Дополнительные данные (продукты, история)
         $products = [];
         $tableKeys = [];
 
@@ -452,7 +428,6 @@ class ObjectController extends Controller
         $history_fields = [];
 
         if ($id && !$request->is_copy) {
-            // Оптимизация: запрос истории только если это не копирование и есть ID
             if ($eventsVisible) {
                 $history_events = History::list($slug, $id, null, new Request(['filter' => 'events']));
             }
@@ -515,7 +490,6 @@ class ObjectController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        // Базовые данные
         $detail = EntityObject::detail_module($slug, $id, $module, new Request());
         if (isset($detail['error'])) {
             return response()->json(['message' => $detail['error']['message']], $detail['error']['code']);
@@ -587,7 +561,6 @@ class ObjectController extends Controller
             }
         }
 
-        // Связанные сущности модуля
         $moduleModel = Module::where('slug', $module)->firstOrFail();
 
         $eventsVisibility = self::eventsVisibilitySettings($slug);
@@ -675,7 +648,6 @@ class ObjectController extends Controller
     {
         $user = Auth::user();
 
-        // Пользователя с id=1 (системный/владелец портала) удалять нельзя (8588).
         if ($slug === 'users' && in_array(1, array_map('intval', (array) $request->ids), true)) {
             return response()->json(['message' => 'Этого пользователя нельзя удалить'], 403);
         }
@@ -716,12 +688,10 @@ class ObjectController extends Controller
         }
 
         $entityClass = $settings['models'][$slug]->model_name;
-        $item = $entityClass::withTrashed()->findOrFail($id); // Fail сразу, если не найден
+        $item = $entityClass::withTrashed()->findOrFail($id);
 
-        // Логика восстановления
         $item->restore();
 
-        // Запись истории
         $history = new History([
             'entity'    => $slug,
             'entity_id' => $item->id,
@@ -735,10 +705,8 @@ class ObjectController extends Controller
         $freshSettings = Settings::get(true);
         $data = $item->getData([], $freshSettings);
 
-        // Событие
         \App\Events\ObjectUpdated::dispatch('ObjectRestored', $data, tenant('id'));
 
-        // Формирование ответа истории через существующий метод
         $historyResponse = [History::getDataList([$history])];
 
         return response()->json([
@@ -756,7 +724,6 @@ class ObjectController extends Controller
 
     public function export($slug, Request $request): JsonResponse
     {
-        // Убрал info(), если они нужны для дебага, можно вернуть
         $user = Auth::user();
 
         $permissions = $this->getPermissions($user, $slug);
@@ -778,13 +745,11 @@ class ObjectController extends Controller
             $request->merge(['filter' => array_merge($request->input('filter', []), ['employee_id' => $employeeIds ?: -1])]);
         }
 
-        // Логика получения настроек таблиц
         $tables = $this->getUserTables($user, $slug);
 
         $fieldsForExport = [];
         $headings = [];
 
-        // Получение полей модели
         $settings = app('settings');
         if (!isset($settings['models'][$slug]) || !$settings['models'][$slug]->enable) {
              return response()->json(['message' => 'Entity not found'], 404);
@@ -792,9 +757,7 @@ class ObjectController extends Controller
         
         $modelFields = collect($settings[$slug]['fields']);
         
-        // Логика фильтрации колонок
         if (isset($tables[$slug]) && !$request->fields) {
-            // Если есть сохраненные настройки таблицы у юзера (оставляем без изменений)
             $tableColumns = collect($tables[$slug])->keyBy('key');
             
             $systemKeys = ['isChoose', 'actions', 'iconDrag', 'iconDelete'];
@@ -809,37 +772,27 @@ class ObjectController extends Controller
                 }
             }
         } else {
-            // ИЗМЕНЕННАЯ ЛОГИКА ЗДЕСЬ
 
             if ($request->fields && is_array($request->fields)) {
-                // ВАРИАНТ 1: Если переданы конкретные поля, соблюдаем их порядок
                 
-                // Преобразуем modelFields в ассоциативный массив для быстрого поиска по ключу
                 $modelFieldsMap = $modelFields->keyBy('field');
 
                 foreach ($request->fields as $requestedFieldKey) {
-                    // Ищем описание поля в настройках
                     $fieldData = $modelFieldsMap->get($requestedFieldKey);
 
-                    // Если поле найдено в настройках и не запрещено
                     if ($fieldData && !in_array($fieldData->type, ['text_group', 'password'])) {
                         
                         $title = $fieldData->display_parent_name 
                             ? "$fieldData->display_parent_name, $fieldData->title" 
                             : $fieldData->title;
 
-                        // Добавляем в том порядке, в котором они пришли в $request->fields
                         $headings[] = $title;
                         $fieldsForExport[] = $requestedFieldKey;
                     }
                     
-                    // Если нужно экспортировать системные поля (id, created_at), которых может не быть в $settings[$slug]['fields'],
-                    // но они есть в модели, добавьте проверку здесь. 
-                    // Обычно id и даты есть в $modelFields, так что код выше их подхватит.
                 }
 
             } else {
-                // ВАРИАНТ 2: Дефолтная логика (если fields не переданы), берем порядок из модели
                 $sortedFields = $modelFields->filter(function($field) {
                      return !in_array($field->type, ['text_group', 'password']);
                 });
@@ -873,11 +826,6 @@ class ObjectController extends Controller
         return response()->json(['link' => $url]);
     }
 
-    // --- Private Helpers (Вынесенная логика) ---
-
-    /**
-     * Получает права доступа пользователя к сущности
-     */
     private function basedCreatePermissions($user, string $slug): ?array
     {
         $targets = [
@@ -1051,7 +999,6 @@ class ObjectController extends Controller
                 ->where('entity_id', $dataTypeId)
                 ->first();
 
-            // Если прав нет, пытаемся инициализировать (старая логика)
             if (!$permissions) {
                 $this->initializePermissions($user);
                 $permissions = $user->role->permissions()
@@ -1120,9 +1067,6 @@ class ObjectController extends Controller
             : null;
     }
 
-    /**
-     * Инициализация прав, если их нет (Legace logic refactored)
-     */
     private function initializePermissions($user)
     {
         $existingPermissions = Permission::where('role_id', $user->role_id)
@@ -1148,9 +1092,6 @@ class ObjectController extends Controller
         }
     }
 
-    /**
-     * Маппинг категорий вместо if/elseif
-     */
     private function getCategoriesForSlug($slug): array
     {
         $categoryModels = [
@@ -1174,7 +1115,6 @@ class ObjectController extends Controller
 
         $tree = $modelClass::get()->toTree()->toArray();
 
-        // Рекурсивная обработка имен (вынесена, чтобы не дублировать)
         return $this->processCategoryNames($tree);
     }
 
@@ -1193,19 +1133,14 @@ class ObjectController extends Controller
         return $categories;
     }
 
-    /**
-     * Получение таблиц пользователя (для export)
-     */
     private function getUserTables($user, $slug)
     {
         $userTables = $user->tables ? json_decode($user->tables, true) : [];
 
-        // Если у пользователя уже есть настройка для этого слага, возвращаем
         if (isset($userTables[$slug])) {
             return $userTables;
         }
 
-        // Проверяем роль
         $role = $user->role;
         $roleTables = $role && $role->tables ? json_decode($role->tables, true) : [];
         
@@ -1216,7 +1151,6 @@ class ObjectController extends Controller
             return $userTables;
         }
 
-        // Проверяем глобальные настройки
         $globalTablesJson = DB::table('settings')->where('key', 'tables')->value('value');
         $globalTables = $globalTablesJson ? json_decode($globalTablesJson, true) : [];
 

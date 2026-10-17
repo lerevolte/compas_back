@@ -21,8 +21,10 @@ class InstallPickupsEntity extends Command
     public const EXCLUDE_FIELDS = [
         'route_id', 'address', 'plan_time', 'service_time', 'car_type',
         'car_requirements', 'employee_requirements', 'delivery_price', 'point_status',
-        'kommentarii_k_statusu_voditelem_3570', 'saby_waybills', 'na_priemke', 'sort', 'b24_id', 'priority',
+        'kommentarii_k_statusu_voditelem_3570', 'saby_waybills', 'na_priemke', 'sort', 'b24_id', 'priority', 'time',
     ];
+
+    public const REMOVED_FIELDS = ['time'];
 
     public const EXCLUDE_TITLES = ['Время прибытия', 'План. время прибытия', 'Планируемое время прибытия', 'На приемке', 'Комментарий к статусу водителем'];
 
@@ -116,6 +118,7 @@ class InstallPickupsEntity extends Command
         }
 
         $this->cloneDataRows($db, (int) $src->id, $typeId, (int) $infoSecId, $label);
+        $this->removeFields($db, $typeId, $label);
 
         if (!$db->table('settings')->where(['type' => 'menu', 'entity' => self::SLUG])->exists()) {
             $db->table('settings')->insert([
@@ -165,6 +168,16 @@ class InstallPickupsEntity extends Command
         }
 
         $this->line("    [{$label}] " . self::SLUG . ": data_type={$typeId}, section={$infoSecId}");
+    }
+
+    private function removeFields($db, int $typeId, string $label): void
+    {
+        $rows = $db->table('data_rows')->where('data_type_id', $typeId)->whereIn('field', self::REMOVED_FIELDS)->get(['id', 'field']);
+        foreach ($rows as $row) {
+            $db->table('section_fields_sort')->where('field_id', $row->id)->delete();
+            $db->table('data_rows')->where('id', $row->id)->delete();
+            $this->line("    [{$label}] " . self::SLUG . ": поле {$row->field} удалено");
+        }
     }
 
     private function cloneDataRows($db, int $srcTypeId, int $typeId, int $infoSecId, string $label): void

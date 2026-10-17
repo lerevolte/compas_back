@@ -59,6 +59,9 @@ class ObjectRelationController extends Controller
         }
         ObjectRelation::linkWithHistory($data['source_slug'], $data['source_id'], $data['target_slug'], $data['target_id']);
         \App\Services\StorehouseService::inheritOnLink($data['source_slug'], (int) $data['source_id'], $data['target_slug'], (int) $data['target_id']);
+        if ($data['target_slug'] === \App\Services\ShipmentService::DOCUMENT) {
+            \App\Models\ExpenseInvoice::inheritShipmentCompany((string) $data['source_slug'], (int) $data['source_id'], (int) $data['target_id']);
+        }
         if ($data['source_slug'] === 'deals' && \App\Services\ShipmentService::isSource($data['target_slug'])) {
             \App\Services\ShipmentService::setDealColumn($data['target_slug'], (int) $data['target_id'], (int) $data['source_id']);
             try {

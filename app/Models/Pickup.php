@@ -3,13 +3,13 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\FieldValue, App\Traits\ModelActions, App\Traits\ColorGenerator, App\Traits\HasRelationFields;
+use App\Traits\FieldValue, App\Traits\ModelActions, App\Traits\ColorGenerator, App\Traits\HasRelationFields, App\Traits\HasSharedShipmentId;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Auth;
 
 class Pickup extends Model
 {
-    use FieldValue, ModelActions, ColorGenerator, SoftDeletes, HasRelationFields;
+    use FieldValue, ModelActions, ColorGenerator, SoftDeletes, HasRelationFields, HasSharedShipmentId;
 
     protected $table = 'pickups';
 

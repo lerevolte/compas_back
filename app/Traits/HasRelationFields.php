@@ -38,5 +38,13 @@ trait HasRelationFields
                 }
             }
         });
+
+        static::deleted(function ($model) {
+            RelationFieldsService::refreshNeighbours($model->getTable(), (int) $model->id);
+        });
+
+        static::restored(function ($model) {
+            RelationFieldsService::refreshNeighbours($model->getTable(), (int) $model->id);
+        });
     }
 }

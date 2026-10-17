@@ -60,6 +60,28 @@ class ExpenseInvoice extends Model
         });
     }
 
+    public static function inheritShipmentCompany(string $sourceSlug, int $sourceId, int $id): void
+    {
+        if (!\App\Services\ShipmentService::isSource($sourceSlug)
+            || !\Schema::hasColumn('expense_invoices', 'shipment_company_id')
+            || !\Schema::hasColumn($sourceSlug, 'shipment_company_id')) {
+            return;
+        }
+        $invoice = self::find($id);
+        if (!$invoice || \App\Services\RelationFieldsService::singleValue($invoice->shipment_company_id)) {
+            return;
+        }
+        $companyId = \App\Services\RelationFieldsService::singleValue(
+            \DB::table($sourceSlug)->where('id', $sourceId)->value('shipment_company_id')
+        );
+        if (!$companyId) {
+            return;
+        }
+        History::saveForObject('expense_invoices', [['id' => $invoice->id, 'shipment_company_id' => $companyId]], true, [], [], true);
+        $invoice->shipment_company_id = $companyId;
+        $invoice->save();
+    }
+
     public function regeneratePdf(): bool
     {
         return \App\Services\SaleDocumentService::regenerate('expense_invoices', (int) $this->id);

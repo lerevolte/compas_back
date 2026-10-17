@@ -4,14 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use App\Providers\CRest;
-use App\Traits\FieldValue, App\Traits\ModelActions, App\Traits\ColorGenerator, App\Traits\HasRelationFields;
+use App\Traits\FieldValue, App\Traits\ModelActions, App\Traits\ColorGenerator, App\Traits\HasRelationFields, App\Traits\HasSharedShipmentId;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Auth;
 use App\Models\Route;
 
 class Task extends Model
 {
-    use FieldValue, ModelActions, ColorGenerator, SoftDeletes, HasRelationFields;
+    use FieldValue, ModelActions, ColorGenerator, SoftDeletes, HasRelationFields, HasSharedShipmentId;
 
     protected $guarded = ['id'];
     protected $table = 'logistic_tasks';
