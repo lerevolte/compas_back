@@ -31,6 +31,7 @@ class SupplierOrder extends Model
             if (empty($model->date) && \Schema::hasColumn($model->getTable(), 'date')) {
                 $model->date = date('Y-m-d');
             }
+            \App\Services\OneC\OneCExportService::assignStatus($model);
         });
 
         static::saving(function ($model) {

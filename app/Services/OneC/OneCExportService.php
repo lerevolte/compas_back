@@ -346,7 +346,7 @@ SQL);
     public static function assignStatus($model): void
     {
         $table = $model->getTable();
-        if (!isset(self::DOCUMENTS[$table]) || !self::hasStatusColumn($table)) {
+        if ((!isset(self::DOCUMENTS[$table]) && $table !== OneCSupplierOrderService::SLUG) || !self::hasStatusColumn($table)) {
             return;
         }
         if (trim((string) $model->getAttribute(self::STATUS_FIELD)) !== '') {

@@ -233,8 +233,9 @@ class OneCSupplierOrderService
         $confirmed = [];
         $unknown = [];
         $states = [];
+        $statuses = [];
         if (!self::ready()) {
-            return ['confirmed' => $confirmed, 'unknown' => $unknown, 'states' => $states];
+            return ['confirmed' => $confirmed, 'unknown' => $unknown, 'states' => $states, 'statuses' => $statuses];
         }
         $now = now();
         foreach ($items as $item) {
@@ -247,6 +248,11 @@ class OneCSupplierOrderService
             if ($stateIndex !== null) {
                 self::setState($id, $stateIndex);
                 $states[] = ['number' => self::numberFor($id), 'state' => self::STATES[$stateIndex]['value']];
+            }
+            $status = $item['status'] ?? null;
+            if ($status !== null) {
+                OneCExportService::markStatus(self::SLUG, $id, $status);
+                $statuses[] = ['number' => self::numberFor($id), 'status' => OneCExportService::STATUS_VALUES[$status]['value']];
             }
             if (!empty($item['state_only'])) {
                 continue;
@@ -265,10 +271,13 @@ class OneCSupplierOrderService
             } else {
                 DB::table(OneCExportService::STATE_TABLE)->insert($update + ['slug' => self::SLUG, 'document_id' => $id, 'created_at' => $now, 'updated_at' => $now]);
             }
+            if ($status === null) {
+                OneCExportService::markStatus(self::SLUG, $id, OneCExportService::STATUS_CREATED, true);
+            }
             $confirmed[] = self::numberFor($id);
         }
 
-        return ['confirmed' => $confirmed, 'unknown' => $unknown, 'states' => $states];
+        return ['confirmed' => $confirmed, 'unknown' => $unknown, 'states' => $states, 'statuses' => $statuses];
     }
 
     public static function normalizeState($raw): ?int

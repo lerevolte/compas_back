@@ -9,9 +9,9 @@ use Illuminate\Console\Command;
 
 class OneCUninstallPurchases extends Command
 {
-    protected $signature = 'onec:uninstall-purchases {target=avixo : <tenant_id>} {--purge : удалить колонку «Состояние» и состояние выгрузки}';
+    protected $signature = 'onec:uninstall-purchases {target=avixo : <tenant_id>} {--purge : удалить колонки «Статус», «Статус 1С» и состояние выгрузки}';
 
-    protected $description = 'Снять обмен с 1С по закупкам: выгрузку заказов поставщикам и приходных, поле «Состояние»';
+    protected $description = 'Снять обмен с 1С по закупкам: выгрузку заказов поставщикам и приходных, поля «Статус» и «Статус 1С»';
 
     public function handle(): int
     {
@@ -33,22 +33,24 @@ class OneCUninstallPurchases extends Command
             }
             $typeId = $db->table('data_types')->where('slug', OneCSupplierOrderService::SLUG)->value('id');
             if ($typeId) {
-                $fieldIds = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', OneCSupplierOrderService::STATE_FIELD)->pluck('id')->all();
+                $fieldIds = $db->table('data_rows')->where('data_type_id', $typeId)->whereIn('field', [OneCSupplierOrderService::STATE_FIELD, OneCExportService::STATUS_FIELD])->pluck('id')->all();
                 if (count($fieldIds)) {
                     $db->table('field_values')->whereIn('field_id', $fieldIds)->delete();
                     $db->table('section_fields_sort')->whereIn('field_id', $fieldIds)->delete();
                     $db->table('data_rows')->whereIn('id', $fieldIds)->delete();
                 }
-                $this->line("    [{$tenant->id}] supplier_orders: поле «" . OneCSupplierOrderService::STATE_TITLE . '» снято');
+                $this->line("    [{$tenant->id}] supplier_orders: поля «" . OneCSupplierOrderService::STATE_TITLE . '» и «' . OneCExportService::STATUS_TITLE . '» сняты');
             }
             if ($this->option('purge')) {
-                if ($sb->hasTable(OneCSupplierOrderService::SLUG) && $sb->hasColumn(OneCSupplierOrderService::SLUG, OneCSupplierOrderService::STATE_FIELD)) {
-                    $sb->table(OneCSupplierOrderService::SLUG, fn ($table) => $table->dropColumn(OneCSupplierOrderService::STATE_FIELD));
+                foreach ([OneCSupplierOrderService::STATE_FIELD, OneCExportService::STATUS_FIELD] as $column) {
+                    if ($sb->hasTable(OneCSupplierOrderService::SLUG) && $sb->hasColumn(OneCSupplierOrderService::SLUG, $column)) {
+                        $sb->table(OneCSupplierOrderService::SLUG, fn ($table) => $table->dropColumn($column));
+                    }
                 }
                 if ($sb->hasTable(OneCExportService::STATE_TABLE)) {
                     $db->table(OneCExportService::STATE_TABLE)->where('slug', OneCSupplierOrderService::SLUG)->delete();
                 }
-                $this->line("    [{$tenant->id}] колонка «Состояние» и состояние выгрузки удалены");
+                $this->line("    [{$tenant->id}] колонки «Статус», «Статус 1С» и состояние выгрузки удалены");
             }
             OneCExportService::forget();
             OneCSupplierOrderService::forget();

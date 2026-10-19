@@ -68,7 +68,7 @@ class OneCInstall extends Command
                     if (!$fieldId) {
                         continue;
                     }
-                    $merged = $this->mergeDuplicateStatuses($db, $slug, $fieldId);
+                    $merged = self::mergeDuplicateStatuses($db, $slug, $fieldId);
                     $this->line("    [{$tenant->id}] {$slug}: удалено дублей статуса 1С {$merged}");
                     try {
                         if ($db->getSchemaBuilder()->hasTable('local_cache')) {
@@ -122,7 +122,7 @@ class OneCInstall extends Command
                 }
                 $numbered = OneCExportService::renumber($db, $slug);
                 $this->line("    [{$tenant->id}] {$slug}: номеров cmps-<id> присвоено {$numbered}");
-                $this->installStatusField($db, $sb, (string) $tenant->id, $slug, (int) $typeId);
+                self::installStatusField($db, $sb, $slug, (int) $typeId, fn (string $message) => $this->line("    [{$tenant->id}] {$slug}: {$message}"));
                 try {
                     if ($sb->hasTable('local_cache')) {
                         $db->table('local_cache')->where('url', 'fields/' . $slug)->update(['updated_at' => now()]);
@@ -170,7 +170,7 @@ class OneCInstall extends Command
         return self::SUCCESS;
     }
 
-    private function installStatusField($db, $sb, string $tenantId, string $slug, int $typeId): void
+    public static function installStatusField($db, $sb, string $slug, int $typeId, callable $log): void
     {
         $field = OneCExportService::STATUS_FIELD;
         if (!$sb->hasColumn($slug, $field)) {
@@ -203,7 +203,7 @@ class OneCInstall extends Command
                 'field' => $field,
                 'sort' => $maxSort + 1,
             ]));
-            $this->line("    [{$tenantId}] {$slug}: создано поле {$field} (id {$fieldId})");
+            $log("создано поле {$field} (id {$fieldId})");
         }
         foreach (OneCExportService::STATUS_VALUES as $sort => $def) {
             $value = $db->table('field_values')->where('field_id', $fieldId)->where('value', $def['value'])->orderBy('id')->first();
@@ -224,9 +224,9 @@ class OneCInstall extends Command
                 ]);
             }
         }
-        $merged = $this->mergeDuplicateStatuses($db, $slug, $fieldId);
+        $merged = self::mergeDuplicateStatuses($db, $slug, $fieldId);
         if ($merged) {
-            $this->line("    [{$tenantId}] {$slug}: удалено дублей статуса 1С {$merged}");
+            $log("удалено дублей статуса 1С {$merged}");
         }
         OneCExportService::forget();
         $ids = [];
@@ -238,7 +238,7 @@ class OneCInstall extends Command
             ? $db->table($slug)->whereIn('id', $confirmedIds)->where(fn ($q) => $q->whereNull($field)->orWhere($field, '')->orWhere($field, $ids[OneCExportService::STATUS_NONE]))->update([$field => $ids[OneCExportService::STATUS_CREATED]])
             : 0;
         $filled = $db->table($slug)->where(fn ($q) => $q->whereNull($field)->orWhere($field, ''))->update([$field => $ids[OneCExportService::STATUS_NONE]]);
-        $this->line("    [{$tenantId}] {$slug}: статус 1С — создана {$confirmed}, не создана {$filled}");
+        $log("статус 1С — создана {$confirmed}, не создана {$filled}");
         OneCExportService::forget();
     }
 
@@ -289,7 +289,7 @@ class OneCInstall extends Command
         $this->line("    [{$tenantId}] {$slug}: дата отгрузки заполнена у {$filled}");
     }
 
-    private function mergeDuplicateStatuses($db, string $slug, int $fieldId): int
+    public static function mergeDuplicateStatuses($db, string $slug, int $fieldId): int
     {
         $field = OneCExportService::STATUS_FIELD;
         $removed = 0;

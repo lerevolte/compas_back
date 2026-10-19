@@ -11,7 +11,7 @@ class OneCInstallPurchases extends Command
 {
     protected $signature = 'onec:install-purchases {target=avixo : <tenant_id>} {--since= : выгружать документы, созданные с этой даты (по умолчанию — с момента первой установки)}';
 
-    protected $description = 'Обмен с 1С по закупкам: выгрузка заказов поставщикам (поля «Состояние», «Склад прихода») и приходных накладных';
+    protected $description = 'Обмен с 1С по закупкам: выгрузка заказов поставщикам (поля «Статус», «Статус 1С», «Склад прихода») и приходных накладных';
 
     public const SLUGS = [OneCSupplierOrderService::SLUG, 'receipt_invoices'];
 
@@ -37,7 +37,12 @@ class OneCInstallPurchases extends Command
                 return;
             }
             OneCExportService::ensureTables($db);
-            OneCSupplierOrderService::install($db, $sb, fn (string $message) => $this->line("    [{$tenant->id}] supplier_orders: {$message}"));
+            $log = fn (string $message) => $this->line("    [{$tenant->id}] supplier_orders: {$message}");
+            OneCSupplierOrderService::install($db, $sb, $log);
+            $typeId = (int) $db->table('data_types')->where('slug', OneCSupplierOrderService::SLUG)->value('id');
+            if ($typeId && $sb->hasTable(OneCSupplierOrderService::SLUG)) {
+                OneCInstall::installStatusField($db, $sb, OneCSupplierOrderService::SLUG, $typeId, $log);
+            }
 
             $config = $db->table(OneCExportService::CONFIG_TABLE)->orderBy('id')->first();
             $bySlug = OneCExportService::slugSince($config);
@@ -62,7 +67,7 @@ class OneCInstallPurchases extends Command
             }
             $this->info("  ✓ {$tenant->id}: выгрузка закупок в 1С включена");
             $this->line("    GET  https://{$tenant->id}.compas.pro/api/1c/supplier-orders?token=<токен>");
-            $this->line("    POST https://{$tenant->id}.compas.pro/api/1c/supplier-orders/confirm?token=<токен>  {\"documents\": [{\"number\": \"cmps-z1\", \"ref\": \"<GUID>\", \"state\": \"Оплатили\"}]}");
+            $this->line("    POST https://{$tenant->id}.compas.pro/api/1c/supplier-orders/confirm?token=<токен>  {\"documents\": [{\"number\": \"cmps-z1\", \"ref\": \"<GUID>\", \"state\": \"Оплатили\", \"status\": \"posted\"}]}");
             $this->line("    POST https://{$tenant->id}.compas.pro/api/1c/supplier-orders/state?token=<токен>  {\"documents\": [{\"number\": \"cmps-z1\", \"state\": 6}]}");
             $this->line("    приходные накладные — в GET /api/1c/documents (type receipt_invoice)");
         });

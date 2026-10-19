@@ -134,7 +134,7 @@ class OneCController extends Controller
         }
         $items = $this->supplierOrderItems($request, $stateOnly);
         if (!count($items)) {
-            return $this->cashConfirmError($request, ['documents' => [['number' => 'cmps-z1', 'ref' => '<GUID 1С>', 'state' => 'Оплатили']]]);
+            return $this->cashConfirmError($request, ['documents' => [['number' => 'cmps-z1', 'ref' => '<GUID 1С>', 'state' => 'Оплатили', 'status' => 'created|posted|deleted']]]);
         }
 
         return response()->json(['ok' => true] + OneCSupplierOrderService::confirm($items), 200, [], JSON_UNESCAPED_UNICODE);
@@ -173,17 +173,30 @@ class OneCController extends Controller
             }
             $ref = $fields['ref'] ?? $fields['ссылка'] ?? $fields['guid'] ?? null;
             $state = null;
-            foreach (['state', 'состояние', 'status', 'статус'] as $key) {
+            foreach (['state', 'состояние'] as $key) {
                 if (array_key_exists($key, $fields) && is_scalar($fields[$key])) {
                     $state = $fields[$key];
                     break;
                 }
+            }
+            $status = null;
+            foreach (['onec_status', 'status_1c', 'статус 1с', 'статус_1с', 'status', 'статус'] as $key) {
+                if (!array_key_exists($key, $fields) || !is_scalar($fields[$key])) {
+                    continue;
+                }
+                $raw = $fields[$key];
+                $status = is_numeric($raw) && in_array($key, ['status', 'статус'], true) ? null : OneCExportService::normalizeStatus($raw);
+                if ($status === null && $state === null && in_array($key, ['status', 'статус'], true)) {
+                    $state = $raw;
+                }
+                break;
             }
             $items[] = [
                 'number' => is_scalar($number) ? (string) $number : null,
                 'id' => is_scalar($id) ? $id : null,
                 'ref' => is_scalar($ref) ? (string) $ref : null,
                 'state' => $state,
+                'status' => $status ?? $this->flagStatus($fields),
                 'state_only' => $stateOnly,
             ];
         }
@@ -327,20 +340,7 @@ class OneCController extends Controller
             }
         }
         if ($status === null) {
-            foreach (['deleted' => OneCExportService::STATUS_DELETED, 'удалена' => OneCExportService::STATUS_DELETED, 'удален' => OneCExportService::STATUS_DELETED, 'posted' => OneCExportService::STATUS_POSTED, 'проведена' => OneCExportService::STATUS_POSTED, 'проведен' => OneCExportService::STATUS_POSTED] as $key => $index) {
-                if (!array_key_exists($key, $fields)) {
-                    continue;
-                }
-                $flag = filter_var($fields[$key], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
-                if ($flag === true) {
-                    $status = $index;
-                    break;
-                }
-                if ($flag === false && $index === OneCExportService::STATUS_POSTED) {
-                    $status = OneCExportService::STATUS_CREATED;
-                    break;
-                }
-            }
+            $status = $this->flagStatus($fields);
         }
 
         return [[
@@ -349,6 +349,24 @@ class OneCController extends Controller
             'status' => $status,
             'type' => is_scalar($type) ? (string) $type : null,
         ]];
+    }
+
+    private function flagStatus(array $fields): ?int
+    {
+        foreach (['deleted' => OneCExportService::STATUS_DELETED, 'удалена' => OneCExportService::STATUS_DELETED, 'удален' => OneCExportService::STATUS_DELETED, 'posted' => OneCExportService::STATUS_POSTED, 'проведена' => OneCExportService::STATUS_POSTED, 'проведен' => OneCExportService::STATUS_POSTED] as $key => $index) {
+            if (!array_key_exists($key, $fields)) {
+                continue;
+            }
+            $flag = filter_var($fields[$key], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            if ($flag === true) {
+                return $index;
+            }
+            if ($flag === false && $index === OneCExportService::STATUS_POSTED) {
+                return OneCExportService::STATUS_CREATED;
+            }
+        }
+
+        return null;
     }
 
     private function token(Request $request): ?string
