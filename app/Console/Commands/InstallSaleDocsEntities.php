@@ -72,7 +72,8 @@ class InstallSaleDocsEntities extends Command
     public const PRODUCTS_TAB_ENTITIES = ['payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices'];
 
     public const PRINT_TAB = 'print_docs';
-    public const PRINT_TAB_TITLE = 'Печать документов';
+    public const PRINT_TAB_TITLE = 'Документы для заказа';
+    public const PRINT_TAB_OLD_TITLE = 'Печать документов';
     public const PRINT_TAB_ENTITIES = ['logistic_tasks', 'pickups'];
     public const PRINT_TAB_REMOVE_FROM = ['deals'];
 
@@ -102,7 +103,7 @@ class InstallSaleDocsEntities extends Command
     protected $signature = 'entity:install-sale-docs
         {target=avixo : seeds | all-tenants | <tenant_id>}';
 
-    protected $description = 'Установить сущности «Счета на оплату», «Расходные накладные», «Возвраты от покупателя» и «Приходные накладные», переименовать deals в «Заказы покупателей», добавить вкладку «Печать документов», поле «Банковские реквизиты» у счетов и заказов и поле «Компания отгрузки» у заказов/счетов/накладных';
+    protected $description = 'Установить сущности «Счета на оплату», «Расходные накладные», «Возвраты от покупателя» и «Приходные накладные», переименовать deals в «Заказы покупателей», добавить вкладку «Документы для заказа», поле «Банковские реквизиты» у счетов и заказов и поле «Компания отгрузки» у заказов/счетов/накладных';
 
     public function handle(): int
     {

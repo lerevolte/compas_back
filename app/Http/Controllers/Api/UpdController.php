@@ -29,7 +29,9 @@ class UpdController extends Controller
             ? filter_var($request->input('upd'), FILTER_VALIDATE_BOOLEAN)
             : true;
 
-        $output = UpdService::output((string) $model, (array) $ids, $withDocs, $docKeys, $includeUpd);
+        $mainCopies = $request->filled('upd_copies') ? (int) $request->input('upd_copies') : null;
+
+        $output = UpdService::output((string) $model, (array) $ids, $withDocs, $docKeys, $includeUpd, $mainCopies);
         if ($output === null) {
             return response()->json(['message' => 'Не удалось сформировать документы для печати'], 422);
         }

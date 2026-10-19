@@ -10,12 +10,14 @@ class UpdService
 {
     public const SLUGS = ['logistic_tasks', 'pickups'];
 
+    public const MAIN_COPIES = ['upd' => 2, 'receipt' => 1, 'transfer' => 1];
+
     public const MONTHS = [
         1 => 'января', 2 => 'февраля', 3 => 'марта', 4 => 'апреля', 5 => 'мая', 6 => 'июня',
         7 => 'июля', 8 => 'августа', 9 => 'сентября', 10 => 'октября', 11 => 'ноября', 12 => 'декабря',
     ];
 
-    public static function output(string $slug, array $ids, bool $withDocs = false, ?array $docKeys = null, bool $includeUpd = true): ?string
+    public static function output(string $slug, array $ids, bool $withDocs = false, ?array $docKeys = null, bool $includeUpd = true, ?int $mainCopies = null): ?string
     {
         $ids = array_values(array_filter(array_map('intval', $ids)));
         if (!count($ids)) {
@@ -43,64 +45,55 @@ class UpdService
             }
         }
 
+        $attachmentCopies = self::attachmentCopies($docKeys);
+        $attachments = [];
+        if ($withDocs) {
+            foreach (PrintAttachmentService::rows($slug, $ids) as $row) {
+                if ($attachmentCopies !== null && !isset($attachmentCopies[(int) $row->id])) {
+                    continue;
+                }
+                $attachments[(int) $row->object_id][] = [$row, $attachmentCopies[(int) $row->id] ?? (int) $row->copies];
+            }
+        }
+
         $parts = [];
         $temp = [];
+        $writeTemp = fn (string $bytes) => self::writeTemp($bytes);
         foreach ($ids as $id) {
-            if (in_array($id, $transferIds, true)) {
-                if ($withDocs) {
-                    foreach (self::linkedDocumentFiles($slug, [$id], $docKeys) as $file) {
-                        $parts[] = $file;
-                    }
-                }
-                $pdf = $includeUpd ? self::transferPdf($slug, [$id]) : null;
-                $path = $pdf ? self::writeTemp($pdf->output()) : null;
-                if ($path !== null) {
-                    $temp[] = $path;
-                    $parts[] = $path;
-                }
-                continue;
-            }
-            if (in_array($id, $receiptIds, true)) {
-                $pdf = self::receiptPdf($slug, [$id]);
-                $path = $pdf ? self::writeTemp($pdf->output()) : null;
-                if ($path !== null) {
-                    $temp[] = $path;
-                    $parts[] = $path;
-                }
-                continue;
-            }
             if ($withDocs) {
-                foreach (self::linkedDocumentFiles($slug, [$id], $docKeys) as $file) {
-                    $parts[] = $file;
+                foreach (self::linkedDocumentFiles($slug, [$id], $docKeys) as $file => $copies) {
+                    array_push($parts, ...array_fill(0, $copies, $file));
                 }
             }
-            if (!$includeUpd) {
-                continue;
+            if ($includeUpd) {
+                $kind = in_array($id, $transferIds, true) ? 'transfer' : (in_array($id, $receiptIds, true) ? 'receipt' : 'upd');
+                $pdf = $kind === 'transfer' ? self::transferPdf($slug, [$id]) : ($kind === 'receipt' ? self::receiptPdf($slug, [$id]) : self::pdf($slug, [$id]));
+                $path = $pdf ? self::writeTemp($pdf->output()) : null;
+                if ($path !== null) {
+                    $temp[] = $path;
+                    $copies = $mainCopies !== null ? PrintAttachmentService::copies($mainCopies) : self::MAIN_COPIES[$kind];
+                    array_push($parts, ...array_fill(0, $copies, $path));
+                }
             }
-            $pdf = self::pdf($slug, [$id]);
-            if (!$pdf) {
-                continue;
+            foreach ($attachments[$id] ?? [] as [$row, $copies]) {
+                $path = PrintAttachmentService::pdfPath($row, $writeTemp, $temp);
+                if ($path !== null) {
+                    array_push($parts, ...array_fill(0, PrintAttachmentService::copies($copies), $path));
+                }
             }
-            $path = self::writeTemp($pdf->output());
-            if ($path === null) {
-                continue;
-            }
-            $temp[] = $path;
-            $parts[] = $path;
-            $parts[] = $path;
         }
 
         try {
             if (!count($parts)) {
-                return $includeUpd || count($receiptIds) ? self::fallbackUpd($slug, $includeUpd ? $updIds : [], $receiptIds) : null;
+                return $includeUpd ? self::fallbackUpd($slug, $updIds, $receiptIds) : null;
             }
             if (count($parts) === 1) {
                 $bytes = @file_get_contents($parts[0]);
 
-                return $bytes === false ? self::fallbackUpd($slug, $updIds, $receiptIds) : $bytes;
+                return $bytes === false ? ($includeUpd ? self::fallbackUpd($slug, $updIds, $receiptIds) : null) : $bytes;
             }
 
-            return self::mergeFiles($parts) ?? ($includeUpd || count($receiptIds) ? self::fallbackUpd($slug, $includeUpd ? $updIds : [], $receiptIds) : null);
+            return self::mergeFiles($parts) ?? ($includeUpd ? self::fallbackUpd($slug, $updIds, $receiptIds) : null);
         } finally {
             foreach ($temp as $path) {
                 @unlink($path);
@@ -404,11 +397,11 @@ class UpdService
         $docs = [];
         if ($docKeys !== null) {
             foreach ($docKeys as $key) {
-                $parts = explode('#', (string) $key);
-                if (count($parts) !== 2 || !in_array($parts[0], $targets, true) || !ctype_digit($parts[1])) {
+                $parsed = self::parseDocKey((string) $key);
+                if (!$parsed || !in_array($parsed[0], $targets, true)) {
                     continue;
                 }
-                $docs[$parts[0] . '#' . (int) $parts[1]] = [$parts[0], (int) $parts[1]];
+                $docs[$parsed[0] . '#' . $parsed[1]] = $parsed;
             }
 
             return self::filesOf($docs, null);
@@ -419,7 +412,7 @@ class UpdService
             ->orderBy('id')
             ->get(['target_slug', 'target_id']);
         foreach ($own as $relation) {
-            $docs[$relation->target_slug . '#' . $relation->target_id] = [(string) $relation->target_slug, (int) $relation->target_id];
+            $docs[$relation->target_slug . '#' . $relation->target_id] = [(string) $relation->target_slug, (int) $relation->target_id, 1];
         }
         $dealIds = \App\Models\ObjectRelation::where('source_slug', 'deals')
             ->where('target_slug', $slug)
@@ -436,11 +429,36 @@ class UpdService
                 ->orderBy('id')
                 ->get(['target_slug', 'target_id']);
             foreach ($dealDocs as $relation) {
-                $docs[$relation->target_slug . '#' . $relation->target_id] = [(string) $relation->target_slug, (int) $relation->target_id];
+                $docs[$relation->target_slug . '#' . $relation->target_id] = [(string) $relation->target_slug, (int) $relation->target_id, 1];
             }
         }
 
         return self::filesOf($docs, null);
+    }
+
+    public static function parseDocKey(string $key): ?array
+    {
+        if (!preg_match('/^([a-z_]+)#(\d+)(?:\*(\d+))?$/', trim($key), $m)) {
+            return null;
+        }
+
+        return [$m[1], (int) $m[2], PrintAttachmentService::copies($m[3] ?? null)];
+    }
+
+    private static function attachmentCopies(?array $docKeys): ?array
+    {
+        if ($docKeys === null) {
+            return null;
+        }
+        $out = [];
+        foreach ($docKeys as $key) {
+            $parsed = self::parseDocKey((string) $key);
+            if ($parsed && $parsed[0] === 'attachment') {
+                $out[$parsed[1]] = $parsed[2];
+            }
+        }
+
+        return $out;
     }
 
     private static function filesOf(array $docs, ?array $docKeys): array
@@ -468,7 +486,7 @@ class UpdService
 
         $disk = \Storage::disk('public');
         $files = [];
-        foreach ($docs as $key => [$docSlug, $docId]) {
+        foreach ($docs as $key => [$docSlug, $docId, $copies]) {
             if ($docKeys !== null && !in_array($key, $docKeys, true)) {
                 continue;
             }
@@ -483,8 +501,8 @@ class UpdService
                     continue;
                 }
                 $path = $disk->path(substr($url, $pos + strlen('/app/public/')));
-                if (is_file($path) && !in_array($path, $files, true)) {
-                    $files[] = $path;
+                if (is_file($path) && !isset($files[$path])) {
+                    $files[$path] = PrintAttachmentService::copies($copies);
                 }
             }
         }

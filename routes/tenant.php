@@ -93,7 +93,6 @@ Route::get('/api/external/{token}', [App\Http\Controllers\Api\ExternalLinkContro
         PreventAccessFromCentralDomains::class,
         'tenantkeeper'
     ]);
-// Таблица привязанной сущности по внешней ссылке (без auth, scoping на сервере).
 Route::get('/api/external/{token}/module/{module}', [App\Http\Controllers\Api\ExternalLinkController::class, 'showModule'])
     ->name('external.module')
     ->middleware([
@@ -108,10 +107,6 @@ Route::get('/api/external/{token}/table/{slug}', [App\Http\Controllers\Api\Exter
         PreventAccessFromCentralDomains::class,
         'tenantkeeper'
     ]);
-// Задачи маршрута со статусами (statusColor) и данные карты для внешней ссылки
-// на деталку маршрута (без auth). Дают ту же форму, что авторизованные
-// routes/{id}/tasks и routes/{id}/map_data — нужны полям «Статусы» и
-// «Маршрут на карте» во внешней ссылке (8651).
 Route::get('/api/external/{token}/route-tasks', [App\Http\Controllers\Api\ExternalLinkController::class, 'routeTasks'])
     ->name('external.route_tasks')
     ->middleware([
@@ -415,7 +410,6 @@ Route::middleware([
 
         Route::post('files/store', [App\Http\Controllers\Api\FileController::class, 'store']);
 
-        //Route::get('entities', [App\Http\Controllers\Api\EntityController::class, 'list']);
         Route::put('entities', [App\Http\Controllers\Api\EntityController::class, 'update']);
         Route::get('entities', [App\Http\Controllers\Api\EntityController::class, 'compose_list']);
         Route::get('entities/{slug}/menu', [App\Http\Controllers\Api\EntityController::class, 'get_menu']);
@@ -457,8 +451,6 @@ Route::middleware([
         Route::get('routes/{id}/map_data', [App\Http\Controllers\Api\RouteController::class, 'map_data'])->name('routes.map_data');
         Route::get('routes/{id}/tasks', [App\Http\Controllers\Api\RouteController::class, 'tasks'])->name('routes.tasks');
         Route::put('routes/{id}/tasks', [App\Http\Controllers\Api\RouteController::class, 'update_tasks'])->name('routes.update_tasks');
-        // Создать задачу логистики из адреса «Справочника адресов» (drag&drop),
-        // адрес-источник не меняется. Body: { address_id, route_id? }.
         Route::post('routes/task-from-address', [App\Http\Controllers\Api\RouteController::class, 'task_from_address'])->name('routes.task_from_address');
         Route::post('routes/task-from-warehouse', [App\Http\Controllers\Api\RouteController::class, 'task_from_warehouse'])->name('routes.task_from_warehouse');
         Route::get('routes/{id}/task_filter', [App\Http\Controllers\Api\RouteController::class, 'task_filter'])->name('routes.task_filter');
@@ -483,7 +475,6 @@ Route::middleware([
         Route::post('saby-orders/{id}/waybill', [App\Http\Controllers\Api\SabyOrderController::class, 'waybill'])->name('saby.orders.waybill');
         Route::get('saby/settings', [App\Http\Controllers\Api\SabyConfigController::class, 'show'])->name('saby.settings');
         Route::put('saby/settings', [App\Http\Controllers\Api\SabyConfigController::class, 'update'])->name('saby.settings.update');
-        // Настройки полей вкладки «Маршрут списком» (общие на портал).
         Route::get('route-tasks-view/fields', [App\Http\Controllers\Api\RouteController::class, 'tasks_view_fields'])->name('routes.tasks_view_fields');
         Route::put('route-tasks-view/fields', [App\Http\Controllers\Api\RouteController::class, 'save_tasks_view_fields'])->name('routes.save_tasks_view_fields');
 
@@ -548,6 +539,15 @@ Route::middleware([
             ->whereIn('slug', ['production_orders', 'productions']);
         Route::get('production/{slug}/{id}/materials', [App\Http\Controllers\Api\ObjectController::class, 'production_materials'])
             ->whereIn('slug', ['production_orders', 'productions']);
+
+        Route::get('print-attachments/{slug}/{id}', [App\Http\Controllers\Api\PrintAttachmentController::class, 'index'])
+            ->whereIn('slug', App\Services\PrintAttachmentService::SLUGS);
+        Route::post('print-attachments/{slug}/{id}', [App\Http\Controllers\Api\PrintAttachmentController::class, 'store'])
+            ->whereIn('slug', App\Services\PrintAttachmentService::SLUGS);
+        Route::put('print-attachments/{slug}/{id}/{attachment}', [App\Http\Controllers\Api\PrintAttachmentController::class, 'update'])
+            ->whereIn('slug', App\Services\PrintAttachmentService::SLUGS);
+        Route::delete('print-attachments/{slug}/{id}/{attachment}', [App\Http\Controllers\Api\PrintAttachmentController::class, 'destroy'])
+            ->whereIn('slug', App\Services\PrintAttachmentService::SLUGS);
 
         Route::get('{model}/upd', [App\Http\Controllers\Api\UpdController::class, 'print'])
             ->whereIn('model', ['logistic_tasks', 'pickups'])
@@ -622,22 +622,13 @@ Route::middleware([
                 'headers' => [
                     'Authorization' => 'Bearer 0vNsh0NrXyQjo75HSNzZJIkZYn6ss1dCh8BXx9boBBQVSDaeu1UgbZYPoZcA',
                     'Accept' => 'application/json',
-                    //'Content-Type' => 'application/json',
                 ],
-                // 'form_params' => [
-                //     'username' => 'reg@opt6.ru',
-                //     'password' => 'ciSnin-6zykdu-mykkyt'
-                //     //'name' => '123',
-                //     //'sum' => 300
-                //     //'uin' => '18810550231018083263'
-                // ]
             ]);
             $res = json_decode($response->getBody(), true);
             echo 111;
             echo '<pre>';
             print_r($res);
             echo '</pre>';
-            //return $res;
         }
         catch (\GuzzleHttp\Exception\ClientException $e) {
             echo 222;
@@ -647,7 +638,6 @@ Route::middleware([
         die();
         $totalTime = microtime(true) - $startTotal;
 
-        // Вывод результатов замера времени
         echo "<pre>Анализ производительности:\n";
         echo "Общее время выполнения: " . number_format($totalTime, 4) . " сек\n\n";
         die();
@@ -710,7 +700,6 @@ Route::middleware([
                 'message' => 'Forbidden'
             ], 403);
         }
-        //api/objects/$slug/$id
         $add_params = [];
         if(isset($permissions['read_p']) && $permissions['read_p'] == 'Y')
             $add_params['user_id'] = \Auth::user()->id;
@@ -724,19 +713,15 @@ Route::middleware([
                     'message' => $detail['error']['message']
                 ], $detail['error']['code']);
         }
-        //api/objects/products?order_id=$id
         $products = array();
         if($slug == 'logistic_tasks' && $id) {
             $nrequest = new Request(['order_id' => $id]);
             $products = \App\Models\EntityObject::list('products', $nrequest);
         }
-        //api/tables/order_products
         $table = array();
         if($slug == 'logistic_tasks')
             $table = \App\Models\Table::get_order_products();
-        //api/entities
         $entities = \DB::table('data_types')->select(['slug', 'title_singular', 'title_plural', 'color'])->get();
-        //api/history/$slug/$id
         if(!$id || $request->is_copy) {
             $history_events = $history_fields = array();
         } else {
@@ -744,23 +729,19 @@ Route::middleware([
             $history_fields = \App\Models\History::list($slug, $id, null, null);
         }
 
-        //api/entities/$slug/menu
         $menu = \App\Models\Menu::get($slug);
         
 
         $totalTime = microtime(true) - $startTotal;
 
-        // Вывод результатов замера времени
         echo "<pre>Анализ производительности:\n";
         echo "Общее время выполнения: " . number_format($totalTime, 4) . " сек\n\n";
 
         
         die();
-        //return $data;
     });
 
 
-    // Route::get('auth/forgot',  App\Http\Controllers\SpaController::class)->name('password.reset');
     Route::get('auth',  App\Http\Controllers\SpaController::class)->name('password.reset');
 
     Route::get('{path}', App\Http\Controllers\SpaController::class)->where('path', '^(?!api).*$');
@@ -769,4 +750,3 @@ Route::middleware([
 
 
 
-//php artisan migrate:generate --tables="accounts,balances,balance_operations,data_rows,data_types,failed_jobs,fields, field_sections,field_values,files,histories,menus,menu_items,orders,password_resets,permissions,permission_role, personal_access_tokens,products,roles,settings,sidebar_items,translations,users,user_histories,user_roles"

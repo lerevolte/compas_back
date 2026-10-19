@@ -268,8 +268,15 @@ class ObjectRelationController extends Controller
     {
         $isReceipt = \App\Services\UpdService::isReceipt((string) $slug, (int) $id);
         $isTransfer = \App\Services\ShipmentService::isTransfer((string) $slug, (int) $id);
+        $kind = $isTransfer ? 'transfer' : ($isReceipt ? 'receipt' : 'upd');
+        $meta = [
+            'is_receipt' => $isReceipt,
+            'is_transfer' => $isTransfer,
+            'main_copies' => \App\Services\UpdService::MAIN_COPIES[$kind],
+            'attachments' => \App\Services\PrintAttachmentService::forObject((string) $slug, (int) $id),
+        ];
         if (!ObjectRelation::ready()) {
-            return response()->json(['data' => [], 'is_receipt' => $isReceipt, 'is_transfer' => $isTransfer]);
+            return response()->json(['data' => []] + $meta);
         }
 
         $depths = $this->depthsFrom($slug, (int) $id);
@@ -317,7 +324,7 @@ class ObjectRelationController extends Controller
             ];
         }
 
-        return response()->json(['data' => $docs, 'is_receipt' => $isReceipt, 'is_transfer' => $isTransfer]);
+        return response()->json(['data' => $docs] + $meta);
     }
 
     public function tree($slug, $id)
