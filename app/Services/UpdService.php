@@ -21,10 +21,16 @@ class UpdService
         if (!count($ids)) {
             return null;
         }
-        $receiptIds = array_values(array_filter($ids, fn ($id) => self::isReceipt($slug, $id)));
-        $updIds = array_values(array_diff($ids, $receiptIds));
+        $transferIds = array_values(array_filter($ids, fn ($id) => ShipmentService::isTransfer($slug, $id)));
+        $receiptIds = array_values(array_filter(array_diff($ids, $transferIds), fn ($id) => self::isReceipt($slug, $id)));
+        $updIds = array_values(array_diff($ids, $receiptIds, $transferIds));
 
-        if (!$withDocs) {
+        if (!$withDocs && count($transferIds) && !count($receiptIds) && !count($updIds)) {
+            $pdf = self::transferPdf($slug, $transferIds);
+
+            return $pdf ? $pdf->output() : null;
+        }
+        if (!$withDocs && !count($transferIds)) {
             if (!count($receiptIds)) {
                 $pdf = self::pdf($slug, $updIds);
 
@@ -40,6 +46,20 @@ class UpdService
         $parts = [];
         $temp = [];
         foreach ($ids as $id) {
+            if (in_array($id, $transferIds, true)) {
+                if ($withDocs) {
+                    foreach (self::linkedDocumentFiles($slug, [$id], $docKeys) as $file) {
+                        $parts[] = $file;
+                    }
+                }
+                $pdf = $includeUpd ? self::transferPdf($slug, [$id]) : null;
+                $path = $pdf ? self::writeTemp($pdf->output()) : null;
+                if ($path !== null) {
+                    $temp[] = $path;
+                    $parts[] = $path;
+                }
+                continue;
+            }
             if (in_array($id, $receiptIds, true)) {
                 $pdf = self::receiptPdf($slug, [$id]);
                 $path = $pdf ? self::writeTemp($pdf->output()) : null;
@@ -116,6 +136,65 @@ class UpdService
 
         return \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.goods_receipt', ['documents' => $documents])
             ->setPaper('a4', 'portrait');
+    }
+
+    public static function transferPdf(string $slug, array $ids)
+    {
+        if ($slug !== 'logistic_tasks' || !Schema::hasTable($slug)) {
+            return null;
+        }
+        $documents = [];
+        foreach (array_values(array_filter(array_map('intval', $ids))) as $id) {
+            $document = self::buildTransfer($slug, $id);
+            if ($document) {
+                $documents[] = $document;
+            }
+        }
+        if (!count($documents)) {
+            return null;
+        }
+
+        return \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.transfer', ['documents' => $documents])
+            ->setPaper('a4', 'portrait');
+    }
+
+    private static function buildTransfer(string $slug, int $id): ?array
+    {
+        $object = DB::table($slug)->where('id', $id)->first();
+        if (!$object) {
+            return null;
+        }
+        $date = $object->delivery_date ? strtotime($object->delivery_date) : ($object->created_at ? strtotime($object->created_at) : time());
+        $order = self::orderNumber($slug, $id);
+        $products = json_decode((string) ($object->products ?? ''), true);
+        $products = is_array($products) ? array_values(array_filter($products, 'is_array')) : [];
+        $rows = [];
+        $num = 0;
+        foreach ($products as $product) {
+            $count = (float) ($product['count'] ?? 0);
+            if ($count <= 0) {
+                continue;
+            }
+            $productId = (int) ($product['id'] ?? 0);
+            $rows[] = [
+                'num' => ++$num,
+                'code' => $productId ?: '--',
+                'name' => ShipmentService::plainName($product['name'] ?? ''),
+                'count' => rtrim(rtrim(number_format($count, 3, ',', ''), '0'), ','),
+                'unit' => trim((string) ($product['unit'] ?? ($product['measure'] ?? ''))) ?: 'шт',
+                'order' => $order === '—' ? '' : $order,
+            ];
+        }
+
+        return [
+            'number' => (string) $object->id,
+            'date' => date('j', $date) . ' ' . self::MONTHS[(int) date('n', $date)] . ' ' . date('Y', $date) . ' г.',
+            'sender' => StorehouseService::name(StorehouseService::valueOf($slug, $id, StorehouseService::WRITE_OFF)),
+            'receiver' => StorehouseService::name(StorehouseService::valueOf($slug, $id, StorehouseService::RECEIPT)),
+            'order_number' => self::orderLabel($slug, $id),
+            'rows' => $rows,
+            'qr' => self::qrDataUri($slug, $id),
+        ];
     }
 
     private static function buildReceipt(string $slug, int $id): ?array
@@ -305,13 +384,7 @@ class UpdService
                 $parts[] = $key . '=' . $value;
             }
         }
-        try {
-            $png = (new \TCPDF2DBarcode(implode('|', $parts), 'QRCODE,M'))->getBarcodePngData(6, 6, [0, 0, 0]);
-        } catch (\Throwable $e) {
-            return null;
-        }
-
-        return is_string($png) && $png !== '' ? 'data:image/png;base64,' . base64_encode($png) : null;
+        return self::qrImage(implode('|', $parts));
     }
 
     private static function fallbackUpd(string $slug, array $ids, array $receiptIds = []): ?string
@@ -614,20 +687,60 @@ class UpdService
 
     private static function qrDataUri(string $slug, int $id): ?string
     {
-        if (!class_exists(\TCPDF2DBarcode::class)) {
-            return null;
-        }
         $tenant = tenant('id');
         $host = app()->runningInConsole() ? null : request()->getHost();
         $origin = $host ? 'https://' . $host : ($tenant ? 'https://' . $tenant . '.compas.pro' : 'https://compas.pro');
-        $url = $origin . '/objects/' . $slug . '/' . $id . '?attach_employee=1';
+
+        return self::qrImage($origin . '/objects/' . $slug . '/' . $id . '?attach_employee=1');
+    }
+
+    public static function qrImage(string $data): ?string
+    {
+        if (!class_exists(\TCPDF2DBarcode::class)) {
+            return null;
+        }
         try {
-            $png = (new \TCPDF2DBarcode($url, 'QRCODE,M'))->getBarcodePngData(6, 6, [0, 0, 0]);
+            $png = (new \TCPDF2DBarcode($data, 'QRCODE,Q'))->getBarcodePngData(6, 6, [0, 0, 0]);
         } catch (\Throwable $e) {
             return null;
         }
+        if (!is_string($png) || $png === '') {
+            return null;
+        }
 
-        return is_string($png) && $png !== '' ? 'data:image/png;base64,' . base64_encode($png) : null;
+        return 'data:image/png;base64,' . base64_encode(self::withLogo($png));
+    }
+
+    private static function withLogo(string $png): string
+    {
+        $path = resource_path('pdf/qr_logo.png');
+        if (!function_exists('imagecreatefromstring') || !is_file($path)) {
+            return $png;
+        }
+        try {
+            $qr = @imagecreatefromstring($png);
+            $logo = @imagecreatefrompng($path);
+            if (!$qr || !$logo) {
+                return $png;
+            }
+            $width = imagesx($qr);
+            $height = imagesy($qr);
+            $canvas = imagecreatetruecolor($width, $height);
+            imagefill($canvas, 0, 0, imagecolorallocate($canvas, 255, 255, 255));
+            imagecopy($canvas, $qr, 0, 0, 0, 0, $width, $height);
+            $size = (int) round(min($width, $height) * 0.20);
+            imagecopyresampled($canvas, $logo, (int) (($width - $size) / 2), (int) (($height - $size) / 2), 0, 0, $size, $size, imagesx($logo), imagesy($logo));
+            ob_start();
+            imagepng($canvas);
+            $result = (string) ob_get_clean();
+            imagedestroy($canvas);
+            imagedestroy($qr);
+            imagedestroy($logo);
+
+            return $result !== '' ? $result : $png;
+        } catch (\Throwable $e) {
+            return $png;
+        }
     }
 
     private static function dealShipmentCompanyId(string $slug, int $id): ?int
