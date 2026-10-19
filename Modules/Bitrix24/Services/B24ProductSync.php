@@ -845,6 +845,16 @@ class B24ProductSync
         return (string) $raw;
     }
 
+    private function findBy1c(array $row): ?Product
+    {
+        $xmlId = trim((string) ($row['XML_ID'] ?? ''));
+        if ($xmlId === '' || !$this->hasColumn('id_1c')) {
+            return null;
+        }
+
+        return Product::withTrashed()->where('id_1c', $xmlId)->orderByRaw('deleted_at IS NULL DESC')->orderBy('id')->first();
+    }
+
     public function upsertProductFromB24(array $row): Product
     {
         return self::withProductLock($row['ID'] ?? null, $row['NAME'] ?? '', fn () => $this->upsertProductLocked($row));
@@ -857,12 +867,17 @@ class B24ProductSync
         self::$muted = true;
         try {
             $name = trim((string) ($row['NAME'] ?? ''));
-            $model = self::findExisting($b24Id, $name);
+            $model = self::findExisting($b24Id, '') ?? $this->findBy1c($row) ?? self::findExisting($b24Id, $name);
             if ($model && (string) ($model->id_b24 ?? '') !== '' && (string) $model->id_b24 !== $b24Id) {
-                Log::channel('bitrix24')->info('product-sync: товар с тем же названием уже связан с другим товаром Bitrix24, новый не создаётся', [
-                    'product_id' => $model->id, 'linked_b24_id' => $model->id_b24, 'incoming_b24_id' => $b24Id,
+                if (!$model->trashed()) {
+                    Log::channel('bitrix24')->warning('product-sync: товар уже связан с другим товаром Bitrix24, новый не создаётся', [
+                        'product_id' => $model->id, 'linked_b24_id' => $model->id_b24, 'incoming_b24_id' => $b24Id,
+                    ]);
+                    return $model;
+                }
+                Log::channel('bitrix24')->warning('product-sync: удалённый товар восстановлен и перепривязан к новому товару Bitrix24', [
+                    'product_id' => $model->id, 'old_b24_id' => $model->id_b24, 'incoming_b24_id' => $b24Id,
                 ]);
-                return $model;
             }
             if (!$model) {
                 $model = new Product();
