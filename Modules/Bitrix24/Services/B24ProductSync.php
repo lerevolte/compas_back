@@ -855,6 +855,13 @@ class B24ProductSync
         return Product::withTrashed()->where('id_1c', $xmlId)->orderByRaw('deleted_at IS NULL DESC')->orderBy('id')->first();
     }
 
+    private function b24ProductGone(string $b24Id): bool
+    {
+        $resp = $this->b24('crm.product.get', ['id' => $b24Id]);
+
+        return empty($resp['result']) && stripos((string) ($resp['error_description'] ?? ''), 'not found') !== false;
+    }
+
     public function upsertProductFromB24(array $row): Product
     {
         return self::withProductLock($row['ID'] ?? null, $row['NAME'] ?? '', fn () => $this->upsertProductLocked($row));
@@ -869,13 +876,13 @@ class B24ProductSync
             $name = trim((string) ($row['NAME'] ?? ''));
             $model = self::findExisting($b24Id, '') ?? $this->findBy1c($row) ?? self::findExisting($b24Id, $name);
             if ($model && (string) ($model->id_b24 ?? '') !== '' && (string) $model->id_b24 !== $b24Id) {
-                if (!$model->trashed()) {
+                if (!$model->trashed() && !$this->b24ProductGone((string) $model->id_b24)) {
                     Log::channel('bitrix24')->warning('product-sync: товар уже связан с другим товаром Bitrix24, новый не создаётся', [
                         'product_id' => $model->id, 'linked_b24_id' => $model->id_b24, 'incoming_b24_id' => $b24Id,
                     ]);
                     return $model;
                 }
-                Log::channel('bitrix24')->warning('product-sync: удалённый товар восстановлен и перепривязан к новому товару Bitrix24', [
+                Log::channel('bitrix24')->warning('product-sync: товар перепривязан к новому товару Bitrix24, прежний удалён в Bitrix24', [
                     'product_id' => $model->id, 'old_b24_id' => $model->id_b24, 'incoming_b24_id' => $b24Id,
                 ]);
             }
