@@ -60,26 +60,44 @@ class ExpenseInvoice extends Model
         });
     }
 
-    public static function inheritShipmentCompany(string $sourceSlug, int $sourceId, int $id): void
+    public const INHERITED_FIELDS = ['shipment_company_id' => false, 'company_id' => true, 'contact_id' => true];
+
+    public static function inheritFromSource(string $sourceSlug, int $sourceId, int $id, bool $dryRun = false): array
     {
-        if (!\App\Services\ShipmentService::isSource($sourceSlug)
-            || !\Schema::hasColumn('expense_invoices', 'shipment_company_id')
-            || !\Schema::hasColumn($sourceSlug, 'shipment_company_id')) {
-            return;
+        if (!\App\Services\ShipmentService::isSource($sourceSlug)) {
+            return [];
         }
         $invoice = self::find($id);
-        if (!$invoice || \App\Services\RelationFieldsService::singleValue($invoice->shipment_company_id)) {
-            return;
+        $source = $invoice ? \DB::table($sourceSlug)->where('id', $sourceId)->first() : null;
+        if (!$source) {
+            return [];
         }
-        $companyId = \App\Services\RelationFieldsService::singleValue(
-            \DB::table($sourceSlug)->where('id', $sourceId)->value('shipment_company_id')
-        );
-        if (!$companyId) {
-            return;
+        $history = [];
+        $values = [];
+        foreach (self::INHERITED_FIELDS as $field => $plural) {
+            if (!property_exists($source, $field) || !\Schema::hasColumn('expense_invoices', $field)) {
+                continue;
+            }
+            if (count(\App\Services\RelationFieldsService::ids($invoice->{$field}))) {
+                continue;
+            }
+            $ids = \App\Services\RelationFieldsService::ids($source->{$field});
+            if (!count($ids)) {
+                continue;
+            }
+            $history[$field] = $plural ? $ids : $ids[0];
+            $values[$field] = $plural ? json_encode($ids) : $ids[0];
         }
-        History::saveForObject('expense_invoices', [['id' => $invoice->id, 'shipment_company_id' => $companyId]], true, [], [], true);
-        $invoice->shipment_company_id = $companyId;
+        if (!count($values) || $dryRun) {
+            return array_keys($values);
+        }
+        History::saveForObject('expense_invoices', [['id' => $invoice->id] + $history], true, [], [], true);
+        foreach ($values as $field => $value) {
+            $invoice->{$field} = $value;
+        }
         $invoice->save();
+
+        return array_keys($values);
     }
 
     public function regeneratePdf(): bool
