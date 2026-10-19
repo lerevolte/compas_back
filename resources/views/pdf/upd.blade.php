@@ -12,7 +12,7 @@
         .badge { border: 1px solid #000; padding: 2px 3px; font-weight: bold; text-align: center; font-size: 5.6pt; margin-top: 3px; }
         .status { border: 1px solid #000; width: 14px; height: 11px; display: inline-block; text-align: center; font-weight: bold; font-size: 5.4pt; }
         .legend { font-size: 4.8pt; color: #333; line-height: 1.15; }
-        .qr { display: block; width: 82%; height: auto; margin: 0 auto; }
+        .qr { display: block; width: 82%; height: auto; margin-left: 9%; }
         .order-no { font-weight: bold; font-size: 7.4pt; text-align: center; margin-bottom: 2px; }
         .header-note { text-align: right; font-size: 5.4pt; }
         .head td { vertical-align: top; padding: 1px 3px; }
