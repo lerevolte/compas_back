@@ -201,6 +201,7 @@ class OneCSupplierOrderService
                 'vat_included' => $parts['included'],
                 'vat_sum' => self::money($parts['vat']),
                 'sum_without_vat' => self::money($parts['net']),
+                'total' => self::money($parts['gross']),
             ];
         }
         $state = self::currentState($row);
