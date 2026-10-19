@@ -46,6 +46,12 @@ class SupplierOrder extends Model
             if (\App\Services\OneC\OneCSupplierOrderService::touched($model)) {
                 \App\Services\OneC\OneCSupplierOrderService::markChanged((int) $model->id);
             }
+            if (!$model->wasRecentlyCreated && in_array(\App\Services\StorehouseService::RECEIPT, $changes, true)) {
+                try {
+                    \App\Services\StorehouseService::cascadeFromParent($model->getTable(), (int) $model->id, \App\Services\StorehouseService::RECEIPT);
+                } catch (\Throwable $e) {
+                }
+            }
             if ((in_array('company_id', $changes, true) || $model->wasRecentlyCreated) && $model->company_id) {
                 try {
                     Company::addType($model->company_id, self::COMPANY_TYPE);

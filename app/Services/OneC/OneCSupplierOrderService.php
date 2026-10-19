@@ -78,7 +78,7 @@ class OneCSupplierOrderService
                         continue;
                     }
                     $table = $row->relation_table ?: (json_decode((string) $row->details, true)['table'] ?? null);
-                    if (!$result['storehouse'] && $row->type === 'relation' && $table === 'storehouses') {
+                    if ($row->type === 'relation' && $table === 'storehouses' && (!$result['storehouse'] || $row->field === \App\Services\StorehouseService::RECEIPT)) {
                         $result['storehouse'] = $row->field;
                     }
                     if (!$result['contract'] && ($row->field === self::CONTRACT_FIELD || mb_strtolower(trim((string) $row->title)) === mb_strtolower(self::CONTRACT_TITLE))) {
@@ -396,6 +396,24 @@ class OneCSupplierOrderService
                 $sb->table(self::SLUG, fn ($table) => $table->dropColumn($row->field));
             }
             $log('удалено поле «' . $row->title . '»');
+        }
+        $receipt = \App\Services\StorehouseService::RECEIPT;
+        if ($sb->hasTable('storehouses') && !$db->table('data_rows')->where('data_type_id', $typeId)->where('field', $receipt)->exists()) {
+            if (!$sb->hasColumn(self::SLUG, $receipt)) {
+                $db->statement('ALTER TABLE `' . self::SLUG . '` ADD COLUMN `' . $receipt . '` TEXT NULL');
+            }
+            $db->table('data_rows')->insert(array_merge($base(), [
+                'field' => $receipt,
+                'type' => 'relation',
+                'title' => \App\Services\StorehouseService::TITLES[$receipt],
+                'details' => '{"table":"storehouses"}',
+                'relation_table' => 'storehouses',
+                'is_link' => 1,
+                'is_plural' => 0,
+                'visible_always' => 1,
+                'sort' => $nextSort(),
+            ]));
+            $log('создано поле «' . \App\Services\StorehouseService::TITLES[$receipt] . '»');
         }
         self::forget();
         try {

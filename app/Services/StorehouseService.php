@@ -24,6 +24,7 @@ class StorehouseService
         'expense_invoices' => [self::WRITE_OFF],
         'product_returns' => [self::RECEIPT],
         'receipt_invoices' => [self::RECEIPT],
+        'supplier_orders' => [self::RECEIPT],
     ];
 
     public const CHILDREN = [

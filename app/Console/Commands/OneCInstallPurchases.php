@@ -11,7 +11,7 @@ class OneCInstallPurchases extends Command
 {
     protected $signature = 'onec:install-purchases {target=avixo : <tenant_id>} {--since= : выгружать документы, созданные с этой даты (по умолчанию — с момента первой установки)}';
 
-    protected $description = 'Обмен с 1С по закупкам: выгрузка заказов поставщикам (поля «Состояние», «Договор», «Склад») и приходных накладных';
+    protected $description = 'Обмен с 1С по закупкам: выгрузка заказов поставщикам (поля «Состояние», «Склад прихода») и приходных накладных';
 
     public const SLUGS = [OneCSupplierOrderService::SLUG, 'receipt_invoices'];
 
