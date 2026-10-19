@@ -251,6 +251,7 @@ class StorehouseService
         } catch (\Throwable $e) {
         }
         DB::table($slug)->where('id', $id)->update([$field => $value]);
+        \App\Services\OneC\OneCExportService::markChangedById($slug, $id);
         try {
             $class = DB::table('data_types')->where('slug', $slug)->value('model_name');
             $object = $class && class_exists($class) ? $class::find($id) : null;
