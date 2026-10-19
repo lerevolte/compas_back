@@ -15,6 +15,52 @@ class SaleDocumentService
 {
     public const NOT_PRINTED = ['payment_invoices'];
 
+    public const INHERITED_FIELDS = ['shipment_company_id' => false, 'company_id' => true, 'contact_id' => true];
+
+    public const INHERIT_MODELS = [
+        ShipmentService::DOCUMENT => \App\Models\ExpenseInvoice::class,
+        ShipmentService::RETURN_DOC => \App\Models\ProductReturn::class,
+    ];
+
+    public static function inheritFromSource(string $targetSlug, string $sourceSlug, int $sourceId, int $id, bool $dryRun = false): array
+    {
+        $class = self::INHERIT_MODELS[$targetSlug] ?? null;
+        if (!$class || !ShipmentService::isSource($sourceSlug)) {
+            return [];
+        }
+        $document = $class::find($id);
+        $source = $document ? DB::table($sourceSlug)->where('id', $sourceId)->first() : null;
+        if (!$source) {
+            return [];
+        }
+        $history = [];
+        $values = [];
+        foreach (self::INHERITED_FIELDS as $field => $plural) {
+            if (!property_exists($source, $field) || !Schema::hasColumn($targetSlug, $field)) {
+                continue;
+            }
+            if (count(RelationFieldsService::ids($document->{$field}))) {
+                continue;
+            }
+            $ids = RelationFieldsService::ids($source->{$field});
+            if (!count($ids)) {
+                continue;
+            }
+            $history[$field] = $plural ? $ids : $ids[0];
+            $values[$field] = $plural ? json_encode($ids) : $ids[0];
+        }
+        if (!count($values) || $dryRun) {
+            return array_keys($values);
+        }
+        \App\Models\History::saveForObject($targetSlug, [['id' => $document->id] + $history], true, [], [], true);
+        foreach ($values as $field => $value) {
+            $document->{$field} = $value;
+        }
+        $document->save();
+
+        return array_keys($values);
+    }
+
     public const TARGETS = [
         'payment_invoices' => [
             'model' => \App\Models\PaymentInvoice::class,

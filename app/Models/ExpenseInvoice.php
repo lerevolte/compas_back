@@ -60,46 +60,6 @@ class ExpenseInvoice extends Model
         });
     }
 
-    public const INHERITED_FIELDS = ['shipment_company_id' => false, 'company_id' => true, 'contact_id' => true];
-
-    public static function inheritFromSource(string $sourceSlug, int $sourceId, int $id, bool $dryRun = false): array
-    {
-        if (!\App\Services\ShipmentService::isSource($sourceSlug)) {
-            return [];
-        }
-        $invoice = self::find($id);
-        $source = $invoice ? \DB::table($sourceSlug)->where('id', $sourceId)->first() : null;
-        if (!$source) {
-            return [];
-        }
-        $history = [];
-        $values = [];
-        foreach (self::INHERITED_FIELDS as $field => $plural) {
-            if (!property_exists($source, $field) || !\Schema::hasColumn('expense_invoices', $field)) {
-                continue;
-            }
-            if (count(\App\Services\RelationFieldsService::ids($invoice->{$field}))) {
-                continue;
-            }
-            $ids = \App\Services\RelationFieldsService::ids($source->{$field});
-            if (!count($ids)) {
-                continue;
-            }
-            $history[$field] = $plural ? $ids : $ids[0];
-            $values[$field] = $plural ? json_encode($ids) : $ids[0];
-        }
-        if (!count($values) || $dryRun) {
-            return array_keys($values);
-        }
-        History::saveForObject('expense_invoices', [['id' => $invoice->id] + $history], true, [], [], true);
-        foreach ($values as $field => $value) {
-            $invoice->{$field} = $value;
-        }
-        $invoice->save();
-
-        return array_keys($values);
-    }
-
     public function regeneratePdf(): bool
     {
         return \App\Services\SaleDocumentService::regenerate('expense_invoices', (int) $this->id);

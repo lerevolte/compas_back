@@ -231,8 +231,8 @@ class ObjectRelation extends Model
                 \App\Services\ShipmentService::recalcForSource($targetSlug, $targetId);
                 \App\Services\ShipmentService::recalcDealShipped($sourceId);
             }
+            \App\Services\SaleDocumentService::inheritFromSource($targetSlug, $sourceSlug, $sourceId, $targetId);
             if ($targetSlug === \App\Services\ShipmentService::DOCUMENT) {
-                ExpenseInvoice::inheritFromSource($sourceSlug, $sourceId, $targetId);
                 \App\Services\ShipmentService::recalcForDocument($targetId);
             }
             if ($targetSlug === \App\Services\ShipmentService::RETURN_DOC) {
