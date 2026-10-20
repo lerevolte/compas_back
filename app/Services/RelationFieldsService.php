@@ -39,10 +39,10 @@ class RelationFieldsService
         'deals' => ['supplier_orders', 'receipt_invoices', 'product_returns', 'addresses', 'warehouses'],
         'supplier_orders' => ['deals', 'pickups', 'expense_invoices', 'product_returns'],
         'logistic_tasks' => ['pickups', 'product_returns'],
-        'pickups' => ['supplier_orders', 'receipt_invoices', 'product_returns', 'addresses', 'warehouses'],
+        'pickups' => ['logistic_tasks', 'supplier_orders', 'receipt_invoices', 'product_returns', 'addresses', 'warehouses'],
         'payment_invoices' => ['supplier_orders', 'receipt_invoices', 'product_returns', 'addresses', 'warehouses'],
         'expense_invoices' => ['receipt_invoices', 'product_returns', 'addresses'],
-        'receipt_invoices' => ['product_returns'],
+        'receipt_invoices' => ['deals', 'pickups', 'payment_invoices', 'expense_invoices', 'product_returns', 'addresses', 'warehouses'],
         'addresses' => ['product_returns'],
         'warehouses' => ['product_returns'],
     ];

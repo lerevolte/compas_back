@@ -683,6 +683,7 @@ class Table
     public const SHIPPED_TITLE = 'Фактическое кол-во';
     public const INVOICE_LOCKED_PRODUCT_KEYS = ['product_price', 'product_purchase_price', 'product_sum', 'product_nds', 'product_nds_included'];
     public const SALE_PRICE_TITLE = 'Цена продажи';
+    public const AVG_SALE_PRICE_TITLE = 'Ср. цена продажи';
     public const PURCHASE_PRICE_TITLE = 'Цена закупки';
     public const PURCHASE_PRICE_KEY = 'product_purchase_price';
 
@@ -1288,6 +1289,8 @@ class Table
             }
             if($key == 'product_price')
                 $table_columns[$i]['read_only'] = $isSupplierOrder ? 1 : 0;
+            if($key == 'product_price' && $isSupplierOrder && empty($column['is_another_title']))
+                $table_columns[$i]['title'] = self::AVG_SALE_PRICE_TITLE;
             if($key == 'product_sum')
                 $table_columns[$i]['read_only'] = 0;
             if(in_array($key, ['product_nds_sum', 'product_total'], true)) {

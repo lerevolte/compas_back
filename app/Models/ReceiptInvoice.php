@@ -43,6 +43,9 @@ class ReceiptInvoice extends Model
             if (array_key_exists('products', $model->getChanges())) {
                 self::recalcParentShipments((int) $model->id);
             }
+            if ($model->wasRecentlyCreated || array_key_exists('products', $model->getChanges())) {
+                \App\Services\ProductPriceService::recalcFromChange($model->products, $model->wasRecentlyCreated ? null : $model->getOriginal('products'), 'purchase_price');
+            }
             if (\App\Services\OneC\OneCExportService::touched($model)) {
                 \App\Services\OneC\OneCExportService::markChanged($model);
             }
@@ -50,10 +53,12 @@ class ReceiptInvoice extends Model
 
         static::deleted(function ($model) {
             self::recalcParentShipments((int) $model->id);
+            \App\Services\ProductPriceService::recalcFromChange($model->products, null, 'purchase_price');
         });
 
         static::restored(function ($model) {
             self::recalcParentShipments((int) $model->id);
+            \App\Services\ProductPriceService::recalcFromChange($model->products, null, 'purchase_price');
         });
     }
 

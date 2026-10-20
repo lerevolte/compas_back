@@ -86,7 +86,6 @@ class Pickup extends Model
                     \App\Services\ShipmentService::recalcForSource('pickups', (int) $model->id);
                 } catch (\Throwable $e) {
                 }
-                \App\Services\ProductPriceService::recalcFromChange($model->products, $model->wasRecentlyCreated ? null : $model->getOriginal('products'));
             }
         });
     }

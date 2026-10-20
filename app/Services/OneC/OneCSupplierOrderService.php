@@ -18,6 +18,7 @@ class OneCSupplierOrderService
     public const CONTRACT_FIELD = 'contract';
     public const CONTRACT_TITLE = 'Договор';
     public const STOREHOUSE_FIELD = 'storehouse_id';
+    public const FILES_FIELD = 'photo';
     public const STATES = [
         1 => ['value' => 'В работе', 'color' => '#2F8CFF'],
         2 => ['value' => 'Планируемая закупка', 'color' => '#8E7CC3'],
@@ -68,7 +69,7 @@ class OneCSupplierOrderService
         if (array_key_exists($key, self::$fields)) {
             return self::$fields[$key];
         }
-        $result = ['contract' => null, 'storehouse' => null, 'state' => null];
+        $result = ['contract' => null, 'storehouse' => null, 'state' => null, 'files' => null];
         try {
             $typeId = DB::table('data_types')->where('slug', self::SLUG)->value('id');
             if ($typeId) {
@@ -87,6 +88,9 @@ class OneCSupplierOrderService
                     if ($row->field === self::STATE_FIELD) {
                         $result['state'] = $row->field;
                     }
+                    if ($row->type === 'file' && (!$result['files'] || $row->field === self::FILES_FIELD)) {
+                        $result['files'] = $row->field;
+                    }
                 }
             }
         } catch (\Throwable $e) {
@@ -99,7 +103,7 @@ class OneCSupplierOrderService
     {
         $columns = self::fieldColumns();
 
-        return array_values(array_filter(array_merge(self::RESYNC_FIELDS, [$columns['contract'], $columns['storehouse']])));
+        return array_values(array_filter(array_merge(self::RESYNC_FIELDS, [$columns['contract'], $columns['storehouse'], $columns['files']])));
     }
 
     public static function touched($model): bool
@@ -223,6 +227,7 @@ class OneCSupplierOrderService
             'receipt_date' => self::date($row->date ?? null),
             'storehouse' => self::storehouse($columns['storehouse'] ? (self::ids($row->{$columns['storehouse']} ?? null)[0] ?? null) : null),
             'state' => $state,
+            'files' => $columns['files'] ? self::files($row->{$columns['files']} ?? null) : [],
             'sum' => self::money(array_sum(array_map(fn ($item) => (float) $item['sum'], $items))),
             'items' => $items,
         ];
@@ -548,6 +553,50 @@ class OneCSupplierOrderService
         $value = round($value, 2);
 
         return $value == (int) $value ? (int) $value : $value;
+    }
+
+    private static function files($raw): array
+    {
+        $entries = is_array($raw) ? $raw : json_decode((string) $raw, true);
+        if (!is_array($entries)) {
+            $entries = trim((string) $raw) !== '' ? [trim((string) $raw)] : [];
+        } elseif (isset($entries['file']) || isset($entries['path']) || isset($entries['external_link'])) {
+            $entries = [$entries];
+        }
+        $files = [];
+        foreach ($entries as $entry) {
+            $name = null;
+            if (is_array($entry)) {
+                $link = $entry['file'] ?? $entry['external_link'] ?? $entry['path'] ?? $entry['url'] ?? null;
+                $name = isset($entry['name']) ? (string) $entry['name'] : null;
+            } else {
+                $link = $entry;
+            }
+            $url = self::absoluteUrl(trim((string) $link));
+            if (!$url) {
+                continue;
+            }
+            $files[] = ['name' => $name ?: rawurldecode(basename((string) parse_url($url, PHP_URL_PATH))), 'url' => $url];
+        }
+
+        return $files;
+    }
+
+    private static function absoluteUrl(string $link): ?string
+    {
+        if ($link === '') {
+            return null;
+        }
+        if (preg_match('~^https?://~i', $link)) {
+            return $link;
+        }
+        $tenant = function_exists('tenant') ? (string) tenant('id') : '';
+        $host = 'https://' . ($tenant !== '' ? $tenant . '.' : '') . 'compas.pro';
+        if (str_starts_with($link, '/')) {
+            return $host . $link;
+        }
+
+        return $host . '/storage/' . ($tenant !== '' ? 'tenant' . $tenant . '/' : '') . 'app/public/' . ltrim($link, '/');
     }
 
     private static function ids($raw): array

@@ -121,8 +121,9 @@ class Deal extends Model
             $price = isset($product['price']) ? (float) $product['price'] : 0;
             $total += $count * $price;
         }
-        $formatted = $total > 0 ? rtrim(rtrim(number_format($total, 2, '.', ''), '0'), '.') : (count($products) ? '0' : null);
-        if ($formatted === null || (string) $this->delivery_price === $formatted) {
+        $current = (string) $this->delivery_price;
+        $formatted = $total > 0 ? rtrim(rtrim(number_format($total, 2, '.', ''), '0'), '.') : (count($products) || ($current !== '' && (float) $current != 0) ? '0' : null);
+        if ($formatted === null || $current === $formatted) {
             return;
         }
         try {

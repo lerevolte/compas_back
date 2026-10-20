@@ -746,7 +746,7 @@ class UpdService
             $canvas = imagecreatetruecolor($width, $height);
             imagefill($canvas, 0, 0, imagecolorallocate($canvas, 255, 255, 255));
             imagecopy($canvas, $qr, 0, 0, 0, 0, $width, $height);
-            $size = (int) round(min($width, $height) * 0.20);
+            $size = (int) round(min($width, $height) * 0.30);
             imagecopyresampled($canvas, $logo, (int) (($width - $size) / 2), (int) (($height - $size) / 2), 0, 0, $size, $size, imagesx($logo), imagesy($logo));
             ob_start();
             imagepng($canvas);

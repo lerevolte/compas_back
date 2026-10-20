@@ -36,7 +36,7 @@ class RecalcServicesPrice extends Command
                         }
                         $total = 0;
                         $changed = 0;
-                        $class::whereNotNull('products')->where('products', '!=', '')->where('products', '!=', '[]')
+                        $class::whereNotNull('products')->where('products', '!=', '')
                             ->chunkById(200, function ($rows) use (&$total, &$changed) {
                                 foreach ($rows as $row) {
                                     $total++;

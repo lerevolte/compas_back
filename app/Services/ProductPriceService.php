@@ -7,8 +7,8 @@ use Illuminate\Support\Facades\Schema;
 
 class ProductPriceService
 {
-    public const DOCUMENT_SLUGS = ['logistic_tasks', 'pickups'];
-    public const PURCHASE_DOCUMENT_SLUGS = ['supplier_orders'];
+    public const DOCUMENT_SLUGS = ['expense_invoices'];
+    public const PURCHASE_DOCUMENT_SLUGS = ['receipt_invoices'];
     public const KINDS = [
         'price' => ['slugs' => self::DOCUMENT_SLUGS, 'line_key' => 'price'],
         'purchase_price' => ['slugs' => self::PURCHASE_DOCUMENT_SLUGS, 'line_key' => 'purchase_price'],
@@ -95,7 +95,7 @@ class ProductPriceService
                 $query->whereNull('deleted_at');
             }
             foreach ($query->get(['id', 'created_at', 'products']) as $row) {
-                $price = self::linePrice($row->products, $productId, $kind['line_key']);
+                $price = self::linePrice($row->products, $productId, $kind['line_key'], $slug);
                 if ($price !== null) {
                     $entries[] = ['at' => (string) $row->created_at, 'price' => $price];
                 }
@@ -110,14 +110,15 @@ class ProductPriceService
         return array_sum(array_column($entries, 'price')) / count($entries);
     }
 
-    private static function linePrice($raw, int $productId, string $key = 'price'): ?float
+    private static function linePrice($raw, int $productId, string $key = 'price', ?string $slug = null): ?float
     {
         $prices = [];
         foreach (ShipmentService::decode($raw) as $product) {
             if (!is_array($product) || (int) ($product['id'] ?? 0) !== $productId) {
                 continue;
             }
-            $price = $product[$key] ?? null;
+            $lineKey = $slug === ShipmentService::RECEIPT_DOC ? ShipmentService::linePriceKey($slug, $product) : $key;
+            $price = $product[$lineKey] ?? null;
             if ($price === null || $price === '' || !is_numeric($price)) {
                 continue;
             }

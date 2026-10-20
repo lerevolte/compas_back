@@ -605,6 +605,9 @@ SQL);
             if ($since) {
                 $query->where('d.created_at', '>=', $since);
             }
+            if ($slug === ShipmentService::RECEIPT_DOC) {
+                self::whereSupplierLinked($query, $slug);
+            }
             $columns = ['d.*', 's.onec_ref as onec_export_ref'];
             if (self::hasChangedColumn()) {
                 $columns[] = 's.' . self::CHANGED_FIELD . ' as onec_export_changed_at';
@@ -622,6 +625,42 @@ SQL);
         self::markSent($documents);
 
         return $documents;
+    }
+
+    private static function whereSupplierLinked($query, string $slug): void
+    {
+        $hasRelations = Schema::hasTable('object_relations');
+        $hasColumn = Schema::hasColumn($slug, 'related_supplier_orders');
+        $query->where(function ($q) use ($slug, $hasRelations, $hasColumn) {
+            $q->whereRaw('1 = 0');
+            if ($hasRelations) {
+                $q->orWhereExists(function ($sub) use ($slug) {
+                    $sub->select(DB::raw(1))
+                        ->from('object_relations as r')
+                        ->where('r.target_slug', $slug)
+                        ->whereColumn('r.target_id', 'd.id')
+                        ->where(function ($w) {
+                            $w->where('r.source_slug', ShipmentService::SUPPLIER)
+                                ->orWhere(function ($t) {
+                                    $t->whereIn('r.source_slug', ShipmentService::SOURCES)
+                                        ->whereExists(function ($up) {
+                                            $up->select(DB::raw(1))
+                                                ->from('object_relations as p')
+                                                ->where('p.source_slug', ShipmentService::SUPPLIER)
+                                                ->whereColumn('p.target_slug', 'r.source_slug')
+                                                ->whereColumn('p.target_id', 'r.source_id');
+                                        });
+                                });
+                        });
+                });
+            }
+            if ($hasColumn) {
+                $q->orWhere(function ($c) {
+                    $c->whereNotNull('d.related_supplier_orders')
+                        ->whereNotIn('d.related_supplier_orders', ['', '[]', 'null']);
+                });
+            }
+        });
     }
 
     private static function markSent(array $documents): void

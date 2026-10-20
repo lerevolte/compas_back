@@ -81,7 +81,6 @@ class SupplierOrder extends Model
                     $model->wasRecentlyCreated ? null : $model->getOriginal('products'),
                     $model->products
                 );
-                \App\Services\ProductPriceService::recalcFromChange($model->products, $model->wasRecentlyCreated ? null : $model->getOriginal('products'), 'purchase_price');
             }
         });
 
@@ -89,14 +88,12 @@ class SupplierOrder extends Model
             \App\Services\OneC\OneCSupplierOrderService::markChanged((int) $model->id);
             self::syncProductLinks((int) $model->id, $model->products, null);
             \App\Services\ReverseLinkService::sync('companies', self::COMPANY_FIELD, (int) $model->id, \App\Services\ReverseLinkService::ids($model->company_id), []);
-            \App\Services\ProductPriceService::recalcFromChange($model->products, null, 'purchase_price');
         });
 
         static::restored(function ($model) {
             \App\Services\OneC\OneCSupplierOrderService::markChanged((int) $model->id);
             self::syncProductLinks((int) $model->id, null, $model->products);
             \App\Services\ReverseLinkService::sync('companies', self::COMPANY_FIELD, (int) $model->id, [], \App\Services\ReverseLinkService::ids($model->company_id));
-            \App\Services\ProductPriceService::recalcFromChange($model->products, null, 'purchase_price');
         });
     }
 
