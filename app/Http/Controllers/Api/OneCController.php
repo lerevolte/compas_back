@@ -39,6 +39,9 @@ class OneCController extends Controller
             return response()->json(['ok' => false, 'error' => 'Неверный токен'], 403);
         }
         $items = $this->confirmItems($request);
+        if (!count($items) && $this->isEmptyList($request)) {
+            return response()->json(['ok' => true, 'confirmed' => [], 'unknown' => []], 200, [], JSON_UNESCAPED_UNICODE);
+        }
         if (!count($items)) {
             \Log::warning('1C confirm: номера не распознаны', [
                 'content_type' => $request->header('Content-Type'),
@@ -133,6 +136,9 @@ class OneCController extends Controller
             return $error;
         }
         $items = $this->supplierOrderItems($request, $stateOnly);
+        if (!count($items) && $this->isEmptyList($request)) {
+            return response()->json(['ok' => true, 'confirmed' => [], 'unknown' => []], 200, [], JSON_UNESCAPED_UNICODE);
+        }
         if (!count($items)) {
             return $this->cashConfirmError($request, ['documents' => [['number' => 'cmps-z1', 'ref' => '<GUID 1С>', 'state' => 'Оплатили', 'status' => 'created|posted|deleted']]]);
         }
@@ -214,6 +220,32 @@ class OneCController extends Controller
         }
 
         return $items;
+    }
+
+    private function isEmptyList(Request $request): bool
+    {
+        $raw = trim((string) preg_replace('/^\xEF\xBB\xBF/', '', (string) $request->getContent()));
+        $decoded = $raw !== '' ? json_decode($raw, true) : null;
+        $payload = is_array($decoded) ? $decoded : $request->except('token');
+        if ($payload === []) {
+            return $raw === '[]' || $raw === '{}';
+        }
+        foreach ($payload as $key => $value) {
+            if (in_array(mb_strtolower((string) $key), ['documents', 'документы', 'docs', 'orders', 'заказы', 'items', 'data', 'numbers', 'номера'], true)) {
+                if ($value === [] || $value === '' || $value === null) {
+                    continue;
+                }
+
+                return false;
+            }
+        }
+        foreach ($payload as $key => $value) {
+            if (in_array(mb_strtolower((string) $key), ['documents', 'документы', 'docs', 'orders', 'заказы', 'items', 'data', 'numbers', 'номера'], true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function guard(Request $request)
