@@ -756,7 +756,11 @@ SQL);
             ? (self::ids($row->shipment_company_id ?? null)[0] ?? ($order['shipment_company_id'] ?? null))
             : ($order['shipment_company_id'] ?? null);
         $partnerId = self::ids($row->company_id ?? null)[0] ?? null;
-        if (!$isExpense && ($order['type'] ?? null) === 'supplier_order' && !empty($order['company_id'])) {
+        $supplierId = $isExpense ? null : (self::ids($row->shipment_company_id ?? null)[0] ?? null);
+        if ($supplierId) {
+            $ownId = $partnerId ?? $ownId;
+            $partnerId = $supplierId;
+        } elseif (!$isExpense && ($order['type'] ?? null) === 'supplier_order' && !empty($order['company_id'])) {
             $partnerId = $order['company_id'];
         }
         $storehouseField = self::STOREHOUSE_FIELDS[$slug];
