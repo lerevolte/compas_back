@@ -775,7 +775,9 @@ SQL);
             $productId = (int) ($line['id'] ?? 0);
             $name = ShipmentService::plainName($line['name'] ?? '');
             $product = $products[$productId] ?? null;
-            $priceKey = isset($line['price']) && is_numeric($line['price']) ? 'price' : 'purchase_price';
+            $priceKey = $slug === ShipmentService::RECEIPT_DOC
+                ? ShipmentService::linePriceKey($slug, $line)
+                : (isset($line['price']) && is_numeric($line['price']) ? 'price' : 'purchase_price');
             $parts = ShipmentService::lineParts($line, $priceKey);
             $items[] = [
                 'row' => $index + 1,

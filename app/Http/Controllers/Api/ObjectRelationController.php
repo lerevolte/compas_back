@@ -131,6 +131,7 @@ class ObjectRelationController extends Controller
                 'id' => $product['id'] ?? null,
                 'name' => $product['product_name'] ?? ($product['name'] ?? ''),
                 'price' => $product['product_price'] ?? ($product['price'] ?? null),
+                'purchase_price' => $product['product_purchase_price'] ?? ($product['purchase_price'] ?? null),
                 'count' => $product['product_count'] ?? ($product['count'] ?? null),
             ];
         }

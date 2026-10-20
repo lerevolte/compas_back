@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\ReceiptInvoice;
 use App\Models\SupplierOrder;
 use App\Models\Tenant;
 use App\Services\ShipmentService;
@@ -12,7 +13,7 @@ class RecalcSupplierOrderSums extends Command
     protected $signature = 'supplier-orders:recalc-sums
         {target=all-tenants : all-tenants | <tenant_id>}';
 
-    protected $description = 'Пересчитать сумму заказов поставщикам по цене закупки с учётом НДС';
+    protected $description = 'Пересчитать сумму заказов поставщикам и приходных накладных по цене закупки с учётом НДС';
 
     public function handle(): int
     {
@@ -56,5 +57,30 @@ class RecalcSupplierOrderSums extends Command
             $changed++;
         }
         $this->info("  ✓ {$label}: пересчитано заказов {$changed}");
+        $this->recalcReceipts($label);
+    }
+
+    private function recalcReceipts(string $label): void
+    {
+        if (!\Schema::hasTable(ShipmentService::RECEIPT_DOC)) {
+            return;
+        }
+        $changed = 0;
+        foreach (ReceiptInvoice::withTrashed()->orderBy('id')->get() as $receipt) {
+            $total = 0.0;
+            foreach (array_filter(ShipmentService::decode($receipt->products), 'is_array') as $product) {
+                $total += ShipmentService::lineTotal($product, ShipmentService::linePriceKey(ShipmentService::RECEIPT_DOC, $product));
+            }
+            $sum = $total > 0 ? rtrim(rtrim(number_format($total, 2, '.', ''), '0'), '.') : null;
+            if ((string) $receipt->sum === (string) $sum) {
+                continue;
+            }
+            $receipt->sum = $sum;
+            $receipt->timestamps = false;
+            $receipt->saveQuietly();
+            $receipt->timestamps = true;
+            $changed++;
+        }
+        $this->info("  ✓ {$label}: пересчитано приходных {$changed}");
     }
 }

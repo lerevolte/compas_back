@@ -1275,7 +1275,7 @@ class Table
                 $table_columns[$i]['index'] = $i;
         }
 
-        $isSupplierOrder = (string) $parentSlug === 'supplier_orders';
+        $isSupplierOrder = in_array((string) $parentSlug, ['supplier_orders', 'receipt_invoices'], true);
         foreach($table_columns as $i => $column) {
             $key = $column['key'] ?? null;
             if($key == 'product_price' && empty($column['is_another_title']))

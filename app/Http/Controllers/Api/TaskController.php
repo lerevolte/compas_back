@@ -186,7 +186,7 @@ class TaskController extends Controller
                     $line['specification_id'] = $specificationId;
                 }
             }
-            $parts = \App\Services\ShipmentService::lineParts($line, \App\Services\ShipmentService::linePriceKey((string) $slug));
+            $parts = \App\Services\ShipmentService::lineParts($line, \App\Services\ShipmentService::linePriceKey((string) $slug, $line));
             $line['sum'] = round($parts['net'], 2);
             $line['nds_sum'] = round($parts['vat'], 2);
             $line['total'] = round($parts['gross'], 2);

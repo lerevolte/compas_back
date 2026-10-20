@@ -1059,9 +1059,19 @@ class ShipmentService
         return ['net' => $base, 'vat' => $vat, 'gross' => $base + $vat, 'rate' => $rate, 'included' => false];
     }
 
-    public static function linePriceKey(string $slug): string
+    public static function linePriceKey(string $slug, ?array $line = null): string
     {
-        return $slug === 'supplier_orders' ? 'purchase_price' : 'price';
+        if ($slug === self::SUPPLIER) {
+            return 'purchase_price';
+        }
+        if ($slug !== self::RECEIPT_DOC) {
+            return 'price';
+        }
+        if ($line !== null && !is_numeric($line['purchase_price'] ?? null) && is_numeric($line['price'] ?? null)) {
+            return 'price';
+        }
+
+        return 'purchase_price';
     }
 
     public static function lineTotal(array $line, string $priceKey = 'price'): float
@@ -1315,9 +1325,14 @@ class ShipmentService
                     continue;
                 }
                 $count = (float) ($product['count'] ?? 0);
-                $price = (float) ($product['price'] ?? 0);
+                $childKey = self::linePriceKey($childSlug, $product);
+                $limitKey = self::linePriceKey($parentSlug, $limit);
+                if ($childKey !== $limitKey) {
+                    $childKey = $limitKey = 'price';
+                }
+                $price = (float) ($product[$childKey] ?? 0);
                 $limitCount = (float) ($limit['count'] ?? 0);
-                $limitPrice = (float) ($limit['price'] ?? 0);
+                $limitPrice = (float) ($limit[$limitKey] ?? 0);
                 if (in_array((int) ($limit['id'] ?? 0), $services, true)) {
                     if ($limitPrice > 0) {
                         $lineTotal = $price * ($count > 0 ? $count : 1);

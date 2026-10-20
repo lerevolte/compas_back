@@ -76,9 +76,9 @@ class ReceiptInvoice extends Model
         $this->products = json_encode($products);
         $total = 0.0;
         foreach ($products as $product) {
-            $count = isset($product['count']) ? (float) $product['count'] : 0;
-            $price = isset($product['price']) ? (float) $product['price'] : 0;
-            $total += $count * $price;
+            if (is_array($product)) {
+                $total += \App\Services\ShipmentService::lineTotal($product, \App\Services\ShipmentService::linePriceKey($this->getTable(), $product));
+            }
         }
         if ($sum !== null && (float) $sum > 0) {
             $this->sum = rtrim(rtrim(number_format((float) $sum, 2, '.', ''), '0'), '.');
