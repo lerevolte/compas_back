@@ -148,17 +148,29 @@ class OneCController extends Controller
             $decoded = json_decode(preg_replace('/^\xEF\xBB\xBF/', '', $raw), true);
             if (is_array($decoded)) {
                 $payload = array_is_list($decoded) ? ['documents' => $decoded] : $decoded + $payload;
+            } elseif (is_scalar($decoded) && trim((string) $decoded) !== '') {
+                $payload = ['numbers' => (string) $decoded] + $payload;
+            } elseif (!count($payload) && !preg_match('/^[\[{]/', $raw)) {
+                $payload = ['numbers' => $raw];
             }
         }
         $list = null;
         foreach ($payload as $key => $value) {
-            if (in_array(mb_strtolower((string) $key), ['documents', 'документы', 'orders', 'заказы', 'items', 'data'], true) && is_array($value)) {
-                $list = $value;
+            $key = mb_strtolower((string) $key);
+            if (in_array($key, ['documents', 'документы', 'docs', 'orders', 'заказы', 'items', 'data'], true)) {
+                $list = is_array($value) ? $value : [$value];
+                break;
+            }
+            if (in_array($key, ['numbers', 'номера'], true)) {
+                $list = is_string($value) ? preg_split('/[\s,;]+/', $value, -1, PREG_SPLIT_NO_EMPTY) : (array) $value;
                 break;
             }
         }
         $items = [];
         foreach ($list ?? [$payload] as $entry) {
+            if (is_scalar($entry) && trim((string) $entry) !== '') {
+                $entry = ['number' => trim((string) $entry)];
+            }
             if (!is_array($entry)) {
                 continue;
             }
