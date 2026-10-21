@@ -16,7 +16,7 @@ class InstallProductPriceFields extends Command
 
     protected $signature = 'products:install-price-fields
         {target=all : seeds | all-tenants | all (all-tenants + seeds) | <tenant_id>}
-        {--recalc : пересчитать средние цены по последним 30 документам (продажа — расходные накладные, закупка — приходные накладные)}';
+        {--recalc : пересчитать средние цены по последним 10 документам (продажа — расходные накладные, закупка — приходные накладные)}';
 
     protected $description = 'Поля цен у товаров: «Средняя цена продажи» и «Средняя цена закупки» только для чтения; опционально пересчёт средних цен по документам';
 

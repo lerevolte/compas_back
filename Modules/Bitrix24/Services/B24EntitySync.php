@@ -24,6 +24,7 @@ class B24EntitySync
     private array $responsibleCache = [];
 
     private const CONTACT_TYPE_UF = 'UF_CRM_1785851130';
+    private const DEAL_STOREHOUSE_UF = 'UF_CRM_1753786869';
 
     private const DEFAULT_EXCLUDE_STAGES = ['NEW'];
     private const STAGE_PALETTE = [
@@ -882,6 +883,22 @@ class B24EntitySync
                     $model->car_type = (int) $localCt;
                 } elseif (array_key_exists('UF_CRM_1625083610453', $deal) && ($rawCarType === null || $rawCarType === '')) {
                     $model->car_type = null;
+                }
+            }
+
+            if (array_key_exists(self::DEAL_STOREHOUSE_UF, $deal) && $this->dealStorehouseReady()) {
+                $rawStorehouse = $deal[self::DEAL_STOREHOUSE_UF];
+                $rawStorehouse = is_array($rawStorehouse) ? (array_values($rawStorehouse)[0] ?? null) : $rawStorehouse;
+                if ($rawStorehouse === null || $rawStorehouse === '' || $rawStorehouse === false) {
+                    $model->{\App\Services\StorehouseService::WRITE_OFF} = null;
+                } else {
+                    $storehouseId = DB::table(\App\Services\StorehouseService::TABLE)
+                        ->whereNull('deleted_at')
+                        ->where(\App\Console\Commands\InstallShipmentStorehouse::B24_COLUMN, (string) $rawStorehouse)
+                        ->value('id');
+                    if ($storehouseId) {
+                        $model->{\App\Services\StorehouseService::WRITE_OFF} = (int) $storehouseId;
+                    }
                 }
             }
 
@@ -2391,6 +2408,18 @@ class B24EntitySync
     }
 
 
+    private ?bool $dealStorehouseReady = null;
+
+    private function dealStorehouseReady(): bool
+    {
+        if ($this->dealStorehouseReady === null) {
+            $this->dealStorehouseReady = \App\Services\StorehouseService::has('deals', \App\Services\StorehouseService::WRITE_OFF)
+                && Schema::hasColumn(\App\Services\StorehouseService::TABLE, \App\Console\Commands\InstallShipmentStorehouse::B24_COLUMN);
+        }
+
+        return $this->dealStorehouseReady;
+    }
+
     public function pushDeal(Deal $deal, array $changed): void
     {
         if (in_array('contact_id', $changed, true)) {
@@ -2455,6 +2484,17 @@ class B24EntitySync
                         }
                     }
                     $fields['UF_CRM_1762411084'] = $ids;
+                    break;
+                case \App\Services\StorehouseService::WRITE_OFF:
+                    if ($this->dealStorehouseReady()) {
+                        $storehouseId = \App\Services\StorehouseService::normalize($deal->{\App\Services\StorehouseService::WRITE_OFF});
+                        $b24Value = $storehouseId
+                            ? DB::table(\App\Services\StorehouseService::TABLE)->where('id', $storehouseId)->value(\App\Console\Commands\InstallShipmentStorehouse::B24_COLUMN)
+                            : null;
+                        if (!$storehouseId || ($b24Value !== null && $b24Value !== '')) {
+                            $fields[self::DEAL_STOREHOUSE_UF] = $storehouseId ? (string) $b24Value : '';
+                        }
+                    }
                     break;
                 case 'car_type':
                     $carType = is_array($deal->car_type) ? (array_values($deal->car_type)[0] ?? null) : $deal->car_type;

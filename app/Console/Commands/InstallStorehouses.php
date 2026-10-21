@@ -12,7 +12,7 @@ class InstallStorehouses extends Command
         {target=all-tenants : seeds | all-tenants | <tenant_id>}
         {--dry-run : показать план конвертации без изменений}';
 
-    protected $description = 'Сущность «Склады» с полем «Адрес склада»: «Склад отгрузки» (список) → relation «Склад списания» со складами из вариантов списка; поля «Склад списания»/«Склад прихода» у задач, самовывозов, накладных и возвратов';
+    protected $description = 'Сущность «Склады» с полем «Адрес склада»: «Склад отгрузки» (список) → relation «Склад отгрузки» со складами из вариантов списка; поля «Склад отгрузки»/«Склад прихода» у задач, самовывозов, накладных и возвратов';
 
     public const SLUG = StorehouseService::TABLE;
     public const MODEL = 'App\\Models\\Storehouse';

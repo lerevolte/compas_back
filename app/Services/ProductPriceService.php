@@ -13,7 +13,7 @@ class ProductPriceService
         'price' => ['slugs' => self::DOCUMENT_SLUGS, 'line_key' => 'price'],
         'purchase_price' => ['slugs' => self::PURCHASE_DOCUMENT_SLUGS, 'line_key' => 'purchase_price'],
     ];
-    public const LIMIT = 30;
+    public const LIMIT = 10;
 
     public static function ready(string $column = 'price'): bool
     {
@@ -22,6 +22,23 @@ class ProductPriceService
         } catch (\Throwable $e) {
             return false;
         }
+    }
+
+    public static function averaged(string $column = 'price'): bool
+    {
+        if (!isset(self::KINDS[$column]) || !self::ready($column)) {
+            return false;
+        }
+        try {
+            foreach (self::KINDS[$column]['slugs'] as $slug) {
+                if (Schema::hasTable($slug) && Schema::hasColumn($slug, 'products')) {
+                    return true;
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return false;
     }
 
     public static function productIds(...$productsJsons): array
@@ -60,10 +77,7 @@ class ProductPriceService
             if ($productId <= 0) {
                 continue;
             }
-            $average = self::averagePrice($productId, $column);
-            if ($average === null) {
-                continue;
-            }
+            $average = self::averagePrice($productId, $column) ?? 0.0;
             $formatted = rtrim(rtrim(number_format($average, 2, '.', ''), '0'), '.');
             $updated += DB::table('products')
                 ->where('id', $productId)

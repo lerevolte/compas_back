@@ -34,7 +34,8 @@ class ReceiptInvoice extends Model
         static::saving(function ($model) {
             foreach (['contact_id', 'company_id'] as $col) {
                 if (is_array($model->{$col})) {
-                    $model->{$col} = json_encode(array_values(array_filter($model->{$col}, 'is_numeric')));
+                    $ids = array_values(array_filter($model->{$col}, 'is_numeric'));
+                    $model->{$col} = $col === 'company_id' && !self::receiverPlural() ? ($ids[0] ?? null) : json_encode($ids);
                 }
             }
         });
@@ -60,6 +61,19 @@ class ReceiptInvoice extends Model
             self::recalcParentShipments((int) $model->id);
             \App\Services\ProductPriceService::recalcFromChange($model->products, null, 'purchase_price');
         });
+    }
+
+    private static array $receiverPlural = [];
+
+    public static function receiverPlural(): bool
+    {
+        $key = (string) (function_exists('tenant') ? tenant('id') : '');
+        if (!array_key_exists($key, self::$receiverPlural)) {
+            $typeId = \DB::table('data_types')->where('slug', 'receipt_invoices')->value('id');
+            self::$receiverPlural[$key] = (bool) \DB::table('data_rows')->where('data_type_id', $typeId)->where('field', 'company_id')->value('is_plural');
+        }
+
+        return self::$receiverPlural[$key];
     }
 
     public static function recalcParentShipments(int $id): void

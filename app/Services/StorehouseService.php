@@ -14,11 +14,14 @@ class StorehouseService
     public const RECEIPT = 'receipt_storehouse_id';
 
     public const TITLES = [
-        self::WRITE_OFF => 'Склад списания',
+        self::WRITE_OFF => 'Склад отгрузки',
         self::RECEIPT => 'Склад прихода',
     ];
 
+    public const LEGACY_WRITE_OFF_TITLE = 'Склад списания';
+
     public const FIELDS = [
+        'deals' => [self::WRITE_OFF],
         'logistic_tasks' => [self::WRITE_OFF, self::RECEIPT],
         'pickups' => [self::WRITE_OFF],
         'expense_invoices' => [self::WRITE_OFF],
@@ -31,6 +34,10 @@ class StorehouseService
         'expense_invoices' => ['field' => self::WRITE_OFF, 'parents' => ['logistic_tasks', 'pickups']],
         'product_returns' => ['field' => self::RECEIPT, 'parents' => ['logistic_tasks', 'pickups']],
         'receipt_invoices' => ['field' => self::RECEIPT, 'parents' => ['logistic_tasks', 'pickups', 'supplier_orders']],
+    ];
+
+    public const INHERIT_ONLY = [
+        'deals' => ['field' => self::WRITE_OFF, 'children' => ['logistic_tasks', 'pickups', 'expense_invoices']],
     ];
 
     private static array $readyCache = [];
@@ -180,10 +187,17 @@ class StorehouseService
     public static function inheritOnLink(string $parentSlug, int $parentId, string $childSlug, int $childId): void
     {
         $rule = self::CHILDREN[$childSlug] ?? null;
-        if (!$rule || !in_array($parentSlug, $rule['parents'], true)) {
+        $inherit = self::INHERIT_ONLY[$parentSlug] ?? null;
+        if ($rule && in_array($parentSlug, $rule['parents'], true)) {
+            $field = $rule['field'];
+        } elseif ($inherit && in_array($childSlug, $inherit['children'], true)) {
+            $field = $inherit['field'];
+        } else {
             return;
         }
-        $field = $rule['field'];
+        if (!self::has($parentSlug, $field)) {
+            return;
+        }
         if (!self::has($childSlug, $field) || self::valueOf($childSlug, $childId, $field)) {
             return;
         }

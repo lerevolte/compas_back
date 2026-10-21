@@ -18,7 +18,7 @@ class Deal extends Model
     public const B24_PUSH_FIELDS = [
         'address', 'time', 'phone', 'comment',
         'pallets_count', 'delivery_date', 'contact', 'contact_id', 'company_id', 'bank_requisite_id',
-        'car_requirements', 'car_type', 'products',
+        'car_requirements', 'car_type', 'products', 'storehouse_id',
     ];
 
     public static function boot()
