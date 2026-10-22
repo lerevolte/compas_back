@@ -82,7 +82,7 @@ class ProductStatsController extends Controller
             $counts[$value] = ($counts[$value] ?? 0) + 1;
         }
         $ids = array_values(array_filter(array_keys($counts), fn ($v) => $v !== 'none'));
-        $values = $ids ? DB::table('field_values')->whereIn('id', $ids)->get(['id', 'value', 'color', 'sort'])->keyBy(fn ($v) => (string) $v->id) : collect();
+        $values = $ids ? DB::table('field_values')->whereIn('id', $ids)->get(['id', 'value', 'color', 'file', 'sort'])->keyBy(fn ($v) => (string) $v->id) : collect();
         $result = [];
         foreach ($counts as $id => $count) {
             $value = $values[$id] ?? null;
@@ -90,6 +90,7 @@ class ProductStatsController extends Controller
                 'id' => (string) $id,
                 'value' => $id === 'none' ? 'Без типа' : (string) ($value->value ?? ('#' . $id)),
                 'color' => $value->color ?? null,
+                'file' => $value->file ?? null,
                 'sort' => $id === 'none' ? PHP_INT_MAX : (int) ($value->sort ?? 0),
                 'count' => $count,
             ];
