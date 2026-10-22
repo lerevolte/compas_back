@@ -480,6 +480,9 @@ Route::middleware([
 
         Route::get('product-stats/products', [App\Http\Controllers\Api\ProductStatsController::class, 'products'])->name('product_stats.products');
         Route::get('product-stats/tasks', [App\Http\Controllers\Api\ProductStatsController::class, 'tasks'])->name('product_stats.tasks');
+        Route::get('carrier-salary/companies', [App\Http\Controllers\Api\CarrierSalaryController::class, 'companies'])->name('carrier_salary.companies');
+        Route::get('carrier-salary/cars', [App\Http\Controllers\Api\CarrierSalaryController::class, 'cars'])->name('carrier_salary.cars');
+        Route::get('carrier-salary/routes', [App\Http\Controllers\Api\CarrierSalaryController::class, 'routes'])->name('carrier_salary.routes');
 
         Route::put(
             'logistic_tasks/{id}/set_products',

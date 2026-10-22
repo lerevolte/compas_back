@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use App\Models\Task;
 
 /**
@@ -34,16 +35,86 @@ class ProductStatsController extends Controller
         return is_string($name) ? $name : '';
     }
 
+    private function actionColumn(): ?string
+    {
+        $field = \App\Console\Commands\InstallActionTypeField::FIELD;
+
+        return Schema::hasColumn('logistic_tasks', $field) ? $field : null;
+    }
+
+    private function actionValue($raw): ?string
+    {
+        if (is_string($raw) && str_starts_with(trim($raw), '{')) {
+            $decoded = json_decode($raw, true);
+            $raw = is_array($decoded) ? ($decoded['value'] ?? null) : $raw;
+        }
+        if (is_array($raw)) {
+            $raw = $raw[0] ?? null;
+        }
+
+        return $raw === null || $raw === '' ? null : (string) $raw;
+    }
+
+    private function actionFilter(Request $request): ?string
+    {
+        $value = $request->action_type;
+
+        return $value === null || $value === '' || $value === 'all' || !$this->actionColumn() ? null : (string) $value;
+    }
+
+    private function filterByAction($tasks, ?string $action)
+    {
+        $column = $this->actionColumn();
+        if ($action === null || !$column) {
+            return $tasks;
+        }
+
+        return $tasks->filter(fn ($task) => $action === 'none'
+            ? $this->actionValue($task->{$column}) === null
+            : $this->actionValue($task->{$column}) === $action)->values();
+    }
+
+    private function actionTypes($tasks): array
+    {
+        $column = $this->actionColumn();
+        if (!$column) {
+            return [];
+        }
+        $counts = [];
+        foreach ($tasks as $task) {
+            $value = $this->actionValue($task->{$column}) ?? 'none';
+            $counts[$value] = ($counts[$value] ?? 0) + 1;
+        }
+        $ids = array_values(array_filter(array_keys($counts), fn ($v) => $v !== 'none'));
+        $values = $ids ? DB::table('field_values')->whereIn('id', $ids)->get(['id', 'value', 'color', 'sort'])->keyBy(fn ($v) => (string) $v->id) : collect();
+        $result = [];
+        foreach ($counts as $id => $count) {
+            $value = $values[$id] ?? null;
+            $result[] = [
+                'id' => (string) $id,
+                'value' => $id === 'none' ? 'Без типа' : (string) ($value->value ?? ('#' . $id)),
+                'color' => $value->color ?? null,
+                'sort' => $id === 'none' ? PHP_INT_MAX : (int) ($value->sort ?? 0),
+                'count' => $count,
+            ];
+        }
+        usort($result, fn ($a, $b) => [$a['sort'], $a['value']] <=> [$b['sort'], $b['value']]);
+
+        return array_map(fn ($row) => array_diff_key($row, ['sort' => 1]), $result);
+    }
+
     public function products(Request $request)
     {
         $date = $request->delivery_date;
         if (!$date) {
-            return response()->json(['products' => [], 'all_order_count' => 0, 'all_total_count' => 0]);
+            return response()->json(['products' => [], 'all_order_count' => 0, 'all_total_count' => 0, 'action_types' => []]);
         }
 
         $tasks = Task::where('delivery_date', $date)
             ->whereNull('deleted_at')
-            ->get(['id', 'products']);
+            ->get(array_values(array_filter(['id', 'products', $this->actionColumn()])));
+        $actionTypes = $this->actionTypes($tasks);
+        $tasks = $this->filterByAction($tasks, $this->actionFilter($request));
 
         $allOrderCount = $tasks->count();
         $allTotalCount = 0;
@@ -78,6 +149,7 @@ class ProductStatsController extends Controller
             'products' => $result,
             'all_order_count' => $allOrderCount,
             'all_total_count' => $allTotalCount,
+            'action_types' => $actionTypes,
         ]);
     }
 
@@ -96,7 +168,7 @@ class ProductStatsController extends Controller
         if (!$all) {
             $query->whereNotNull('products');
         }
-        $tasks = $query->get(['id', 'products']);
+        $tasks = $this->filterByAction($query->get(array_values(array_filter(['id', 'products', $this->actionColumn()]))), $this->actionFilter($request));
 
         $qtyById = [];
         foreach ($tasks as $task) {
