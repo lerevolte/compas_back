@@ -14,6 +14,9 @@ class File extends Model implements HasMedia
 
     public function registerMediaConversions(Media $media = null): void
     {
+        if ($media && str_contains((string) $media->mime_type, 'svg')) {
+            return;
+        }
         $this->addMediaConversion('thumb')
               ->width(368)
               ->height(232)
