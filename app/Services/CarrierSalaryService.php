@@ -55,7 +55,7 @@ class CarrierSalaryService
         if ($paid) {
             $result['paid'] = $paid->field;
             $result['paid_title'] = trim((string) $paid->title);
-            $result['paid_ids'] = DB::table('field_values')->where('data_row_id', $paid->id)->get(['id', 'value'])
+            $result['paid_ids'] = DB::table('field_values')->where('field_id', $paid->id)->get(['id', 'value'])
                 ->filter(function ($v) {
                     $label = mb_strtolower(trim((string) $v->value));
 
