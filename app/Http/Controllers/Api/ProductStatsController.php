@@ -8,10 +8,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use App\Models\Task;
 
-/**
- * Статистика по товарам в логистике: агрегация товаров из задач логистики
- * (logistic_tasks.products — JSON [{name, count, ...}]) за дату доставки.
- */
 class ProductStatsController extends Controller
 {
     private function productName($p): string
@@ -193,7 +189,6 @@ class ProductStatsController extends Controller
             return response()->json(['list' => ['data' => []], 'table' => $this->buildColumns()]);
         }
 
-        // Форматированные строки задач логистики — как на странице объектов.
         $listed = \App\Models\EntityObject::list('logistic_tasks', new Request(['ids' => $ids, 'per_page' => count($ids)]));
         $rows = $listed['data'] ?? [];
         foreach ($rows as &$row) {
@@ -226,12 +221,6 @@ class ProductStatsController extends Controller
         ]);
     }
 
-    /**
-     * Заголовок нижней таблицы. Берём ПОЛНЫЙ набор столбцов задачи логистики
-     * из Table::get — те же типы/опции/настройки и редактируемость, что и на
-     * /objects/logistic_tasks (8557). Дополнительно добавляем служебный столбец
-     * «Кол-во, шт» выбранного товара (только для чтения).
-     */
     private function buildColumns(): array
     {
         $columns = collect(\App\Models\Table::get('logistic_tasks'))
@@ -259,8 +248,6 @@ class ProductStatsController extends Controller
             'options'    => [],
         ];
 
-        // Вставляем «Кол-во, шт» перед служебным столбцом действий (actions),
-        // если он есть, иначе в конец.
         $actionsIndex = null;
         foreach ($columns as $i => $col) {
             if (($col['key'] ?? null) === 'actions') {

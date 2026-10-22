@@ -49,6 +49,8 @@ class ObjectRelation extends Model
 
         \App\Services\RelationFieldsService::refresh($sourceSlug, (int) $sourceId);
         \App\Services\RelationFieldsService::refresh($targetSlug, (int) $targetId);
+        \App\Services\CashExpenseTotalService::recalcAround($sourceSlug, (int) $sourceId);
+        \App\Services\CashExpenseTotalService::recalcAround($targetSlug, (int) $targetId);
         if ($targetSlug === \App\Services\ShipmentService::DOCUMENT && \App\Services\ShipmentService::isSource($sourceSlug)) {
             \App\Services\OneC\OneCExportService::refreshNumber($targetSlug, (int) $targetId);
         }
@@ -248,6 +250,8 @@ class ObjectRelation extends Model
     public static function afterUnlink(string $slugA, int $idA, string $slugB, int $idB): void
     {
         \App\Services\ProductionService::afterUnlink($slugA, $idA, $slugB, $idB);
+        \App\Services\CashExpenseTotalService::recalcAround($slugA, $idA);
+        \App\Services\CashExpenseTotalService::recalcAround($slugB, $idB);
         foreach ([[$slugA, $idA], [$slugB, $idB]] as [$slug, $id]) {
             if ($slug === \App\Services\ShipmentService::DOCUMENT) {
                 \App\Services\OneC\OneCExportService::refreshNumber($slug, $id);

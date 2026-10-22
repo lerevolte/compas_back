@@ -1049,14 +1049,14 @@ class ShipmentService
         $included = is_array($included) ? ($included[0] ?? null) : $included;
         $included = !($included !== null && $included !== '' && (string) $included === '0');
         if ($rate <= 0) {
-            return ['net' => $base, 'vat' => 0.0, 'gross' => $base, 'rate' => 0.0, 'included' => $included];
+            return ['sum' => $base, 'net' => $base, 'vat' => 0.0, 'gross' => $base, 'rate' => 0.0, 'included' => $included];
         }
         if ($included) {
             $net = $base / (1 + $rate / 100);
-            return ['net' => $net, 'vat' => $base - $net, 'gross' => $base, 'rate' => $rate, 'included' => true];
+            return ['sum' => $base, 'net' => $net, 'vat' => $base - $net, 'gross' => $base, 'rate' => $rate, 'included' => true];
         }
         $vat = $base * $rate / 100;
-        return ['net' => $base, 'vat' => $vat, 'gross' => $base + $vat, 'rate' => $rate, 'included' => false];
+        return ['sum' => $base, 'net' => $base, 'vat' => $vat, 'gross' => $base + $vat, 'rate' => $rate, 'included' => false];
     }
 
     public static function linePriceKey(string $slug, ?array $line = null): string

@@ -66,11 +66,16 @@ class UninstallRelationsModule extends Command
                 $db->table('field_sections')->where('id', $sid)->delete();
             }
 
+            $fields = [];
             foreach (RelationFieldsService::ENTITIES as $target) {
-                if ($target === $slug || RelationFieldsService::isLegacy($slug, $target)) {
-                    continue;
+                if ($target !== $slug && !RelationFieldsService::isLegacy($slug, $target)) {
+                    $fields[] = RelationFieldsService::field($slug, $target);
                 }
-                $field = RelationFieldsService::field($slug, $target);
+            }
+            if (in_array($slug, RelationFieldsService::CASH_TARGETS, true)) {
+                $fields[] = \App\Services\CashExpenseTotalService::FIELD;
+            }
+            foreach ($fields as $field) {
                 $ids = $db->table('data_rows')->where('data_type_id', $type->id)->where('field', $field)->pluck('id');
                 if ($ids->count()) {
                     $db->table('section_fields_sort')->whereIn('field_id', $ids)->delete();

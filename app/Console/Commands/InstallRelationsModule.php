@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Tenant;
 use App\Services\ModuleLayoutService;
+use App\Services\CashExpenseTotalService;
 use App\Services\RelationFieldsService;
 use Illuminate\Console\Command;
 
@@ -148,6 +149,13 @@ class InstallRelationsModule extends Command
                 ModuleLayoutService::attachField($db, $row, RelationFieldsService::MODULE, $sectionId, true);
                 $ordered[] = (int) $row->id;
             }
+            if (in_array($slug, RelationFieldsService::CASH_TARGETS, true)) {
+                if (isset($present[CashExpenseTotalService::EXPENSES])) {
+                    $ordered[] = $this->ensureTotalField($db, $slug, (int) $type->id, $sectionId);
+                } else {
+                    $this->removeField($db, $slug, (int) $type->id, CashExpenseTotalService::FIELD, $sectionId);
+                }
+            }
             ModuleLayoutService::setSectionOrder($db, $sectionId, $ordered);
             ModuleLayoutService::ensureMenuChild($db, $slug, RelationFieldsService::MODULE, RelationFieldsService::MODULE_TITLE);
             $this->dropSingleTabs($db, $slug, $present, $label);
@@ -168,6 +176,13 @@ class InstallRelationsModule extends Command
                 RelationFieldsService::refresh($slug, $id, $db);
             }
             $this->line("    [{$label}] заполнено объектов из связей: " . count($objects));
+            CashExpenseTotalService::forget();
+            foreach (RelationFieldsService::CASH_TARGETS as $slug) {
+                $count = CashExpenseTotalService::backfill($slug, $db);
+                if ($count) {
+                    $this->line("    [{$label}] {$slug}: пересчитаны расходы по связанным документам у {$count}");
+                }
+            }
         }
 
         if ($inTenant) {
@@ -202,6 +217,63 @@ class InstallRelationsModule extends Command
             $db->table($slug)->where('id', $id)->update([$field => $value]);
         }
         $this->line("    [{$label}] {$slug}.{$field}: колонка переведена в " . ($single ? 'одиночную' : 'множественную') . ', значений ' . count($values));
+    }
+
+    private function ensureTotalField($db, string $slug, int $typeId, int $sectionId): int
+    {
+        $field = CashExpenseTotalService::FIELD;
+        if (!$db->getSchemaBuilder()->hasColumn($slug, $field)) {
+            $db->statement("ALTER TABLE `{$slug}` ADD COLUMN `{$field}` DECIMAL(15,2) NULL");
+        }
+        $attrs = [
+            'type' => 'number',
+            'title' => CashExpenseTotalService::TITLE,
+            'unit' => 'руб.',
+            'only_read' => 1,
+            'is_program' => 1,
+            'is_remove' => 0,
+            'hide' => 0,
+            'is_permanent' => 1,
+            'section_id' => null,
+            'group_id' => null,
+        ];
+        $row = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', $field)->first();
+        if ($row) {
+            $db->table('data_rows')->where('id', $row->id)->update($attrs);
+        } else {
+            $id = $db->table('data_rows')->insertGetId($attrs + [
+                'data_type_id' => $typeId,
+                'field' => $field,
+                'details' => '{}',
+                'relation_table' => null,
+                'is_plural' => 0,
+                'is_link' => 0,
+                'required' => 0,
+                'visible_always' => 1,
+                'sort' => (int) $db->table('data_rows')->where('data_type_id', $typeId)->max('sort') + 1,
+                'roles_read' => '',
+                'roles_write' => '',
+                'related_field' => '',
+                'is_default' => 0,
+                'label_color' => '',
+                'button_name' => 'Загрузить',
+                'show_file_image' => 0,
+                'mobile_pages' => '',
+                'show_file_name' => 0,
+                'external_link' => '',
+                'is_external_link' => 0,
+                'is_inactive' => 0,
+                'blocked_changes' => 0,
+                'permanent_required' => 0,
+                'permanent_name' => 0,
+                'set_color' => 0,
+                'is_unique' => 0,
+            ]);
+            $row = $db->table('data_rows')->where('id', $id)->first();
+        }
+        ModuleLayoutService::attachField($db, $row, RelationFieldsService::MODULE, $sectionId, true);
+
+        return (int) $row->id;
     }
 
     private function removeField($db, string $slug, int $typeId, string $field, int $sectionId): void

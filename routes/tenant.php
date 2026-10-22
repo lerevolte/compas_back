@@ -607,8 +607,6 @@ Route::middleware([
     });
 });
 
-
-
 Route::middleware([
     'web',
     InitializeTenancyByDomain::class,
@@ -649,7 +647,7 @@ Route::middleware([
         $id = 488;
         $module = null;
         $timings = [];
-        \Auth::loginUsingId(1); // Авторизует пользователя с ID = 1
+        \Auth::loginUsingId(1);
         
         $settings = app('settings');
         $timings = [];
@@ -744,12 +742,9 @@ Route::middleware([
         die();
     });
 
-
     Route::get('auth',  App\Http\Controllers\SpaController::class)->name('password.reset');
 
     Route::get('{path}', App\Http\Controllers\SpaController::class)->where('path', '^(?!api).*$');
     
 });
-
-
 

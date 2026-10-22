@@ -39,6 +39,7 @@ class InstallProductionEntities extends Command
 
         if ($target === 'seeds') {
             $this->installInto(\DB::connection('seeds'), 'admin_seeds', false);
+            $this->call('entity:install-employee-field', ['entity' => 'production_orders', 'target' => $target]);
             return self::SUCCESS;
         }
 
@@ -55,6 +56,7 @@ class InstallProductionEntities extends Command
                 $this->error("  ✗ {$tenant->id}: " . $e->getMessage());
             }
         }
+        $this->call('entity:install-employee-field', ['entity' => 'production_orders', 'target' => $target]);
 
         return self::SUCCESS;
     }

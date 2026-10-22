@@ -685,6 +685,7 @@ class Table
     public const SALE_PRICE_TITLE = 'Цена продажи';
     public const AVG_SALE_PRICE_TITLE = 'Ср. цена продажи';
     public const PURCHASE_PRICE_TITLE = 'Цена закупки';
+    public const AVG_PURCHASE_PRICE_TITLE = 'Ср. цена закупки';
     public const PURCHASE_PRICE_KEY = 'product_purchase_price';
 
     private static function purchasePriceColumn(int $index): array
@@ -1282,10 +1283,10 @@ class Table
             if($key == 'product_price' && empty($column['is_another_title']))
                 $table_columns[$i]['title'] = self::SALE_PRICE_TITLE;
             if($key == self::PURCHASE_PRICE_KEY && empty($column['is_another_title']))
-                $table_columns[$i]['title'] = self::PURCHASE_PRICE_TITLE;
+                $table_columns[$i]['title'] = $isSupplierOrder ? self::PURCHASE_PRICE_TITLE : self::AVG_PURCHASE_PRICE_TITLE;
             if($key == self::PURCHASE_PRICE_KEY) {
                 $table_columns[$i]['type'] = 'number';
-                $table_columns[$i]['read_only'] = 0;
+                $table_columns[$i]['read_only'] = $isSupplierOrder ? 0 : 1;
             }
             if($key == 'product_price')
                 $table_columns[$i]['read_only'] = $isSupplierOrder ? 1 : 0;

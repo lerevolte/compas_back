@@ -14,37 +14,47 @@ class RelationFieldsService
     public const ENTITIES = [
         'deals', 'supplier_orders', 'logistic_tasks', 'pickups',
         'payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices', 'addresses', 'warehouses',
+        'cash_expenses', 'cash_incomes',
     ];
+
+    public const CASH = ['cash_expenses', 'cash_incomes'];
+    public const CASH_TARGETS = ['deals', 'supplier_orders', 'logistic_tasks', 'pickups'];
 
     public const RANK = [
         'deals' => 0, 'supplier_orders' => 0, 'addresses' => 0, 'warehouses' => 0,
         'logistic_tasks' => 1, 'pickups' => 1, 'payment_invoices' => 1,
         'expense_invoices' => 2, 'product_returns' => 2, 'receipt_invoices' => 2,
+        'cash_expenses' => 3, 'cash_incomes' => 3,
     ];
 
     public const PLURAL = [
-        'deals' => ['supplier_orders', 'logistic_tasks', 'pickups', 'payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices'],
-        'supplier_orders' => ['logistic_tasks', 'receipt_invoices'],
-        'logistic_tasks' => ['expense_invoices', 'product_returns', 'receipt_invoices'],
-        'pickups' => ['expense_invoices', 'product_returns', 'receipt_invoices'],
+        'deals' => ['supplier_orders', 'logistic_tasks', 'pickups', 'payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices', 'cash_expenses', 'cash_incomes'],
+        'supplier_orders' => ['logistic_tasks', 'receipt_invoices', 'cash_expenses', 'cash_incomes'],
+        'logistic_tasks' => ['expense_invoices', 'product_returns', 'receipt_invoices', 'cash_expenses', 'cash_incomes'],
+        'pickups' => ['expense_invoices', 'product_returns', 'receipt_invoices', 'cash_expenses', 'cash_incomes'],
         'payment_invoices' => ['expense_invoices', 'product_returns', 'receipt_invoices'],
         'addresses' => ['logistic_tasks', 'pickups'],
         'warehouses' => ['logistic_tasks', 'pickups'],
         'expense_invoices' => [],
         'product_returns' => [],
         'receipt_invoices' => [],
+        'cash_expenses' => [],
+        'cash_incomes' => [],
     ];
 
     public const EXCLUDE = [
         'deals' => ['supplier_orders', 'receipt_invoices', 'product_returns', 'addresses', 'warehouses'],
-        'supplier_orders' => ['deals', 'pickups', 'expense_invoices', 'product_returns'],
+        'supplier_orders' => ['deals', 'pickups', 'expense_invoices', 'product_returns', 'addresses', 'warehouses'],
         'logistic_tasks' => ['pickups', 'product_returns'],
         'pickups' => ['logistic_tasks', 'supplier_orders', 'receipt_invoices', 'product_returns', 'addresses', 'warehouses'],
-        'payment_invoices' => ['supplier_orders', 'receipt_invoices', 'product_returns', 'addresses', 'warehouses'],
-        'expense_invoices' => ['receipt_invoices', 'product_returns', 'addresses'],
-        'receipt_invoices' => ['deals', 'pickups', 'payment_invoices', 'expense_invoices', 'product_returns', 'addresses', 'warehouses'],
-        'addresses' => ['product_returns'],
-        'warehouses' => ['product_returns'],
+        'payment_invoices' => ['supplier_orders', 'receipt_invoices', 'product_returns', 'addresses', 'warehouses', 'cash_expenses', 'cash_incomes'],
+        'expense_invoices' => ['receipt_invoices', 'product_returns', 'addresses', 'cash_expenses', 'cash_incomes'],
+        'product_returns' => ['cash_expenses', 'cash_incomes'],
+        'receipt_invoices' => ['deals', 'pickups', 'payment_invoices', 'expense_invoices', 'product_returns', 'addresses', 'warehouses', 'cash_expenses', 'cash_incomes'],
+        'addresses' => ['product_returns', 'cash_expenses', 'cash_incomes'],
+        'warehouses' => ['product_returns', 'cash_expenses', 'cash_incomes'],
+        'cash_expenses' => ['payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices', 'addresses', 'warehouses', 'cash_incomes'],
+        'cash_incomes' => ['payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices', 'addresses', 'warehouses', 'cash_expenses'],
     ];
 
     public const LEGACY = [
