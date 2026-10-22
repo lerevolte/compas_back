@@ -103,7 +103,7 @@ class OneCSupplierOrderService
     {
         $columns = self::fieldColumns();
 
-        return array_values(array_filter(array_merge(self::RESYNC_FIELDS, [$columns['contract'], $columns['storehouse'], $columns['files']])));
+        return array_values(array_filter(array_merge(self::RESYNC_FIELDS, [$columns['contract'], $columns['storehouse'], $columns['files'], $columns['state']])));
     }
 
     public static function touched($model): bool
