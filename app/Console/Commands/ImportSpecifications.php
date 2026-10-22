@@ -14,7 +14,8 @@ class ImportSpecifications extends Command
     protected $signature = 'specifications:import
         {file : JSON-выгрузка из 1С (naim, id_1c, sostav[B24_ID, kolvo])}
         {target=avixo : <tenant_id>}
-        {--dry-run : только показать сопоставление}';
+        {--dry-run : только показать сопоставление}
+        {--report= : путь к CSV с несопоставленными позициями}';
 
     protected $description = 'Загрузить спецификации и их состав из выгрузки 1С; код 1С пишется в поле «Код спецификации»';
 
@@ -78,14 +79,6 @@ class ImportSpecifications extends Command
             $this->ensureField();
         }
 
-        $b24Ids = [];
-        $names = [];
-        foreach ($specs as $spec) {
-            $names[] = mb_strtolower($spec['naim']);
-            foreach ($spec['sostav'] as $row) {
-                $b24Ids[] = (string) ($row['B24_ID'] ?? '');
-            }
-        }
         $productColumns = array_values(array_filter(['id', 'name', 'id_b24', 'price', 'purchase_price', 'weight', 'volume', 'nds', 'nds_included'], fn ($c) => Schema::hasColumn('products', $c)));
         $query = DB::table('products')->orderBy('id');
         if (Schema::hasColumn('products', 'deleted_at')) {
@@ -98,7 +91,7 @@ class ImportSpecifications extends Command
             if ($b24 !== '' && !isset($byB24[$b24])) {
                 $byB24[$b24] = $product;
             }
-            $name = mb_strtolower(trim($this->text($product->name ?? '')));
+            $name = $this->key($this->text($product->name ?? ''));
             if ($name !== '' && !isset($byName[$name])) {
                 $byName[$name] = $product;
             }
@@ -112,7 +105,7 @@ class ImportSpecifications extends Command
         $noProduct = [];
         $missing = [];
         foreach ($specs as $spec) {
-            $finished = $byName[mb_strtolower($spec['naim'])] ?? null;
+            $finished = $byName[$this->key($spec['naim'])] ?? null;
             if (!$finished) {
                 $noProduct[] = $spec['naim'];
             }
@@ -156,6 +149,34 @@ class ImportSpecifications extends Command
         foreach (array_slice($missing, 0, 30, true) as $b24 => $where) {
             $this->line("  - B24_ID {$b24} (в " . count($where) . ' спецификац.)');
         }
+
+        $report = (string) $this->option('report');
+        if ($report !== '') {
+            $fh = fopen($report, 'w');
+            fwrite($fh, "\xEF\xBB\xBF");
+            fputcsv($fh, ['Проблема', 'Спецификация', 'Код 1С спецификации', 'B24_ID материала'], ';');
+            foreach ($specs as $spec) {
+                if (in_array($spec['naim'], $noProduct, true)) {
+                    fputcsv($fh, ['Нет товара «Готовая продукция» с таким названием', $spec['naim'], $spec['id_1c'], ''], ';');
+                }
+                foreach ($spec['sostav'] as $row) {
+                    $b24 = trim((string) ($row['B24_ID'] ?? ''));
+                    if (!isset($byB24[$b24])) {
+                        fputcsv($fh, ['Материал не найден по B24_ID', $spec['naim'], $spec['id_1c'], $b24], ';');
+                    }
+                }
+            }
+            fclose($fh);
+            $this->line("Отчёт: {$report}");
+        }
+        $this->line('Спецификаций с неполным составом: ' . count(array_filter($specs, function ($spec) use ($byB24) {
+            foreach ($spec['sostav'] as $row) {
+                if (!isset($byB24[trim((string) ($row['B24_ID'] ?? ''))])) {
+                    return true;
+                }
+            }
+            return false;
+        })));
 
         if (!$dryRun) {
             DB::table('local_cache')->where('url', 'like', 'objects/' . self::SLUG . '%')->update(['updated_at' => now()]);
@@ -222,6 +243,14 @@ class ImportSpecifications extends Command
         }
         DB::table('local_cache')->where('url', 'fields/' . self::SLUG)->update(['updated_at' => now()]);
         \App\Models\Settings::clear_cache();
+    }
+
+    private function key(string $name): string
+    {
+        $name = str_replace('ё', 'е', mb_strtolower(trim($name)));
+        $name = preg_replace('/\s*([,()\-])\s*/u', '$1', $name);
+
+        return (string) preg_replace('/\s+/u', ' ', $name);
     }
 
     private function text($value): string
