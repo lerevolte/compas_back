@@ -678,6 +678,17 @@ class B24ProductSync
         return ['total' => count($rows), 'missing' => $missing, 'trashed' => $trashed, 'pulled' => $pulled, 'failed' => $failed];
     }
 
+    public function fetchProductRow($productId): ?array
+    {
+        try {
+            $row = $this->b24('crm.product.get', ['id' => $productId])['result'] ?? null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+
+        return is_array($row) ? $row : null;
+    }
+
     public function pullProductById($productId): ?Product
     {
         $resp = $this->b24('crm.product.get', ['id' => $productId]);

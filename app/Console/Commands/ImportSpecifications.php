@@ -79,7 +79,7 @@ class ImportSpecifications extends Command
             $this->ensureField();
         }
 
-        $productColumns = array_values(array_filter(['id', 'name', 'id_b24', 'price', 'purchase_price', 'weight', 'volume', 'nds', 'nds_included'], fn ($c) => Schema::hasColumn('products', $c)));
+        $productColumns = array_values(array_filter(['id', 'name', 'id_b24', 'id_1c', 'price', 'purchase_price', 'weight', 'volume', 'nds', 'nds_included'], fn ($c) => Schema::hasColumn('products', $c)));
         $query = DB::table('products')->orderBy('id');
         if (Schema::hasColumn('products', 'deleted_at')) {
             $query->whereNull('deleted_at');
@@ -95,6 +95,21 @@ class ImportSpecifications extends Command
             if ($name !== '' && !isset($byName[$name])) {
                 $byName[$name] = $product;
             }
+        }
+
+        $by1c = [];
+        if (Schema::hasColumn('products', 'id_1c')) {
+            $q = DB::table('products')->whereNotNull('id_1c')->where('id_1c', '!=', '')->orderBy('id');
+            if (Schema::hasColumn('products', 'deleted_at')) {
+                $q->whereNull('deleted_at');
+            }
+            foreach ($q->get($productColumns) as $product) {
+                $by1c[trim((string) $product->id_1c)] ??= $product;
+            }
+        }
+        $resolved = $this->resolveMissing($specs, $byB24, $by1c, $byName);
+        foreach ($resolved as $b24 => $product) {
+            $byB24[$b24] = $product;
         }
 
         $existing = Schema::hasColumn(self::SLUG, self::FIELD)
@@ -181,6 +196,46 @@ class ImportSpecifications extends Command
         if (!$dryRun) {
             DB::table('local_cache')->where('url', 'like', 'objects/' . self::SLUG . '%')->update(['updated_at' => now()]);
         }
+    }
+
+    private function resolveMissing(array $specs, array $byB24, array $by1c, array $byName): array
+    {
+        $missing = [];
+        foreach ($specs as $spec) {
+            foreach ($spec['sostav'] as $row) {
+                $b24 = trim((string) ($row['B24_ID'] ?? ''));
+                if ($b24 !== '' && !isset($byB24[$b24])) {
+                    $missing[$b24] = true;
+                }
+            }
+        }
+        if (!$missing || !class_exists(\Modules\Bitrix24\Services\B24ProductSync::class)) {
+            return [];
+        }
+        $sync = \Modules\Bitrix24\Services\B24ProductSync::make();
+        if (!$sync) {
+            $this->warn('Битрикс24 не настроен — недостающие материалы не уточнить');
+            return [];
+        }
+        $result = [];
+        foreach (array_keys($missing) as $b24) {
+            $row = $sync->fetchProductRow($b24);
+            if (!$row) {
+                $this->line("  B24_ID {$b24}: в Битрикс24 не найден");
+                continue;
+            }
+            $xml = trim((string) ($row['XML_ID'] ?? ''));
+            $name = trim((string) ($row['NAME'] ?? ''));
+            $product = ($xml !== '' ? ($by1c[$xml] ?? null) : null) ?? ($byName[$this->key($name)] ?? null);
+            if ($product) {
+                $result[(string) $b24] = $product;
+                $this->line("  B24_ID {$b24} «{$name}» → товар Компаса #{$product->id} (B24 {$product->id_b24})");
+            } else {
+                $this->line("  B24_ID {$b24} «{$name}»: в Компасе нет ни по коду 1С, ни по названию");
+            }
+        }
+
+        return $result;
     }
 
     private function productLine(object $product, $count): array
