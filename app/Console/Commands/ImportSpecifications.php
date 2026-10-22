@@ -124,7 +124,7 @@ class ImportSpecifications extends Command
                     $missing[$b24][] = $spec['naim'];
                     continue;
                 }
-                $lines[] = $this->line($product, $row['kolvo'] ?? 0);
+                $lines[] = $this->productLine($product, $row['kolvo'] ?? 0);
             }
             if ($dryRun) {
                 continue;
@@ -162,7 +162,7 @@ class ImportSpecifications extends Command
         }
     }
 
-    private function line(object $product, $count): array
+    private function productLine(object $product, $count): array
     {
         $count = is_numeric($count) ? $count + 0 : 0;
         $line = [
