@@ -148,6 +148,9 @@ class Route extends Model
             if (!$model->exists || $model->isDirty('car_id') || $model->isDirty('mileage')) {
                 $model->mileage_cost = $model->computeMileageCost();
             }
+            if (\App\Services\RouteProfitService::ready() && (!$model->exists || $model->isDirty(\App\Services\RouteProfitService::ACTUAL) || $model->isDirty(\App\Services\RouteProfitService::PLANNED))) {
+                $model->{\App\Services\RouteProfitService::FIELD} = \App\Services\RouteProfitService::compute($model->{\App\Services\RouteProfitService::PLANNED}, $model->{\App\Services\RouteProfitService::ACTUAL});
+            }
         });
 
         static::saved(function($model)
