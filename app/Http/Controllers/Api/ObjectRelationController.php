@@ -20,13 +20,37 @@ class ObjectRelationController extends Controller
             'target_slug' => 'required|string|max:64',
             'target_id' => 'required|integer',
             'copy_products' => 'nullable|boolean',
+            'products' => 'nullable|array',
         ]);
 
         if (!ObjectRelation::ready()) {
             return response()->json(['ok' => false], 200);
         }
 
-        return \App\Services\ShipmentService::withFamilyLock($data['source_slug'], (int) $data['source_id'], fn () => $this->storeLinked($data));
+        $rows = array_values(array_filter((array) ($data['products'] ?? []), 'is_array'));
+        if (count($rows)) {
+            $data['copy_products'] = false;
+        }
+        $response = \App\Services\ShipmentService::withFamilyLock($data['source_slug'], (int) $data['source_id'], fn () => $this->storeLinked($data));
+        if (!count($rows) || $response->getStatusCode() !== 200) {
+            return $response;
+        }
+
+        $saved = app(TaskController::class)->saveCompositionFor((string) $data['target_slug'], (int) $data['target_id'], $rows);
+        $payload = $response->getData(true);
+        if (!$saved) {
+            $payload['products_saved'] = false;
+        } elseif ($saved->getStatusCode() === 200) {
+            $payload['products_saved'] = true;
+        } else {
+            $error = $saved->getData(true);
+            $payload['products_saved'] = false;
+            $payload['products_status'] = $saved->getStatusCode();
+            $payload['products_message'] = $error['message'] ?? null;
+            $payload['products_errors'] = $error['errors'] ?? [];
+        }
+
+        return response()->json($payload);
     }
 
     private function storeLinked(array $data)
@@ -83,6 +107,12 @@ class ObjectRelationController extends Controller
                 $data['target_slug'],
                 $data['target_id']
             );
+            if (!$productsCopied) {
+                try {
+                    $productsCopied = \App\Services\ShipmentService::inheritPrices((string) $data['source_slug'], (int) $data['source_id'], (string) $data['target_slug'], (int) $data['target_id']);
+                } catch (\Throwable $e) {
+                }
+            }
         }
 
         \App\Services\ProductionService::afterLink((string) $data['source_slug'], (int) $data['source_id'], (string) $data['target_slug'], (int) $data['target_id']);

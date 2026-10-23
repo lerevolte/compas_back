@@ -14,6 +14,33 @@ use Illuminate\Support\Facades\Hash;
 
 class TaskController extends Controller
 {
+    public const COMPOSITION_MODELS = [
+        'logistic_tasks' => Task::class,
+        'deals' => \App\Models\Deal::class,
+        'payment_invoices' => \App\Models\PaymentInvoice::class,
+        'expense_invoices' => \App\Models\ExpenseInvoice::class,
+        'product_returns' => \App\Models\ProductReturn::class,
+        'receipt_invoices' => \App\Models\ReceiptInvoice::class,
+        'pickups' => \App\Models\Pickup::class,
+        'addresses' => \App\Models\Address::class,
+        'specifications' => \App\Models\Specification::class,
+        'supplier_orders' => \App\Models\SupplierOrder::class,
+        'production_orders' => \App\Models\ProductionOrder::class,
+        'productions' => \App\Models\Production::class,
+        'transfer_orders' => \App\Models\TransferOrder::class,
+        'transfers' => \App\Models\Transfer::class,
+    ];
+
+    public function saveCompositionFor(string $slug, int $id, array $rows)
+    {
+        $class = self::COMPOSITION_MODELS[$slug] ?? null;
+        if (!$class) {
+            return null;
+        }
+
+        return $this->saveProductsFor($slug, $class, $id, new Request(['products' => $rows]));
+    }
+
     public function set_products($id, Request $request)
     {
         return $this->saveProductsFor('logistic_tasks', Task::class, $id, $request);

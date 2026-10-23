@@ -1035,7 +1035,10 @@ class ShipmentService
                 continue;
             }
             $product['count'] = $rest == (int) $rest ? (int) $rest : $rest;
-            $product['sum'] = round($price * $rest, 2);
+            $parts = self::lineParts($product, self::linePriceKey($sourceSlug, $product));
+            $product['sum'] = round($parts['sum'], 2);
+            $product['nds_sum'] = round($parts['vat'], 2);
+            $product['total'] = round($parts['gross'], 2);
             $result[] = $product;
         }
 
@@ -1082,6 +1085,75 @@ class ShipmentService
         }
 
         return $products;
+    }
+
+    public static function inheritPrices(string $sourceSlug, int $sourceId, string $targetSlug, int $targetId): bool
+    {
+        if (!in_array($targetSlug, self::childSlugsOf($sourceSlug, $sourceId), true)) {
+            return false;
+        }
+        $target = ObjectRelation::objectWithProducts($targetSlug, $targetId);
+        $source = ObjectRelation::objectWithProducts($sourceSlug, $sourceId);
+        if (!$target || !$source || !method_exists($target, 'setProducts')) {
+            return false;
+        }
+        $lines = self::decode($target->products);
+        if (!count(array_filter($lines, 'is_array'))) {
+            return ObjectRelation::copyProducts($sourceSlug, $sourceId, $targetSlug, $targetId);
+        }
+        $sourceLines = array_values(array_filter(self::decode($source->products), 'is_array'));
+        if (!count($sourceLines)) {
+            return false;
+        }
+        $find = function (array $line) use ($sourceLines) {
+            $id = (int) ($line['id'] ?? 0);
+            $name = self::nameKey($line['name'] ?? '');
+            foreach ($sourceLines as $candidate) {
+                if ($id && (int) ($candidate['id'] ?? 0) === $id) {
+                    return $candidate;
+                }
+            }
+            foreach ($sourceLines as $candidate) {
+                if (!$id && $name !== '' && self::nameKey($candidate['name'] ?? '') === $name) {
+                    return $candidate;
+                }
+            }
+            return null;
+        };
+        $empty = fn ($value) => !is_numeric($value) || (float) $value == 0.0;
+        $changed = false;
+        foreach ($lines as $i => $line) {
+            if (!is_array($line)) {
+                continue;
+            }
+            $match = $find($line);
+            if (!$match) {
+                continue;
+            }
+            $targetKey = self::linePriceKey($targetSlug);
+            $sourcePrice = $match[self::linePriceKey($sourceSlug, $match)] ?? null;
+            if ($empty($sourcePrice) || (is_numeric($line[$targetKey] ?? null) && abs((float) $line[$targetKey] - (float) $sourcePrice) < 0.001)) {
+                continue;
+            }
+            $line[$targetKey] = $sourcePrice;
+            foreach (['nds', 'nds_included'] as $key) {
+                if (array_key_exists($key, $match)) {
+                    $line[$key] = $match[$key];
+                }
+            }
+            $parts = self::lineParts($line, self::linePriceKey($targetSlug, $line));
+            $line['sum'] = round($parts['sum'], 2);
+            $line['nds_sum'] = round($parts['vat'], 2);
+            $line['total'] = round($parts['gross'], 2);
+            $lines[$i] = $line;
+            $changed = true;
+        }
+        if (!$changed) {
+            return false;
+        }
+        $target->setProducts(array_values($lines));
+
+        return true;
     }
 
     public static function linePriceKey(string $slug, ?array $line = null): string

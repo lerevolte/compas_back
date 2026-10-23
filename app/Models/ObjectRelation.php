@@ -236,6 +236,7 @@ class ObjectRelation extends Model
                 \App\Services\ShipmentService::recalcDealShipped($sourceId);
             }
             \App\Services\SaleDocumentService::inheritFromSource($targetSlug, $sourceSlug, $sourceId, $targetId);
+            \App\Services\ShipmentService::inheritPrices($sourceSlug, $sourceId, $targetSlug, $targetId);
             if ($targetSlug === \App\Services\ShipmentService::DOCUMENT) {
                 \App\Services\ShipmentService::recalcForDocument($targetId);
             }
@@ -379,7 +380,7 @@ class ObjectRelation extends Model
         }
     }
 
-    private static function objectWithProducts(string $slug, int $id)
+    public static function objectWithProducts(string $slug, int $id)
     {
         if (!Schema::hasTable($slug) || !Schema::hasColumn($slug, 'products')) {
             return null;
