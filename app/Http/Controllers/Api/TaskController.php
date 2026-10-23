@@ -244,6 +244,10 @@ class TaskController extends Controller
             }
         }
         $products = $this->compositionLines($slug, (array) ($request->products ?? []));
+        try {
+            $products = \App\Services\ShipmentService::applyParentPrices((string) $slug, (int) $id, $products);
+        } catch (\Throwable $e) {
+        }
         $errors = \App\Services\ShipmentService::withFamilyLock($slug, (int) $id, function () use ($class, $slug, $id, $products) {
             $object = $class::find($id);
             if (!$object) {

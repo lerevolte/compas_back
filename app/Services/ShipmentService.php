@@ -1087,6 +1087,63 @@ class ShipmentService
         return $products;
     }
 
+    public static function applyParentPrices(string $slug, int $id, array $lines): array
+    {
+        $parent = $id ? self::parentOf($slug, $id) : null;
+        if (!$parent || !count($lines)) {
+            return $lines;
+        }
+        [$parentSlug, $parentId] = $parent;
+        $parentRow = Schema::hasTable($parentSlug) ? DB::table($parentSlug)->where('id', $parentId)->first(['products']) : null;
+        $parentLines = array_values(array_filter(self::decode($parentRow->products ?? null), 'is_array'));
+        if (!count($parentLines)) {
+            return $lines;
+        }
+        $ownRow = Schema::hasTable($slug) ? DB::table($slug)->where('id', $id)->first(['products']) : null;
+        $known = [];
+        foreach (self::decode($ownRow->products ?? null) as $line) {
+            if (is_array($line) && (int) ($line['id'] ?? 0)) {
+                $known[(int) $line['id']] = true;
+            }
+        }
+        $byId = [];
+        foreach ($parentLines as $line) {
+            if ((int) ($line['id'] ?? 0) && !isset($byId[(int) $line['id']])) {
+                $byId[(int) $line['id']] = $line;
+            }
+        }
+        $targetKey = self::linePriceKey($slug);
+        foreach ($lines as $i => $line) {
+            $productId = (int) ($line['id'] ?? 0);
+            if (!$productId || !isset($byId[$productId])) {
+                continue;
+            }
+            $current = $line[$targetKey] ?? null;
+            $empty = !is_numeric($current) || (float) $current == 0.0;
+            if (isset($known[$productId]) && !$empty) {
+                continue;
+            }
+            $match = $byId[$productId];
+            $price = $match[self::linePriceKey($parentSlug, $match)] ?? null;
+            if (!is_numeric($price) || (float) $price == 0.0) {
+                continue;
+            }
+            $line[$targetKey] = $price;
+            foreach (['nds', 'nds_included'] as $key) {
+                if (array_key_exists($key, $match)) {
+                    $line[$key] = $match[$key];
+                }
+            }
+            $parts = self::lineParts($line, self::linePriceKey($slug, $line));
+            $line['sum'] = round($parts['sum'], 2);
+            $line['nds_sum'] = round($parts['vat'], 2);
+            $line['total'] = round($parts['gross'], 2);
+            $lines[$i] = $line;
+        }
+
+        return $lines;
+    }
+
     public static function inheritPrices(string $sourceSlug, int $sourceId, string $targetSlug, int $targetId): bool
     {
         if (!in_array($targetSlug, self::childSlugsOf($sourceSlug, $sourceId), true)) {
