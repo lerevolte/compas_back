@@ -19,6 +19,12 @@ class Task extends Model
     public static function boot()
     {
        parent::boot();
+       static::creating(function ($model) {
+           if (\App\Services\DeliveryCostService::ready()) {
+               $model->{\App\Services\DeliveryCostService::FIELD} = null;
+           }
+       });
+
        static::creating(function($model)
        {
             $user = Auth::user();
@@ -122,12 +128,17 @@ class Task extends Model
                     $newRoute = Route::find($newRouteId);
                     if ($newRoute) $newRoute->recalculateTotals();
                 }
+                if (!$newRouteId) {
+                    \App\Services\DeliveryCostService::clearTask((int) $model->id);
+                }
             } else {
 
                 if ($model->route_id && ($model->isDirty('weight') || $model->isDirty('volume') || $model->isDirty('delivery_price'))) {
                     if ($model->route) {
                         $model->route->recalculateTotals();
                     }
+                } elseif ($model->route_id && $model->wasChanged(\App\Services\ShipmentService::ACTION_FIELD)) {
+                    \App\Services\DeliveryCostService::recalcRoute((int) $model->route_id);
                 }
             }
        });
@@ -150,6 +161,13 @@ class Task extends Model
            if ($model->route_id) {
                $route = Route::find($model->route_id);
                if ($route) $route->recalculateTotals();
+           }
+           \App\Services\DeliveryCostService::recalcOrdersForTasks([(int) $model->id]);
+       });
+
+       static::restored(function ($model) {
+           if ($model->route_id) {
+               \App\Services\DeliveryCostService::recalcRoute((int) $model->route_id);
            }
        });
 

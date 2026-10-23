@@ -87,6 +87,9 @@ class Product extends Model
             } catch (\Throwable $e) {
                 \Log::warning('product kit mirror failed', ['product_id' => $model->id, 'error' => $e->getMessage()]);
             }
+            if ($model->wasChanged([\App\Services\PurchaseTermService::FACT_FIELD, 'kit_products'])) {
+                \App\Services\PurchaseTermService::recalcAll();
+            }
        });
     }
 

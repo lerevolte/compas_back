@@ -26,6 +26,7 @@ class Kernel extends ConsoleKernel
         $schedule->command('bitrix24:sync-entities all-tenants --queue --chunk=200')->everyTenMinutes()->withoutOverlapping();
         $schedule->command('saby:sync-orders all-tenants')->everyTenMinutes()->withoutOverlapping();
         $schedule->command('employees:sync-geolocation-status all-tenants')->everyFiveMinutes()->withoutOverlapping();
+        $schedule->command('products:recalc-purchase-term all-tenants')->dailyAt('03:40')->withoutOverlapping();
         $tenants = \App\Models\Tenant::get();
         //info('SCHEDULER');
         foreach ($tenants as $tenant) {

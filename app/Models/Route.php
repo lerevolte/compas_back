@@ -155,6 +155,9 @@ class Route extends Model
 
         static::saved(function($model)
         {
+            if ($model->wasChanged(\App\Services\DeliveryCostService::ROUTE_FIELDS)) {
+                \App\Services\DeliveryCostService::recalcRoute((int) $model->id);
+            }
             if ($model->isDirty('company_id') && $model->company_id) {
                 \App\Models\Company::addType($model->company_id, 'Перевозчик');
             }
@@ -373,21 +376,10 @@ class Route extends Model
         return $this->hasMany(Task::class, 'route_id')->orderBy('sort');
     }
 
-    /**
-     * 1. Метод для пересчета суммарного веса и объема маршрута
-     * Вызывается из модели Task при изменениях
-     */
     public function recalculateTotals()
     {
-        // Считаем суммы отдельными легкими запросами
         $totalWeight = $this->tasks()->sum('weight');
         $totalVolume = $this->tasks()->sum('volume');
-        // «Заложено на доставку» (reserve_for_delivery) = сумма delivery_price
-        // задач маршрута. Раньше эта сумма ошибочно писалась в delivery_price
-        // («Цена доставки»), из-за чего reserve_for_delivery всегда оставался
-        // пуст, а «Цена доставки» показывала заложенную сумму (8456).
-        // delivery_price здесь больше не трогаем — это отдельная величина
-        // (фактическая цена доставки).
         $totalReserve = $this->tasks()->sum('delivery_price');
 
         $this->timestamps = false;
@@ -397,6 +389,7 @@ class Route extends Model
             'reserve_for_delivery' => $totalReserve,
         ]);
         $this->timestamps = true;
+        \App\Services\DeliveryCostService::recalcRoute((int) $this->id);
     }
     
 

@@ -33,6 +33,7 @@ class InstallSupplierOrdersEntity extends Command
 
         if ($target === 'seeds') {
             $this->installInto(\DB::connection('seeds'), 'admin_seeds', false);
+            $this->call('entity:install-employee-field', ['entity' => self::SLUG, 'target' => $target]);
             return self::SUCCESS;
         }
 
@@ -45,6 +46,7 @@ class InstallSupplierOrdersEntity extends Command
                     $this->error("  ✗ {$tenant->id}: " . $e->getMessage());
                 }
             }
+            $this->call('entity:install-employee-field', ['entity' => self::SLUG, 'target' => $target]);
             return self::SUCCESS;
         }
 
@@ -60,6 +62,7 @@ class InstallSupplierOrdersEntity extends Command
             return self::FAILURE;
         }
         $tenant->run(fn () => $this->installInto(\DB::connection(), (string) $tenant->id, true));
+        $this->call('entity:install-employee-field', ['entity' => self::SLUG, 'target' => (string) $tenant->id]);
         $this->info("Готово: {$target}");
 
         return self::SUCCESS;

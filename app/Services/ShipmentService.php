@@ -844,6 +844,8 @@ class ShipmentService
             $parentSlugs = array_merge(self::SOURCES, [self::SUPPLIER]);
         } elseif ($slug === ProductionService::DOC) {
             $parentSlugs = [ProductionService::ORDER];
+        } elseif ($slug === TransferService::DOC) {
+            $parentSlugs = [TransferService::ORDER];
         } else {
             $parentSlugs = [];
         }
@@ -895,6 +897,9 @@ class ShipmentService
         }
         if ($slug === ProductionService::ORDER) {
             return [ProductionService::DOC];
+        }
+        if ($slug === TransferService::ORDER) {
+            return [TransferService::DOC];
         }
         if (self::isSource($slug)) {
             if ($id && self::isNeutralAction($slug, $id)) {
@@ -1391,7 +1396,7 @@ class ShipmentService
             }
             if ($slug === 'deals') {
                 $lines = self::childLines($slug, $id, self::SOURCES);
-            } elseif ($slug === self::SUPPLIER || $slug === ProductionService::ORDER) {
+            } elseif ($slug === self::SUPPLIER || $slug === ProductionService::ORDER || $slug === TransferService::ORDER) {
                 $lines = self::childLines($slug, $id, self::childSlugsOf($slug, $id));
             } elseif (self::isSource($slug) && self::isLoading($slug, $id)) {
                 $lines = self::childLines($slug, $id, [self::RECEIPT_DOC]);

@@ -74,6 +74,16 @@ class TaskController extends Controller
         return $this->saveProductsFor(\App\Services\ProductionService::DOC, \App\Models\Production::class, $id, $request);
     }
 
+    public function set_transfer_order_products($id, Request $request)
+    {
+        return $this->saveProductsFor(\App\Services\TransferService::ORDER, \App\Models\TransferOrder::class, $id, $request);
+    }
+
+    public function set_transfer_products($id, Request $request)
+    {
+        return $this->saveProductsFor(\App\Services\TransferService::DOC, \App\Models\Transfer::class, $id, $request);
+    }
+
     public function set_production_order_materials($id, Request $request)
     {
         return $this->saveMaterialsFor(\App\Services\ProductionService::ORDER, $id, $request);

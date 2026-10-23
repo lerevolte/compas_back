@@ -18,7 +18,8 @@ class InstallCommentField extends Command
     public const ENTITIES = [
         'deals', 'supplier_orders', 'logistic_tasks', 'pickups',
         'payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices',
-        'addresses', 'warehouses',
+        'addresses', 'warehouses', 'specifications', 'production_orders', 'productions',
+        'transfer_orders', 'transfers', 'cash_expenses', 'cash_incomes',
     ];
 
     public function handle(): int

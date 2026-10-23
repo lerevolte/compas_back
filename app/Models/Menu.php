@@ -121,7 +121,7 @@ class Menu
                 unset($menu[$k]);
             } elseif(isset($menu_item['has_roles_read']) && $menu_item['has_roles_read'] && isset($menu_item['roles_read']) && count($menu_item['roles_read']) && !in_array($user->role_id, $menu_item['roles_read']) && !$user->is_admin) {
                 unset($menu[$k]);
-            } elseif(in_array($slug, ['logistic_tasks', 'pickups', 'deals', 'supplier_orders', 'payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices', 'addresses', 'specifications', 'production_orders', 'productions']) && isset($menu_item['tab']) && in_array($menu_item['tab'], ['products', 'materials'], true) && !$user->is_admin
+            } elseif(in_array($slug, ['logistic_tasks', 'pickups', 'deals', 'supplier_orders', 'payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices', 'addresses', 'specifications', 'production_orders', 'productions', 'transfer_orders', 'transfers']) && isset($menu_item['tab']) && in_array($menu_item['tab'], ['products', 'materials'], true) && !$user->is_admin
                 && isset($s[$slug]['perms'][$menu_item['tab']]['read']) && !$s[$slug]['perms'][$menu_item['tab']]['read']) {
                 unset($menu[$k]);
             } elseif(isset($menu_item['tab']) && $menu_item['tab'] == 'modules') {

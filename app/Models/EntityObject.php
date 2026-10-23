@@ -1877,6 +1877,8 @@ class EntityObject
                 'specifications' => \App\Models\Specification::class,
                 'production_orders' => \App\Models\ProductionOrder::class,
                 'productions' => \App\Models\Production::class,
+                'transfer_orders' => \App\Models\TransferOrder::class,
+                'transfers' => \App\Models\Transfer::class,
                 'production_orders_materials' => \App\Models\ProductionOrderMaterials::class,
                 'productions_materials' => \App\Models\ProductionMaterials::class,
             ][$request->order_entity] ?? \App\Models\Task::class;

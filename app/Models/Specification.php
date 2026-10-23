@@ -38,14 +38,19 @@ class Specification extends Model
                     \App\Services\ReverseLinkService::ids($model->finished_product_id)
                 );
             }
+            if ($model->wasRecentlyCreated || $model->wasChanged(['finished_product_id', 'products'])) {
+                \App\Services\PurchaseTermService::recalcAll();
+            }
         });
 
         static::deleted(function ($model) {
             \App\Services\ReverseLinkService::sync('products', self::PRODUCT_FIELD, (int) $model->id, \App\Services\ReverseLinkService::ids($model->finished_product_id), []);
+            \App\Services\PurchaseTermService::recalcAll();
         });
 
         static::restored(function ($model) {
             \App\Services\ReverseLinkService::sync('products', self::PRODUCT_FIELD, (int) $model->id, [], \App\Services\ReverseLinkService::ids($model->finished_product_id));
+            \App\Services\PurchaseTermService::recalcAll();
         });
     }
 
@@ -64,6 +69,7 @@ class Specification extends Model
             true
         );
         $this->saveQuietly();
+        \App\Services\PurchaseTermService::recalcAll();
     }
 
     public function getHtmlProducts()

@@ -392,7 +392,7 @@ class ObjectController extends Controller
         $products = [];
         $tableKeys = [];
 
-        if (in_array($slug, ['logistic_tasks', 'pickups', 'deals', 'supplier_orders', 'payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices', 'addresses', 'specifications', 'production_orders', 'productions'], true)) {
+        if (in_array($slug, ['logistic_tasks', 'pickups', 'deals', 'supplier_orders', 'payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices', 'addresses', 'specifications', 'production_orders', 'productions', 'transfer_orders', 'transfers'], true)) {
             $productsPerms = $this->getProductsFieldPerms($user, $entity->id, $isExternalAccess, $slug);
             if ($productsPerms['read']) {
                 $tableKeys = Table::get_order_products($slug);
@@ -835,6 +835,7 @@ class ObjectController extends Controller
             'pickups' => ['expense_invoices', 'product_returns'],
             'addresses' => ['logistic_tasks'],
             'production_orders' => ['productions'],
+            'transfer_orders' => ['transfers'],
         ][$slug] ?? null;
         if ($targets === null) {
             return null;

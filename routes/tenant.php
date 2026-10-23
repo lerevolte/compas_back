@@ -536,6 +536,8 @@ Route::middleware([
 
         Route::put('production_orders/{id}/set_products', [App\Http\Controllers\Api\TaskController::class, 'set_production_order_products']);
         Route::put('productions/{id}/set_products', [App\Http\Controllers\Api\TaskController::class, 'set_production_products']);
+        Route::put('transfer_orders/{id}/set_products', [App\Http\Controllers\Api\TaskController::class, 'set_transfer_order_products']);
+        Route::put('transfers/{id}/set_products', [App\Http\Controllers\Api\TaskController::class, 'set_transfer_products']);
         Route::put('production_orders_materials/{id}/set_products', [App\Http\Controllers\Api\TaskController::class, 'set_production_order_materials']);
         Route::put('productions_materials/{id}/set_products', [App\Http\Controllers\Api\TaskController::class, 'set_production_materials']);
         Route::post('production/{slug}/{id}/fill_materials', [App\Http\Controllers\Api\TaskController::class, 'fill_production_materials'])

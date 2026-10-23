@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Schema;
 
 class SaleDocumentService
 {
-    public const NOT_PRINTED = ['payment_invoices'];
+    public const NOT_PRINTED = ['payment_invoices', 'expense_invoices'];
 
     public const INHERITED_FIELDS = ['shipment_company_id' => false, 'company_id' => true, 'contact_id' => true];
 
