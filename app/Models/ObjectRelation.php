@@ -291,7 +291,7 @@ class ObjectRelation extends Model
                 return false;
             }
 
-            $products = self::decodeProducts($source->products);
+            $products = \App\Services\ShipmentService::repriceForTarget($sourceSlug, $targetSlug, self::decodeProducts($source->products));
             if ($targetSlug === \App\Services\ShipmentService::RETURN_DOC) {
                 $products = \App\Services\ShipmentService::withoutServices($products);
             }

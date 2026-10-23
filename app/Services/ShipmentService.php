@@ -1059,6 +1059,26 @@ class ShipmentService
         return ['sum' => $base, 'net' => $base, 'vat' => $vat, 'gross' => $base + $vat, 'rate' => $rate, 'included' => false];
     }
 
+    public static function repriceForTarget(string $sourceSlug, string $targetSlug, array $products): array
+    {
+        if (self::linePriceKey($sourceSlug) !== 'purchase_price' || self::linePriceKey($targetSlug) !== 'price') {
+            return $products;
+        }
+        foreach ($products as $i => $line) {
+            if (!is_array($line) || !is_numeric($line['purchase_price'] ?? null)) {
+                continue;
+            }
+            $line['price'] = $line['purchase_price'];
+            $parts = self::lineParts($line);
+            $line['sum'] = round($parts['sum'], 2);
+            $line['nds_sum'] = round($parts['vat'], 2);
+            $line['total'] = round($parts['gross'], 2);
+            $products[$i] = $line;
+        }
+
+        return $products;
+    }
+
     public static function linePriceKey(string $slug, ?array $line = null): string
     {
         if ($slug === self::SUPPLIER) {
