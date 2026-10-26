@@ -167,7 +167,7 @@ class ImportSpecifications extends Command
             $model->name = $spec['naim'];
             $model->{self::FIELD} = $spec['id_1c'];
             if ($finished) {
-                $model->finished_product_id = Schema::hasColumn(self::SLUG, 'finished_product_id') ? json_encode([(int) $finished->id]) : null;
+                $model->finished_product_id = Schema::hasColumn(self::SLUG, 'finished_product_id') ? (string) (int) $finished->id : null;
             }
             $model->save();
             $model->setProducts($lines);
