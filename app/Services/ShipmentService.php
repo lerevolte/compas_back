@@ -549,6 +549,13 @@ class ShipmentService
                 if ($supplier) {
                     self::recalcSupplierReceived((int) $supplier);
                 }
+                $transferOrder = ObjectRelation::where('source_slug', TransferService::ORDER)
+                    ->where('target_slug', $slug)
+                    ->where('target_id', $id)
+                    ->value('source_id');
+                if ($transferOrder) {
+                    TransferService::recalcOrder((int) $transferOrder);
+                }
             } catch (\Throwable $e) {
             }
 
@@ -572,18 +579,14 @@ class ShipmentService
             return;
         }
 
+        $services = self::serviceIds(array_map(fn ($p) => is_array($p) ? ($p['id'] ?? 0) : 0, $products));
+        $goods = array_filter($products, fn ($p) => is_array($p) && (float) ($p['count'] ?? 0) > 0 && !in_array((int) ($p['id'] ?? 0), $services, true));
+        $countable = count($goods) ? $goods : array_filter($products, fn ($p) => is_array($p) && (float) ($p['count'] ?? 0) > 0);
         $hasAny = false;
         $full = false;
         $lines = 0;
-        $services = self::serviceIds(array_map(fn ($p) => is_array($p) ? ($p['id'] ?? 0) : 0, $products));
-        foreach ($products as $product) {
-            if (!is_array($product) || in_array((int) ($product['id'] ?? 0), $services, true)) {
-                continue;
-            }
-            $count = (float) ($product['count'] ?? 0);
-            if ($count <= 0) {
-                continue;
-            }
+        foreach ($countable as $product) {
+            $count = (float) $product['count'];
             $lines++;
             $value = self::lookup($shipped, $product);
             if ($value > 0.0001) {
@@ -711,11 +714,11 @@ class ShipmentService
             return $shipped;
         }
         $received = self::receiptsUsage($slug, $id);
+        if (self::isTransfer($slug, $id)) {
+            return self::maxUsage(self::maxUsage($shipped, $received), self::documentUsage(TransferService::DOC, $slug, $id));
+        }
         if (!count($received['id']) && !count($received['name'])) {
             return $shipped;
-        }
-        if (self::isTransfer($slug, $id)) {
-            return self::maxUsage($shipped, $received);
         }
 
         return count($shipped['id']) || count($shipped['name']) ? $shipped : $received;
@@ -837,7 +840,7 @@ class ShipmentService
             return null;
         }
         if (self::isSource($slug)) {
-            $parentSlugs = ['deals', self::SUPPLIER];
+            $parentSlugs = ['deals', self::SUPPLIER, TransferService::ORDER];
         } elseif ($slug === self::DOCUMENT || $slug === self::RETURN_DOC) {
             $parentSlugs = self::SOURCES;
         } elseif ($slug === self::RECEIPT_DOC) {
@@ -845,7 +848,7 @@ class ShipmentService
         } elseif ($slug === ProductionService::DOC) {
             $parentSlugs = [ProductionService::ORDER];
         } elseif ($slug === TransferService::DOC) {
-            $parentSlugs = [TransferService::ORDER];
+            $parentSlugs = [TransferService::ORDER, 'logistic_tasks'];
         } else {
             $parentSlugs = [];
         }
@@ -867,11 +870,13 @@ class ShipmentService
             return [];
         }
         if (self::isSource($slug)) {
-            $parentSlugs = ['deals', self::SUPPLIER];
+            $parentSlugs = ['deals', self::SUPPLIER, TransferService::ORDER];
         } elseif ($slug === self::DOCUMENT || $slug === self::RETURN_DOC) {
             $parentSlugs = self::SOURCES;
         } elseif ($slug === self::RECEIPT_DOC) {
             $parentSlugs = array_merge(self::SOURCES, [self::SUPPLIER]);
+        } elseif ($slug === TransferService::DOC) {
+            $parentSlugs = [TransferService::ORDER, 'logistic_tasks'];
         } else {
             return [];
         }
@@ -899,14 +904,14 @@ class ShipmentService
             return [ProductionService::DOC];
         }
         if ($slug === TransferService::ORDER) {
-            return [TransferService::DOC];
+            return [TransferService::DOC, 'logistic_tasks'];
         }
         if (self::isSource($slug)) {
             if ($id && self::isNeutralAction($slug, $id)) {
                 return [];
             }
             if ($id && self::isTransfer($slug, $id)) {
-                return [self::DOCUMENT, self::RECEIPT_DOC];
+                return [TransferService::DOC, self::DOCUMENT, self::RECEIPT_DOC];
             }
             return $id && self::isLoading($slug, $id) ? [self::RECEIPT_DOC] : [self::DOCUMENT];
         }
@@ -923,7 +928,7 @@ class ShipmentService
         if ($parentSlug === self::SUPPLIER && $childSlug === self::RECEIPT_DOC) {
             return [self::RECEIPT_DOC];
         }
-        if (self::isSource($parentSlug) && self::isTransfer($parentSlug, $parentId)) {
+        if ($parentSlug === TransferService::ORDER || (self::isSource($parentSlug) && self::isTransfer($parentSlug, $parentId))) {
             return [$childSlug];
         }
 
@@ -962,7 +967,7 @@ class ShipmentService
         if ($slug === self::SUPPLIER) {
             return self::supplierSourceUsage($id);
         }
-        if (self::isSource($slug) && self::isTransfer($slug, $id)) {
+        if ($slug === TransferService::ORDER || (self::isSource($slug) && self::isTransfer($slug, $id))) {
             $result = ['id' => [], 'name' => [], 'price_id' => [], 'price_name' => []];
             foreach ($childSlugs as $childSlug) {
                 $result = self::maxUsage($result, self::usageByChildren($slug, $id, [$childSlug]));
@@ -1525,19 +1530,21 @@ class ShipmentService
             }
             if ($slug === 'deals') {
                 $lines = self::childLines($slug, $id, self::SOURCES);
-            } elseif ($slug === self::SUPPLIER || $slug === ProductionService::ORDER || $slug === TransferService::ORDER) {
+            } elseif ($slug === self::SUPPLIER || $slug === ProductionService::ORDER) {
                 $lines = self::childLines($slug, $id, self::childSlugsOf($slug, $id));
             } elseif (self::isSource($slug) && self::isLoading($slug, $id)) {
                 $lines = self::childLines($slug, $id, [self::RECEIPT_DOC]);
-            } elseif (self::isSource($slug) && self::isTransfer($slug, $id)) {
-                $lines = self::childLines($slug, $id, [self::DOCUMENT]);
-                foreach (self::childLines($slug, $id, [self::RECEIPT_DOC]) as $key => $line) {
-                    if (!isset($lines[$key])) {
-                        $lines[$key] = $line;
-                        continue;
+            } elseif ($slug === TransferService::ORDER || (self::isSource($slug) && self::isTransfer($slug, $id))) {
+                $lines = [];
+                foreach (self::childSlugsOf($slug, $id) as $childSlug) {
+                    foreach (self::childLines($slug, $id, [$childSlug]) as $key => $line) {
+                        if (!isset($lines[$key])) {
+                            $lines[$key] = $line;
+                            continue;
+                        }
+                        $lines[$key]['count'] = max($lines[$key]['count'], $line['count']);
+                        $lines[$key]['price_total'] = max($lines[$key]['price_total'], $line['price_total']);
                     }
-                    $lines[$key]['count'] = max($lines[$key]['count'], $line['count']);
-                    $lines[$key]['price_total'] = max($lines[$key]['price_total'], $line['price_total']);
                 }
             } elseif (self::isSource($slug)) {
                 $docs = self::childLines($slug, $id, [self::DOCUMENT]);

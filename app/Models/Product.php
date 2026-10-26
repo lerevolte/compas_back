@@ -90,6 +90,7 @@ class Product extends Model
             if ($model->wasChanged([\App\Services\PurchaseTermService::FACT_FIELD, 'kit_products'])) {
                 \App\Services\PurchaseTermService::recalcAll();
             }
+            \App\Services\ProductCompositionService::onSaved($model);
        });
     }
 

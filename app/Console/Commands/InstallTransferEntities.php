@@ -32,6 +32,8 @@ class InstallTransferEntities extends Command
         ],
     ];
 
+    public const ORDER_TASK_FIELDS = ['service_time', 'phone', 'contact', 'car_requirements', 'time'];
+
     public function handle(): int
     {
         $target = (string) $this->argument('target');
@@ -56,6 +58,33 @@ class InstallTransferEntities extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    private function orderTaskFields($db, $sb): array
+    {
+        $taskTypeId = $db->table('data_types')->where('slug', 'logistic_tasks')->value('id');
+        $result = [];
+        foreach (self::ORDER_TASK_FIELDS as $field) {
+            if (!$sb->hasColumn(TransferService::ORDER, $field)) {
+                $db->statement('ALTER TABLE `' . TransferService::ORDER . '` ADD COLUMN `' . $field . '` ' . InstallSupplierOrdersEntity::TASK_COLUMNS[$field]);
+            }
+            $attrs = InstallSupplierOrdersEntity::TASK_FIELDS[$field];
+            $source = $taskTypeId
+                ? $db->table('data_rows')->where('data_type_id', $taskTypeId)->where('field', $field)->where('is_remove', 0)->first()
+                : null;
+            if ($source && $source->type !== 'status') {
+                $attrs = array_merge($attrs, array_filter([
+                    'type' => $source->type,
+                    'title' => $source->title,
+                    'details' => $source->details,
+                    'mask' => $source->mask,
+                    'unit' => $source->unit,
+                ], fn ($v) => $v !== null && $v !== ''), ['is_plural' => (int) $source->is_plural]);
+            }
+            $result[$field] = $attrs;
+        }
+
+        return $result;
     }
 
     private function installInto($db, string $label, bool $inTenant): void
@@ -141,6 +170,11 @@ SQL);
             $fields += [
                 'shipment_company_id' => ['type' => 'relation', 'title' => 'Компания поставщик', 'details' => '{"table":"companies","can_create":true}', 'relation_table' => 'companies', 'is_link' => 1],
                 'address' => ['type' => 'address', 'title' => 'Адрес'],
+            ];
+            if ($slug === TransferService::ORDER) {
+                $fields += $this->orderTaskFields($db, $sb);
+            }
+            $fields += [
                 'products' => ['type' => 'json', 'title' => 'Состав', 'only_read' => 1, 'is_default' => 1],
                 'weight' => ['type' => 'number', 'title' => 'Вес'],
                 'comment' => ['type' => 'text', 'title' => 'Примечание', 'is_plural' => 1],
@@ -155,7 +189,7 @@ SQL);
             foreach ($fields as $field => $attrs) {
                 $existing = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', $field)->first();
                 if ($existing) {
-                    $patch = array_intersect_key($attrs, array_flip(['type', 'details', 'relation_table', 'is_plural', 'only_read', 'is_program']));
+                    $patch = array_intersect_key($attrs, array_flip(['type', 'details', 'relation_table', 'is_plural', 'only_read', 'is_program', 'mask', 'unit']));
                     $patch['is_remove'] = 0;
                     $db->table('data_rows')->where('id', $existing->id)->update($patch);
                     $sort++;

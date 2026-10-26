@@ -243,6 +243,9 @@ class Task extends Model
         $this->timestamps = false;
         $this->saveQuietly();
         $this->timestamps = true;
+        if ($this->route_id && ($route = Route::find($this->route_id))) {
+            $route->recalculateTotals();
+        }
     }
 
     public function setProducts(array $products)

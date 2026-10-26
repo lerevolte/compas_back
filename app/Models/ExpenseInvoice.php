@@ -70,6 +70,7 @@ class ExpenseInvoice extends Model
 
     public function setProducts(array $products, $sum = null)
     {
+        $oldProducts = $this->getOriginal('products');
         $this->products = json_encode($products);
         $total = 0.0;
         foreach ($products as $product) {
@@ -98,6 +99,7 @@ class ExpenseInvoice extends Model
         \App\Services\OneC\OneCExportService::markChanged($this);
         $this->regeneratePdf();
         \App\Services\ShipmentService::recalcForDocument((int) $this->id);
+        \App\Services\ProductPriceService::recalcFromChange($this->products, $oldProducts);
     }
 
     public function getHtmlProducts()

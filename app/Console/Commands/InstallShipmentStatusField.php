@@ -14,7 +14,7 @@ class InstallShipmentStatusField extends Command
 
     public const FIELD = 'shipment_status';
     public const TITLE = 'Отгрузки со склада';
-    public const ENTITIES = ['logistic_tasks', 'pickups', 'deals', 'supplier_orders'];
+    public const ENTITIES = ['logistic_tasks', 'pickups', 'deals', 'supplier_orders', 'transfer_orders'];
     public const REFERENCE = 'logistic_tasks';
     public const VALUES = [
         ['value' => 'Не отгружено', 'color' => '#A8A8A8'],
@@ -192,7 +192,7 @@ class InstallShipmentStatusField extends Command
             } catch (\Throwable $e) {
             }
 
-            foreach (['deals' => 'recalcDealShipped', 'supplier_orders' => 'recalcSupplierReceived'] as $slug => $method) {
+            foreach (['deals' => [\App\Services\ShipmentService::class, 'recalcDealShipped'], 'supplier_orders' => [\App\Services\ShipmentService::class, 'recalcSupplierReceived'], 'transfer_orders' => [\App\Services\TransferService::class, 'recalcOrder']] as $slug => $method) {
                 try {
                     if (!$sb->hasTable($slug) || !$sb->hasColumn($slug, self::FIELD) || !\App\Models\ObjectRelation::ready()) {
                         continue;
@@ -200,7 +200,7 @@ class InstallShipmentStatusField extends Command
                     $count = 0;
                     $db->table($slug)->whereNull('deleted_at')->orderBy('id')->select('id')->chunk(200, function ($items) use ($method, &$count) {
                         foreach ($items as $item) {
-                            \App\Services\ShipmentService::$method((int) $item->id);
+                            $method((int) $item->id);
                             $count++;
                         }
                     });

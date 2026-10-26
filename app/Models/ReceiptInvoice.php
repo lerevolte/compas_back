@@ -97,6 +97,7 @@ class ReceiptInvoice extends Model
 
     public function setProducts(array $products, $sum = null)
     {
+        $oldProducts = $this->getOriginal('products');
         $this->products = json_encode($products);
         $total = 0.0;
         foreach ($products as $product) {
@@ -124,6 +125,7 @@ class ReceiptInvoice extends Model
         $this->saveQuietly();
         \App\Services\OneC\OneCExportService::markChanged($this);
         self::recalcParentShipments((int) $this->id);
+        \App\Services\ProductPriceService::recalcFromChange($this->products, $oldProducts, 'purchase_price');
     }
 
     public function getHtmlProducts()

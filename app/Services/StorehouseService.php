@@ -37,7 +37,7 @@ class StorehouseService
     ];
 
     public const INHERIT_ONLY = [
-        'deals' => ['field' => self::WRITE_OFF, 'children' => ['logistic_tasks', 'pickups', 'expense_invoices']],
+        'deals' => ['field' => self::WRITE_OFF, 'children' => ['pickups', 'expense_invoices']],
     ];
 
     private static array $readyCache = [];

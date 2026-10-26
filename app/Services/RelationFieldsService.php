@@ -14,8 +14,10 @@ class RelationFieldsService
     public const ENTITIES = [
         'deals', 'supplier_orders', 'logistic_tasks', 'pickups',
         'payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices', 'addresses', 'warehouses',
-        'cash_expenses', 'cash_incomes',
+        'cash_expenses', 'cash_incomes', 'transfer_orders', 'transfers',
     ];
+
+    public const TRANSFER_PEERS = ['deals', 'logistic_tasks', 'transfer_orders', 'transfers'];
 
     public const CASH = ['cash_expenses', 'cash_incomes'];
     public const CASH_TARGETS = ['deals', 'supplier_orders', 'logistic_tasks', 'pickups'];
@@ -25,12 +27,13 @@ class RelationFieldsService
         'logistic_tasks' => 1, 'pickups' => 1, 'payment_invoices' => 1,
         'expense_invoices' => 2, 'product_returns' => 2, 'receipt_invoices' => 2,
         'cash_expenses' => 3, 'cash_incomes' => 3,
+        'transfer_orders' => 0.5, 'transfers' => 2,
     ];
 
     public const PLURAL = [
-        'deals' => ['supplier_orders', 'logistic_tasks', 'pickups', 'payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices', 'cash_expenses', 'cash_incomes'],
+        'deals' => ['supplier_orders', 'logistic_tasks', 'pickups', 'payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices', 'cash_expenses', 'cash_incomes', 'transfer_orders', 'transfers'],
         'supplier_orders' => ['logistic_tasks', 'receipt_invoices', 'cash_expenses', 'cash_incomes'],
-        'logistic_tasks' => ['expense_invoices', 'product_returns', 'receipt_invoices', 'cash_expenses', 'cash_incomes'],
+        'logistic_tasks' => ['expense_invoices', 'product_returns', 'receipt_invoices', 'cash_expenses', 'cash_incomes', 'transfers'],
         'pickups' => ['expense_invoices', 'product_returns', 'receipt_invoices', 'cash_expenses', 'cash_incomes'],
         'payment_invoices' => ['expense_invoices', 'product_returns', 'receipt_invoices'],
         'addresses' => ['logistic_tasks', 'pickups'],
@@ -40,6 +43,8 @@ class RelationFieldsService
         'receipt_invoices' => [],
         'cash_expenses' => [],
         'cash_incomes' => [],
+        'transfer_orders' => ['logistic_tasks', 'transfers'],
+        'transfers' => [],
     ];
 
     public const EXCLUDE = [
@@ -71,6 +76,10 @@ class RelationFieldsService
 
     public static function isExcluded(string $slug, string $target): bool
     {
+        if (TransferService::isEntity($slug) || TransferService::isEntity($target)) {
+            return !in_array($slug, self::TRANSFER_PEERS, true) || !in_array($target, self::TRANSFER_PEERS, true);
+        }
+
         return in_array($target, self::EXCLUDE[$slug] ?? [], true);
     }
 

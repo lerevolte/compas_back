@@ -246,6 +246,12 @@ class ObjectRelation extends Model
             if ($targetSlug === \App\Services\ShipmentService::RECEIPT_DOC) {
                 ReceiptInvoice::recalcParentShipments($targetId);
             }
+            if ($targetSlug === \App\Services\TransferService::DOC) {
+                \App\Services\TransferService::recalcAround($targetSlug, $targetId);
+            }
+            if ($sourceSlug === \App\Services\TransferService::ORDER) {
+                \App\Services\TransferService::recalcOrder($sourceId);
+            }
         } catch (\Throwable $e) {
         }
     }
@@ -271,6 +277,8 @@ class ObjectRelation extends Model
                     \App\Services\ShipmentService::recalcDealShipped($id);
                 } elseif ($slug === \App\Services\ShipmentService::SUPPLIER) {
                     \App\Services\ShipmentService::recalcSupplierReceived($id);
+                } elseif ($slug === \App\Services\TransferService::ORDER) {
+                    \App\Services\TransferService::recalcOrder($id);
                 }
             }
         } catch (\Throwable $e) {

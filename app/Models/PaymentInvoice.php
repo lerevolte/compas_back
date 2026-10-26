@@ -41,7 +41,22 @@ class PaymentInvoice extends Model
             if ($model->wasRecentlyCreated || count(array_intersect(array_keys($model->getChanges()), self::REGENERATE_FIELDS))) {
                 $model->regeneratePdf();
             }
+            if (!$model->wasRecentlyCreated && array_key_exists('products', $model->getChanges())) {
+                $model->pushProductsToB24($model->getOriginal('products'));
+            }
         });
+    }
+
+    public function pushProductsToB24($oldProducts): void
+    {
+        if (!$this->b24_id || !class_exists(\Modules\Bitrix24\Services\B24EntitySync::class) || \Modules\Bitrix24\Services\B24EntitySync::$muted) {
+            return;
+        }
+        try {
+            \Modules\Bitrix24\Services\B24EntitySync::make()?->pushInvoiceProducts($this, $oldProducts);
+        } catch (\Throwable $e) {
+            \Log::channel('bitrix24')->warning('invoice push failed', ['invoice_id' => $this->id, 'error' => $e->getMessage(), 'at' => $e->getFile() . ':' . $e->getLine()]);
+        }
     }
 
     public function regeneratePdf(): bool
@@ -51,6 +66,7 @@ class PaymentInvoice extends Model
 
     public function setProducts(array $products, $sum = null)
     {
+        $oldProducts = $this->getOriginal('products');
         $this->products = json_encode($products);
         $total = 0.0;
         foreach ($products as $product) {
@@ -77,6 +93,7 @@ class PaymentInvoice extends Model
         );
         $this->saveQuietly();
         $this->regeneratePdf();
+        $this->pushProductsToB24($oldProducts);
     }
 
     public function getHtmlProducts()

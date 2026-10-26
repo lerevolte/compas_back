@@ -2647,6 +2647,131 @@ class B24EntitySync
         ]);
     }
 
+    public const INVOICE_KEEP_FIELDS = [
+        'PERSON_TYPE_ID', 'PAY_SYSTEM_ID', 'ORDER_TOPIC', 'RESPONSIBLE_ID',
+        'UF_DEAL_ID', 'UF_QUOTE_ID', 'UF_COMPANY_ID', 'UF_CONTACT_ID', 'UF_MYCOMPANY_ID', 'INVOICE_PROPERTIES',
+    ];
+
+    public function pushInvoiceProducts(\App\Models\PaymentInvoice $invoice, $oldProducts): void
+    {
+        if (!$invoice->b24_id) {
+            return;
+        }
+        $products = json_decode(self::attrString($invoice->products), true);
+        $products = is_array($products) ? array_values(array_filter($products, 'is_array')) : [];
+        if (self::productsSignature($products) === self::productsSignature($oldProducts)) {
+            return;
+        }
+
+        $current = $this->b24('crm.invoice.get', ['id' => $invoice->b24_id])['result'] ?? null;
+        if (!is_array($current) || empty($current['ID'])) {
+            Log::channel('bitrix24')->warning('entity-sync: invoice push skipped, invoice not found in B24', ['invoice_id' => $invoice->id, 'b24_id' => $invoice->b24_id]);
+            return;
+        }
+        $currentRows = is_array($current['PRODUCT_ROWS'] ?? null) ? $current['PRODUCT_ROWS'] : [];
+
+        $localIds = array_values(array_unique(array_filter(array_map(fn ($p) => (int) ($p['id'] ?? 0), $products))));
+        $localProducts = count($localIds)
+            ? \Modules\Products\Entities\Product::withTrashed()->whereIn('id', $localIds)->get()->keyBy('id')
+            : collect();
+        $productSvc = B24ProductSync::make();
+        foreach ($localProducts as $product) {
+            if (!$product->id_b24 && $productSvc) {
+                try {
+                    $productSvc->pushProduct($product);
+                } catch (\Throwable $e) {
+                    Log::channel('bitrix24')->warning('entity-sync: product create for invoice rows failed', ['product_id' => $product->id, 'error' => $e->getMessage()]);
+                }
+            }
+        }
+
+        $foreignRows = [];
+        $existingByProduct = [];
+        $existingByName = [];
+        foreach ($currentRows as $row) {
+            $pid = (string) ($row['PRODUCT_ID'] ?? '');
+            $name = B24ProductSync::nameText($row['PRODUCT_NAME'] ?? '');
+            $isForeign = $pid === '' || $pid === '0'
+                ? !$this->localProductByName($name)
+                : (!in_array((int) $pid, Bitrix24Controller::SKIP_PRODUCT_IDS, true)
+                    && !\Modules\Products\Entities\Product::withTrashed()->where('id_b24', $pid)->exists());
+            if ($isForeign) {
+                $foreignRows[] = $this->keepInvoiceRowFields($row);
+                continue;
+            }
+            if ($pid !== '' && $pid !== '0') {
+                $existingByProduct[$pid][] = $row;
+            } elseif ($name !== '') {
+                $existingByName[$name][] = $row;
+            }
+        }
+
+        $rows = [];
+        foreach ($products as $product) {
+            $localId = (int) ($product['id'] ?? 0);
+            $local = $localId ? ($localProducts[$localId] ?? null) : null;
+            $b24Id = $local && $local->id_b24 ? (string) $local->id_b24 : '';
+            $name = B24ProductSync::nameText($product['name'] ?? '');
+            if ($local && $name === '') {
+                $name = B24ProductSync::nameText($local->name);
+            }
+            if ($b24Id === '' && $name === '') {
+                continue;
+            }
+            $existing = null;
+            if ($b24Id !== '' && !empty($existingByProduct[$b24Id])) {
+                $existing = array_shift($existingByProduct[$b24Id]);
+            } elseif (!empty($existingByName[$name])) {
+                $existing = array_shift($existingByName[$name]);
+            }
+            $line = $existing ? $this->keepInvoiceRowFields($existing) : [];
+            $line['PRODUCT_ID'] = $b24Id !== '' ? (int) $b24Id : 0;
+            $line['PRODUCT_NAME'] = $name;
+            $line['PRICE'] = (float) self::num($product['price'] ?? 0);
+            $line['QUANTITY'] = (float) self::num($product['count'] ?? 0);
+            unset($line['DISCOUNT_PRICE']);
+            if (array_key_exists('nds', $product)) {
+                $nds = (string) $product['nds'];
+                $line['VAT_RATE'] = ($nds === '' || $nds === 'none') ? 0 : round((float) $nds / 100, 4);
+                $line['VAT_INCLUDED'] = (($product['nds_included'] ?? '1') === '0' || ($product['nds_included'] ?? '1') === 0) ? 'N' : 'Y';
+            }
+            if (!isset($line['MEASURE_CODE'])) {
+                $line['MEASURE_CODE'] = 796;
+                $line['MEASURE_NAME'] = 'шт';
+            }
+            $rows[] = $line;
+        }
+        $rows = array_merge($rows, $foreignRows);
+        foreach ($rows as $i => $row) {
+            $rows[$i]['SORT'] = ($i + 1) * 10;
+        }
+
+        $fields = ['PRODUCT_ROWS' => $rows];
+        foreach (self::INVOICE_KEEP_FIELDS as $key) {
+            if (array_key_exists($key, $current) && $current[$key] !== null && $current[$key] !== '') {
+                $fields[$key] = $current[$key];
+            }
+        }
+
+        $resp = $this->b24('crm.invoice.update', ['id' => $invoice->b24_id, 'fields' => $fields]);
+        Log::channel('bitrix24')->info('entity-sync: invoice products pushed', [
+            'invoice_id' => $invoice->id, 'b24_id' => $invoice->b24_id,
+            'rows' => count($rows), 'result' => $resp['result'] ?? null, 'error' => $resp['error_description'] ?? ($resp['error'] ?? null),
+        ]);
+    }
+
+    private function keepInvoiceRowFields(array $row): array
+    {
+        $keep = [];
+        foreach (['ID', 'PRODUCT_ID', 'PRODUCT_NAME', 'PRICE', 'QUANTITY', 'VAT_RATE', 'VAT_INCLUDED',
+                  'MEASURE_CODE', 'MEASURE_NAME', 'DISCOUNT_PRICE', 'CUSTOMIZED', 'SORT'] as $key) {
+            if (array_key_exists($key, $row)) {
+                $keep[$key] = $row[$key];
+            }
+        }
+        return $keep;
+    }
+
     private function localProductByName(string $name): bool
     {
         if ($name === '') {

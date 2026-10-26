@@ -3,13 +3,13 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\FieldValue, App\Traits\ModelActions, App\Traits\ColorGenerator;
+use App\Traits\FieldValue, App\Traits\ModelActions, App\Traits\ColorGenerator, App\Traits\HasRelationFields;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Auth;
 
 class Transfer extends Model
 {
-    use FieldValue, ModelActions, ColorGenerator, SoftDeletes;
+    use FieldValue, ModelActions, ColorGenerator, SoftDeletes, HasRelationFields;
 
     protected $table = 'transfers';
 
@@ -35,6 +35,19 @@ class Transfer extends Model
                     $model->{$col} = array_values(array_filter($model->{$col}, 'is_numeric'))[0] ?? null;
                 }
             }
+        });
+        static::saved(function ($model) {
+            if ($model->wasRecentlyCreated || array_key_exists('products', $model->getChanges())) {
+                \App\Services\TransferService::recalcAround(\App\Services\TransferService::DOC, (int) $model->id);
+            }
+        });
+
+        static::deleted(function ($model) {
+            \App\Services\TransferService::recalcAround(\App\Services\TransferService::DOC, (int) $model->id);
+        });
+
+        static::restored(function ($model) {
+            \App\Services\TransferService::recalcAround(\App\Services\TransferService::DOC, (int) $model->id);
         });
     }
 
