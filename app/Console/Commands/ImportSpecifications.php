@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Schema;
 class ImportSpecifications extends Command
 {
     protected $signature = 'specifications:import
-        {file : JSON-выгрузка из 1С (naim, id_1c, sostav[B24_ID, kolvo])}
+        {file : JSON-выгрузка из 1С (naim, id_1c, idgp_1c, sostav[id_1c, B24_ID, kolvo])}
         {target=avixo : <tenant_id>}
         {--dry-run : только показать сопоставление}
         {--report= : путь к CSV с несопоставленными позициями}';
@@ -62,6 +62,7 @@ class ImportSpecifications extends Command
             $specs[] = [
                 'naim' => trim((string) $item['naim']),
                 'id_1c' => trim((string) $item['id_1c']),
+                'idgp_1c' => trim((string) ($item['idgp_1c'] ?? '')),
                 'sostav' => is_array($item['sostav'] ?? null) ? $item['sostav'] : [],
             ];
         }
@@ -107,10 +108,18 @@ class ImportSpecifications extends Command
                 $by1c[trim((string) $product->id_1c)] ??= $product;
             }
         }
-        $resolved = $this->resolveMissing($specs, $byB24, $by1c, $byName);
+        $sync = class_exists(\Modules\Bitrix24\Services\B24ProductSync::class) ? \Modules\Bitrix24\Services\B24ProductSync::make() : null;
+        if (!$sync) {
+            $this->warn('Битрикс24 не настроен — недостающие товары не уточнить');
+        }
+        $by1c = array_merge($by1c, $this->resolveMissing1c($sync, $specs, $by1c, $byB24, $dryRun));
+        $resolved = $this->resolveMissing($sync, $specs, $byB24, $by1c, $byName);
         foreach ($resolved as $b24 => $product) {
             $byB24[$b24] = $product;
         }
+        $material = function (array $row) use ($by1c, $byB24) {
+            return $by1c[trim((string) ($row['id_1c'] ?? ''))] ?? $byB24[trim((string) ($row['B24_ID'] ?? ''))] ?? null;
+        };
 
         $existing = Schema::hasColumn(self::SLUG, self::FIELD)
             ? DB::table(self::SLUG)->whereNotNull(self::FIELD)->where(self::FIELD, '!=', '')->pluck('id', self::FIELD)->all()
@@ -120,18 +129,28 @@ class ImportSpecifications extends Command
         $noProduct = [];
         $missing = [];
         foreach ($specs as $spec) {
-            $finished = $byName[$this->key($spec['naim'])] ?? null;
+            $finished = ($spec['idgp_1c'] !== '' ? ($by1c[$spec['idgp_1c']] ?? null) : null) ?? ($byName[$this->key($spec['naim'])] ?? null);
             if (!$finished) {
                 $noProduct[] = $spec['naim'];
+            } elseif (!is_object($finished)) {
+                $finished = null;
             }
             $lines = [];
+            $seen = [];
             foreach ($spec['sostav'] as $row) {
-                $b24 = trim((string) ($row['B24_ID'] ?? ''));
-                $product = $byB24[$b24] ?? null;
+                $product = $material($row);
                 if (!$product) {
-                    $missing[$b24][] = $spec['naim'];
+                    $missing[$this->rowKey($row)][] = $spec['naim'];
                     continue;
                 }
+                if (!is_object($product)) {
+                    continue;
+                }
+                $dup = $product->id . '|' . (is_numeric($row['kolvo'] ?? null) ? $row['kolvo'] + 0 : 0);
+                if (isset($seen[$dup])) {
+                    continue;
+                }
+                $seen[$dup] = true;
                 $lines[] = $this->productLine($product, $row['kolvo'] ?? 0);
             }
             if ($dryRun) {
@@ -156,37 +175,36 @@ class ImportSpecifications extends Command
         }
 
         $this->info(($dryRun ? '[dry-run] ' : '') . "Создано: {$created}, обновлено: {$updated}");
-        $this->line('Без готовой продукции (нет товара с таким названием): ' . count($noProduct));
+        $this->line('Без готовой продукции (нет товара ни по idgp_1c, ни по названию): ' . count($noProduct));
         foreach (array_slice($noProduct, 0, 30) as $name) {
             $this->line('  - ' . $name);
         }
-        $this->line('Материалов не найдено по B24_ID: ' . count($missing));
-        foreach (array_slice($missing, 0, 30, true) as $b24 => $where) {
-            $this->line("  - B24_ID {$b24} (в " . count($where) . ' спецификац.)');
+        $this->line('Материалов не найдено ни по id_1c, ни по B24_ID: ' . count($missing));
+        foreach (array_slice($missing, 0, 30, true) as $key => $where) {
+            $this->line("  - {$key} (в " . count($where) . ' спецификац.)');
         }
 
         $report = (string) $this->option('report');
         if ($report !== '') {
             $fh = fopen($report, 'w');
             fwrite($fh, "\xEF\xBB\xBF");
-            fputcsv($fh, ['Проблема', 'Спецификация', 'Код 1С спецификации', 'B24_ID материала'], ';');
+            fputcsv($fh, ['Проблема', 'Спецификация', 'Код 1С спецификации', 'Код 1С товара', 'B24_ID материала'], ';');
             foreach ($specs as $spec) {
                 if (in_array($spec['naim'], $noProduct, true)) {
-                    fputcsv($fh, ['Нет товара «Готовая продукция» с таким названием', $spec['naim'], $spec['id_1c'], ''], ';');
+                    fputcsv($fh, ['Нет товара «Готовая продукция»', $spec['naim'], $spec['id_1c'], $spec['idgp_1c'], ''], ';');
                 }
                 foreach ($spec['sostav'] as $row) {
-                    $b24 = trim((string) ($row['B24_ID'] ?? ''));
-                    if (!isset($byB24[$b24])) {
-                        fputcsv($fh, ['Материал не найден по B24_ID', $spec['naim'], $spec['id_1c'], $b24], ';');
+                    if (!$material($row)) {
+                        fputcsv($fh, ['Материал не найден', $spec['naim'], $spec['id_1c'], trim((string) ($row['id_1c'] ?? '')), trim((string) ($row['B24_ID'] ?? ''))], ';');
                     }
                 }
             }
             fclose($fh);
             $this->line("Отчёт: {$report}");
         }
-        $this->line('Спецификаций с неполным составом: ' . count(array_filter($specs, function ($spec) use ($byB24) {
+        $this->line('Спецификаций с неполным составом: ' . count(array_filter($specs, function ($spec) use ($material) {
             foreach ($spec['sostav'] as $row) {
-                if (!isset($byB24[trim((string) ($row['B24_ID'] ?? ''))])) {
+                if (!$material($row)) {
                     return true;
                 }
             }
@@ -198,23 +216,64 @@ class ImportSpecifications extends Command
         }
     }
 
-    private function resolveMissing(array $specs, array $byB24, array $by1c, array $byName): array
+    private function resolveMissing1c($sync, array $specs, array $by1c, array $byB24, bool $dryRun): array
+    {
+        $missing = [];
+        foreach ($specs as $spec) {
+            if ($spec['idgp_1c'] !== '' && !isset($by1c[$spec['idgp_1c']])) {
+                $missing[$spec['idgp_1c']] = $spec['naim'];
+            }
+            foreach ($spec['sostav'] as $row) {
+                $code = trim((string) ($row['id_1c'] ?? ''));
+                if ($code !== '' && !isset($by1c[$code])) {
+                    $missing[$code] ??= '';
+                }
+            }
+        }
+        if (!$missing || !$sync) {
+            return [];
+        }
+        $this->line('Кодов 1С нет в товарах Компаса: ' . count($missing) . ', ищем в Битрикс24 по XML_ID');
+        $result = [];
+        foreach ($missing as $code => $title) {
+            $row = $sync->fetchProductRowByXmlId((string) $code);
+            if (!$row) {
+                $this->line("  1С {$code}" . ($title !== '' ? " (готовая продукция «{$title}»)" : '') . ': в Битрикс24 не найден');
+                continue;
+            }
+            $b24 = (string) ($row['ID'] ?? '');
+            $name = trim((string) ($row['NAME'] ?? ''));
+            if (isset($byB24[$b24])) {
+                $result[$code] = $byB24[$b24];
+                $this->line("  1С {$code} → B24 {$b24} «{$name}» → товар Компаса #{$byB24[$b24]->id}");
+            } elseif (\Modules\Bitrix24\Services\B24ProductSync::isInactive($row)) {
+                $this->line("  1С {$code} → B24 {$b24} «{$name}»: товар неактивен в Битрикс24");
+            } elseif ($dryRun) {
+                $result[$code] = true;
+                $this->line("  1С {$code} → B24 {$b24} «{$name}»: нет в Компасе, будет подтянут из Битрикс24");
+            } elseif ($product = $sync->pullProductById($b24)) {
+                $result[$code] = $product;
+                $this->line("  1С {$code} → B24 {$b24} «{$name}»: подтянут в Компас #{$product->id}");
+            } else {
+                $this->line("  1С {$code} → B24 {$b24} «{$name}»: не удалось подтянуть");
+            }
+        }
+
+        return $result;
+    }
+
+    private function resolveMissing($sync, array $specs, array $byB24, array $by1c, array $byName): array
     {
         $missing = [];
         foreach ($specs as $spec) {
             foreach ($spec['sostav'] as $row) {
                 $b24 = trim((string) ($row['B24_ID'] ?? ''));
-                if ($b24 !== '' && !isset($byB24[$b24])) {
+                if ($b24 !== '' && !isset($byB24[$b24]) && !isset($by1c[trim((string) ($row['id_1c'] ?? ''))])) {
                     $missing[$b24] = true;
                 }
             }
         }
-        if (!$missing || !class_exists(\Modules\Bitrix24\Services\B24ProductSync::class)) {
-            return [];
-        }
-        $sync = \Modules\Bitrix24\Services\B24ProductSync::make();
-        if (!$sync) {
-            $this->warn('Битрикс24 не настроен — недостающие материалы не уточнить');
+        if (!$missing || !$sync) {
             return [];
         }
         $result = [];
@@ -236,6 +295,11 @@ class ImportSpecifications extends Command
         }
 
         return $result;
+    }
+
+    private function rowKey(array $row): string
+    {
+        return '1С ' . trim((string) ($row['id_1c'] ?? '')) . ' / B24_ID ' . trim((string) ($row['B24_ID'] ?? ''));
     }
 
     private function productLine(object $product, $count): array

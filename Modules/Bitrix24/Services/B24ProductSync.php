@@ -689,6 +689,25 @@ class B24ProductSync
         return is_array($row) ? $row : null;
     }
 
+    public function fetchProductRowByXmlId(string $xmlId): ?array
+    {
+        try {
+            $rows = $this->b24('crm.product.list', [
+                'filter' => ['XML_ID' => $xmlId],
+                'select' => ['ID', 'NAME', 'XML_ID', 'ACTIVE'],
+            ])['result'] ?? [];
+        } catch (\Throwable $e) {
+            return null;
+        }
+        foreach (is_array($rows) ? $rows : [] as $row) {
+            if (trim((string) ($row['XML_ID'] ?? '')) === $xmlId) {
+                return $row;
+            }
+        }
+
+        return null;
+    }
+
     public function pullProductById($productId): ?Product
     {
         $resp = $this->b24('crm.product.get', ['id' => $productId]);
