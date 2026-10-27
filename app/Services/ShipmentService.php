@@ -1105,19 +1105,25 @@ class ShipmentService
             return $lines;
         }
         $ownRow = Schema::hasTable($slug) ? DB::table($slug)->where('id', $id)->first(['products']) : null;
+        $targetKey = self::linePriceKey($slug);
         $known = [];
         foreach (self::decode($ownRow->products ?? null) as $line) {
-            if (is_array($line) && (int) ($line['id'] ?? 0)) {
-                $known[(int) $line['id']] = true;
+            if (is_array($line) && (int) ($line['id'] ?? 0) && !isset($known[(int) $line['id']])) {
+                $known[(int) $line['id']] = $line[$targetKey] ?? null;
             }
         }
+        $cardPrices = [];
+        $lineIds = array_values(array_unique(array_filter(array_map(fn ($l) => is_array($l) ? (int) ($l['id'] ?? 0) : 0, $lines))));
+        if (count($lineIds) && Schema::hasColumn('products', $targetKey)) {
+            $cardPrices = DB::table('products')->whereIn('id', $lineIds)->pluck($targetKey, 'id')->all();
+        }
+        $same = fn ($a, $b) => is_numeric($a) && is_numeric($b) && abs((float) $a - (float) $b) < 0.005;
         $byId = [];
         foreach ($parentLines as $line) {
             if ((int) ($line['id'] ?? 0) && !isset($byId[(int) $line['id']])) {
                 $byId[(int) $line['id']] = $line;
             }
         }
-        $targetKey = self::linePriceKey($slug);
         foreach ($lines as $i => $line) {
             $productId = (int) ($line['id'] ?? 0);
             if (!$productId || !isset($byId[$productId])) {
@@ -1125,8 +1131,10 @@ class ShipmentService
             }
             $current = $line[$targetKey] ?? null;
             $empty = !is_numeric($current) || (float) $current == 0.0;
-            if (isset($known[$productId]) && !$empty) {
-                continue;
+            if (!$empty && array_key_exists($productId, $known)) {
+                if ($same($current, $known[$productId]) || !$same($current, $cardPrices[$productId] ?? null)) {
+                    continue;
+                }
             }
             $match = $byId[$productId];
             $price = $match[self::linePriceKey($parentSlug, $match)] ?? null;

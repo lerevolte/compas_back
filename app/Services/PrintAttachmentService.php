@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Helpers\ValueHelper;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -59,17 +60,59 @@ SQL);
             return [];
         }
 
-        return DB::table(self::TABLE)
+        $rows = DB::table(self::TABLE)
             ->where('slug', $slug)
             ->where('object_id', $id)
             ->orderBy('id')
-            ->get()
-            ->map(fn ($row) => self::present($row))
-            ->all();
+            ->get();
+        $users = self::users($rows->pluck('user_id')->filter()->unique()->values()->all());
+
+        return $rows->map(fn ($row) => self::present($row, $users))->all();
     }
 
-    public static function present($row): array
+    public static function users(array $ids): array
     {
+        if (!count($ids)) {
+            return [];
+        }
+        $tenant = tenant('id');
+        $result = [];
+        foreach (DB::table('users')->whereIn('id', $ids)->get(['id', 'name', 'last_name', 'avatar', 'color']) as $user) {
+            $icon = '';
+            $avatar = json_decode((string) $user->avatar, true);
+            if (isset($avatar[0]['url'])) {
+                $icon = $avatar[0]['url'];
+            } elseif (isset($avatar[0]['id'])) {
+                $file = \App\Models\File::where('id', $avatar[0]['id'])->first();
+                if (isset($file->path)) {
+                    try {
+                        $icon = \Thumbnail::src('https://' . $tenant . '.compas.pro/storage/tenant' . $tenant . '/app/public/' . $file->path)->heighten(200)->url();
+                    } catch (\Throwable $e) {
+                        $icon = '';
+                    }
+                }
+            }
+            $first = ValueHelper::isJson((string) $user->name) ? (json_decode((string) $user->name, true)['value'] ?? '') : (string) $user->name;
+            $last = ValueHelper::isJson((string) $user->last_name) ? (json_decode((string) $user->last_name, true)['value'] ?? '') : (string) $user->last_name;
+            $result[(int) $user->id] = [
+                'id' => (int) $user->id,
+                'ab' => mb_strtoupper(mb_substr($first, 0, 1) . mb_substr($last, 0, 1)),
+                'name' => ValueHelper::personName($user->name, $user->last_name),
+                'color' => $user->color,
+                'icon' => $icon,
+            ];
+        }
+
+        return $result;
+    }
+
+    public static function present($row, ?array $users = null): array
+    {
+        $userId = (int) ($row->user_id ?? 0);
+        if ($users === null) {
+            $users = $userId ? self::users([$userId]) : [];
+        }
+
         return [
             'id' => (int) $row->id,
             'name' => (string) $row->name,
@@ -77,6 +120,7 @@ SQL);
             'copies' => (int) $row->copies,
             'url' => self::url((string) $row->path),
             'created_at' => $row->created_at ? date('d.m.Y H:i', strtotime($row->created_at)) : null,
+            'user' => $users[$userId] ?? null,
         ];
     }
 

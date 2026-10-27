@@ -2768,6 +2768,13 @@ class EntityObject
 
         $object->save();
 
+        if ($object instanceof \App\Models\SupplierOrder && $object->products && (float) $object->sum <= 0) {
+            $copiedProducts = json_decode((string) $object->products, true);
+            if (is_array($copiedProducts) && count($copiedProducts)) {
+                $object->setProducts(array_values(array_filter($copiedProducts, 'is_array')), null);
+            }
+        }
+
         self::copyParentRelations($slug, (int) $source->id, (int) $object->id);
 
         if($slug == 'logistic_tasks' && $route_id) {
