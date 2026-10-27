@@ -1157,6 +1157,43 @@ class ShipmentService
         return $lines;
     }
 
+    public static function parentPrices(string $slug, int $id, ?string $sourceSlug = null, int $sourceId = 0): array
+    {
+        $targetKey = self::linePriceKey($slug);
+        $result = ['key' => $targetKey, 'prices' => (object) []];
+        if ($sourceSlug && $sourceId && in_array($slug, self::childSlugsOf($sourceSlug, $sourceId), true)) {
+            $parent = [$sourceSlug, $sourceId];
+        } else {
+            $parent = $id ? self::parentOf($slug, $id) : null;
+        }
+        if (!$parent || !Schema::hasTable($parent[0])) {
+            return $result;
+        }
+        [$parentSlug, $parentId] = $parent;
+        $row = DB::table($parentSlug)->where('id', $parentId)->first(['products']);
+        $prices = [];
+        foreach (self::decode($row->products ?? null) as $line) {
+            $productId = is_array($line) ? (int) ($line['id'] ?? 0) : 0;
+            if (!$productId || isset($prices[$productId])) {
+                continue;
+            }
+            $price = $line[self::linePriceKey($parentSlug, $line)] ?? null;
+            if (!is_numeric($price) || (float) $price == 0.0) {
+                continue;
+            }
+            $entry = ['price' => (float) $price];
+            foreach (['nds', 'nds_included'] as $key) {
+                if (array_key_exists($key, $line)) {
+                    $entry[$key] = $line[$key];
+                }
+            }
+            $prices[$productId] = $entry;
+        }
+        $result['prices'] = (object) $prices;
+
+        return $result;
+    }
+
     public static function inheritPrices(string $sourceSlug, int $sourceId, string $targetSlug, int $targetId): bool
     {
         if (!in_array($targetSlug, self::childSlugsOf($sourceSlug, $sourceId), true)) {

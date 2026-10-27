@@ -46,6 +46,21 @@ class TaskController extends Controller
         return $this->saveProductsFor('logistic_tasks', Task::class, $id, $request);
     }
 
+    public function parent_prices($slug, $id, Request $request)
+    {
+        $settings = app('settings');
+        if (!isset($settings[$slug])) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+
+        return response()->json(\App\Services\ShipmentService::parentPrices(
+            (string) $slug,
+            (int) $id,
+            $request->query('source_slug') ? (string) $request->query('source_slug') : null,
+            (int) $request->query('source_id', 0)
+        ));
+    }
+
     public function set_deal_products($id, Request $request)
     {
         return $this->saveProductsFor('deals', \App\Models\Deal::class, $id, $request);

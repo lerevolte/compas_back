@@ -545,6 +545,8 @@ Route::middleware([
         Route::get('production/{slug}/{id}/materials', [App\Http\Controllers\Api\ObjectController::class, 'production_materials'])
             ->whereIn('slug', ['production_orders', 'productions']);
 
+        Route::get('composition/{slug}/{id}/parent_prices', [App\Http\Controllers\Api\TaskController::class, 'parent_prices'])
+            ->where('id', '[0-9]+');
         Route::get('print-attachments/{slug}/{id}', [App\Http\Controllers\Api\PrintAttachmentController::class, 'index'])
             ->whereIn('slug', App\Services\PrintAttachmentService::SLUGS);
         Route::post('print-attachments/{slug}/{id}', [App\Http\Controllers\Api\PrintAttachmentController::class, 'store'])
