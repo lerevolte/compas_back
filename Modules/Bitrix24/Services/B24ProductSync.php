@@ -823,6 +823,9 @@ class B24ProductSync
 
     public static function nameText($name): string
     {
+        if (is_array($name)) {
+            return (string) ($name['value'] ?? '');
+        }
         $decoded = json_decode((string) $name, true);
         if (is_array($decoded) && array_key_exists('value', $decoded)) {
             return (string) $decoded['value'];
@@ -832,7 +835,7 @@ class B24ProductSync
 
     public static function linkFromName($name): ?string
     {
-        $decoded = json_decode((string) $name, true);
+        $decoded = is_array($name) ? $name : json_decode((string) $name, true);
         $url = is_array($decoded) ? ($decoded['external_link'] ?? null) : null;
         return ($url !== null && $url !== '') ? (string) $url : null;
     }
