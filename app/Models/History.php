@@ -13,6 +13,33 @@ class History extends Model
 
     public static ?int $actingUserId = null;
 
+    const TEXT_COLUMN_BYTES = 65535;
+
+    public function setTextAttribute($value)
+    {
+        $this->attributes['text'] = self::fitTextColumn($value);
+    }
+
+    public function setOldValueAttribute($value)
+    {
+        $this->attributes['old_value'] = self::fitTextColumn($value);
+    }
+
+    public function setNewValueAttribute($value)
+    {
+        $this->attributes['new_value'] = self::fitTextColumn($value);
+    }
+
+    public static function fitTextColumn($value)
+    {
+        if (!is_string($value) || strlen($value) <= self::TEXT_COLUMN_BYTES) {
+            return $value;
+        }
+        $suffix = '…';
+
+        return mb_strcut($value, 0, self::TEXT_COLUMN_BYTES - strlen($suffix), 'UTF-8') . $suffix;
+    }
+
     public static function currentUserId(): ?int
     {
         if (self::$actingUserId) {
