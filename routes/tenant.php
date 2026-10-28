@@ -594,6 +594,15 @@ Route::middleware([
 
         Route::get('logistic/sections', [App\Http\Controllers\Api\LogisticController::class, 'get_sections']);
         Route::put('logistic/sections/{id}', [App\Http\Controllers\Api\LogisticController::class, 'update_section']);
+
+        Route::prefix('warehouse-logistic')->group(function () {
+            Route::get('config', [App\Http\Controllers\Api\WarehouseLogisticController::class, 'config']);
+            Route::get('shifts/{id}', [App\Http\Controllers\Api\WarehouseLogisticController::class, 'shift']);
+            Route::post('shifts', [App\Http\Controllers\Api\WarehouseLogisticController::class, 'store_shift']);
+            Route::post('tasks', [App\Http\Controllers\Api\WarehouseLogisticController::class, 'store_task']);
+            Route::put('tasks/{id}/schedule', [App\Http\Controllers\Api\WarehouseLogisticController::class, 'schedule_task']);
+            Route::post('tasks/from-warehouse', [App\Http\Controllers\Api\WarehouseLogisticController::class, 'task_from_warehouse']);
+        });
         
 
         Route::get('cache_changes', function(Request $request){
