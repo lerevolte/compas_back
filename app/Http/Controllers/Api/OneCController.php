@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\OneC\OneCCashExportService;
 use App\Services\OneC\OneCExportService;
 use App\Services\OneC\OneCSupplierOrderService;
+use App\Services\OneC\OneCProductionService;
 use Illuminate\Http\Request;
 
 class OneCController extends Controller
@@ -118,6 +119,32 @@ class OneCController extends Controller
         $documents = OneCSupplierOrderService::pending(OneCExportService::config());
 
         return response()->json(['ok' => true, 'count' => count($documents), 'documents' => $documents], 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    public function productionDocuments(Request $request)
+    {
+        if ($error = $this->guard($request)) {
+            return $error;
+        }
+        $documents = OneCProductionService::pending(OneCExportService::config());
+
+        return response()->json(['ok' => true, 'count' => count($documents), 'documents' => $documents], 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    public function productionDocumentsConfirm(Request $request)
+    {
+        if ($error = $this->guard($request)) {
+            return $error;
+        }
+        $items = $this->confirmItems($request);
+        if (!count($items) && $this->isEmptyList($request)) {
+            return response()->json(['ok' => true, 'confirmed' => [], 'unknown' => []], 200, [], JSON_UNESCAPED_UNICODE);
+        }
+        if (!count($items)) {
+            return $this->cashConfirmError($request, ['documents' => [['number' => 'cmps-po1', 'type' => 'production_order', 'status' => 'created|posted|deleted']]]);
+        }
+
+        return response()->json(['ok' => true] + OneCProductionService::confirm($items), 200, [], JSON_UNESCAPED_UNICODE);
     }
 
     public function supplierOrdersConfirm(Request $request)

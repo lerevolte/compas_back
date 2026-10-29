@@ -258,17 +258,36 @@ class TaskController extends Controller
                 return response()->json(['message' => 'Нет прав на изменение состава'], 403);
             }
         }
-        $products = $this->compositionLines($slug, (array) ($request->products ?? []));
-        try {
-            $products = \App\Services\ShipmentService::applyParentPrices((string) $slug, (int) $id, $products);
-        } catch (\Throwable $e) {
+        if (\App\Services\TransferService::isEntity((string) $slug)) {
+            $object = $class::find($id);
+            if (!$object) {
+                return response()->json(['error' => 404, 'text' => 'Объект не найден'], 404);
+            }
+            $additional = [];
+            foreach ((array) ($request->products ?? []) as $row) {
+                $key = \App\Services\TransferService::lineKey(['id' => $row['id'] ?? null, 'name' => $row['product_name'] ?? ($row['name'] ?? '')]);
+                $value = $row['product_additional_count'] ?? 0;
+                if ($key === '' || !is_numeric($value) || (float) $value < 0) {
+                    return response()->json(['message' => 'Некорректное дополнительное количество'], 422);
+                }
+                $additional[$key] = (float) $value;
+            }
+            $products = \App\Services\TransferService::compose((string) $slug, (int) $id, \App\Services\ShipmentService::decode($object->products), $additional);
+        } else {
+            $products = $this->compositionLines($slug, (array) ($request->products ?? []));
+        }
+        if (!\App\Services\TransferService::isEntity((string) $slug)) {
+            try {
+                $products = \App\Services\ShipmentService::applyParentPrices((string) $slug, (int) $id, $products);
+            } catch (\Throwable $e) {
+            }
         }
         $errors = \App\Services\ShipmentService::withFamilyLock($slug, (int) $id, function () use ($class, $slug, $id, $products) {
             $object = $class::find($id);
             if (!$object) {
                 return null;
             }
-            $errors = array_merge(
+            $errors = \App\Services\TransferService::isEntity((string) $slug) ? [] : array_merge(
                 \App\Services\ShipmentService::validateAgainstParent($slug, (int) $id, $products),
                 \App\Services\ShipmentService::validateAgainstChildren($slug, (int) $id, $products)
             );

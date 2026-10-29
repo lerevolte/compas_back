@@ -18,6 +18,132 @@ class TransferService
         return $slug === self::ORDER || $slug === self::DOC;
     }
 
+    public static function dealIds(string $slug, int $id): array
+    {
+        if (!self::isEntity($slug) || !$id || !ObjectRelation::ready()) {
+            return [];
+        }
+        $nodes = [[$slug, $id]];
+        if ($slug === self::DOC) {
+            foreach (ObjectRelation::where('target_slug', self::DOC)->where('target_id', $id)->where('source_slug', self::ORDER)->get(['source_id']) as $relation) {
+                $nodes[] = [self::ORDER, (int) $relation->source_id];
+            }
+        }
+        $ids = [];
+        foreach ($nodes as [$nodeSlug, $nodeId]) {
+            foreach (ObjectRelation::where('source_slug', 'deals')->where('target_slug', $nodeSlug)->where('target_id', $nodeId)->pluck('source_id') as $dealId) {
+                $ids[(int) $dealId] = true;
+            }
+            foreach (ObjectRelation::where('target_slug', 'deals')->where('source_slug', $nodeSlug)->where('source_id', $nodeId)->pluck('target_id') as $dealId) {
+                $ids[(int) $dealId] = true;
+            }
+        }
+
+        return array_keys($ids);
+    }
+
+    public static function compose(string $slug, int $id, array $current, array $additional = []): array
+    {
+        $ids = self::dealIds($slug, $id);
+        $lines = [];
+        if ($ids && Schema::hasTable('deals')) {
+            foreach (DB::table('deals')->whereIn('id', $ids)->whereNull('deleted_at')->pluck('products') as $json) {
+                foreach (ShipmentService::decode($json) as $line) {
+                    if (!is_array($line)) {
+                        continue;
+                    }
+                    $key = self::lineKey($line);
+                    if ($key === '') {
+                        continue;
+                    }
+                    if (!isset($lines[$key])) {
+                        $lines[$key] = $line;
+                        $lines[$key]['count'] = 0;
+                    }
+                    $lines[$key]['count'] += (float) ($line['count'] ?? 0);
+                }
+            }
+        }
+        foreach ($current as $line) {
+            if (!is_array($line)) {
+                continue;
+            }
+            $key = self::lineKey($line);
+            if ($key === '') {
+                continue;
+            }
+            $extra = $additional[$key] ?? ($line['additional_count'] ?? 0);
+            if (!is_numeric($extra) || (float) $extra < 0) {
+                continue;
+            }
+            if (!isset($lines[$key]) && (float) $extra > 0) {
+                $lines[$key] = $line;
+                $lines[$key]['count'] = 0;
+            }
+            if (isset($lines[$key])) {
+                $lines[$key]['additional_count'] = (float) $extra;
+            }
+        }
+        foreach ($lines as &$line) {
+            $line['count'] += (float) ($line['additional_count'] ?? 0);
+            $parts = ShipmentService::lineParts($line);
+            $line['sum'] = round($parts['sum'], 2);
+            $line['nds_sum'] = round($parts['vat'], 2);
+            $line['total'] = round($parts['gross'], 2);
+        }
+        unset($line);
+
+        return array_values($lines);
+    }
+
+    public static function lineKey(array $line): string
+    {
+        $id = (int) ($line['id'] ?? 0);
+
+        return $id ? 'id:' . $id : (($name = ShipmentService::nameKey($line['name'] ?? '')) !== '' ? 'name:' . $name : '');
+    }
+
+    public static function refresh(string $slug, int $id): void
+    {
+        if (!self::isEntity($slug) || !Schema::hasTable($slug)) {
+            return;
+        }
+        $class = $slug === self::ORDER ? \App\Models\TransferOrder::class : \App\Models\Transfer::class;
+        $model = $class::find($id);
+        if (!$model) {
+            return;
+        }
+        $current = ShipmentService::decode($model->products);
+        $next = self::compose($slug, $id, $current);
+        if (json_encode($current) !== json_encode($next)) {
+            $model->setProducts($next);
+        }
+        if ($slug === self::ORDER && ObjectRelation::ready()) {
+            foreach (ObjectRelation::where('source_slug', self::ORDER)->where('source_id', $id)->where('target_slug', self::DOC)->pluck('target_id') as $docId) {
+                self::refresh(self::DOC, (int) $docId);
+            }
+        }
+    }
+
+    public static function refreshForDeal(int $dealId): void
+    {
+        if (!ObjectRelation::ready()) {
+            return;
+        }
+        foreach ([self::ORDER, self::DOC] as $slug) {
+            $ids = ObjectRelation::where('source_slug', 'deals')->where('source_id', $dealId)->where('target_slug', $slug)->pluck('target_id')->all();
+            $ids = array_merge($ids, ObjectRelation::where('target_slug', 'deals')->where('target_id', $dealId)->where('source_slug', $slug)->pluck('source_id')->all());
+            foreach (array_unique(array_map('intval', $ids)) as $id) {
+                self::refresh($slug, $id);
+                if ($slug === self::ORDER) {
+                    foreach (ObjectRelation::where('source_slug', self::ORDER)->where('source_id', $id)->where('target_slug', self::DOC)->pluck('target_id') as $docId) {
+                        self::refresh(self::DOC, (int) $docId);
+                    }
+                }
+            }
+        }
+    }
+
     public static function orderUsage(int $orderId): array
     {
         $result = ['id' => [], 'name' => [], 'price_id' => [], 'price_name' => []];

@@ -24,11 +24,15 @@ class Production extends Model
             if (!$model->user_id && $user) {
                 $model->user_id = $user->id;
             }
+            \App\Services\OneC\OneCExportService::assignStatus($model);
         });
+
+        static::saved(fn ($model) => \App\Services\OneC\OneCProductionService::changed($model));
 
         foreach (['deleted', 'restored'] as $event) {
             static::{$event}(function ($model) {
                 \App\Services\ProductionService::recalcForDocument((int) $model->id);
+                \App\Services\OneC\OneCExportService::markChanged($model);
             });
         }
     }
@@ -63,6 +67,7 @@ class Production extends Model
             true
         );
         $this->saveQuietly();
+        \App\Services\OneC\OneCExportService::markChanged($this);
         try {
             \App\Events\ObjectUpdated::dispatch('ObjectUpdated', $this->getData($objects['changed_fields'] ?? []));
         } catch (\Throwable $e) {

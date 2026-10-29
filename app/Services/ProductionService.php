@@ -295,6 +295,7 @@ class ProductionService
             $statusChanged = self::applyStatus($order, $products);
             if ($changed || $statusChanged) {
                 $order->saveQuietly();
+                \App\Services\OneC\OneCExportService::markChangedById(self::ORDER, $orderId);
                 try {
                     \App\Events\ObjectUpdated::dispatch('ObjectUpdated', $order->getData());
                 } catch (\Throwable $e) {

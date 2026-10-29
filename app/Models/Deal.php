@@ -62,6 +62,7 @@ class Deal extends Model
                     $model->recalcServicesPrice();
                 } catch (\Throwable $e) {
                 }
+                \App\Services\TransferService::refreshForDeal((int) $model->id);
             }
             if (count(array_intersect($changedKeys, ['products', 'sum']))) {
                 try {

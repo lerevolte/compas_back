@@ -26,9 +26,11 @@ class Specification extends Model
             if (!$model->user_id && $user) {
                 $model->user_id = $user->id;
             }
+            \App\Services\OneC\OneCExportService::assignStatus($model);
         });
 
         static::saved(function ($model) {
+            \App\Services\OneC\OneCProductionService::changed($model);
             if ($model->wasRecentlyCreated || $model->wasChanged('finished_product_id')) {
                 \App\Services\ReverseLinkService::sync(
                     'products',
@@ -44,11 +46,13 @@ class Specification extends Model
         });
 
         static::deleted(function ($model) {
+            \App\Services\OneC\OneCExportService::markChanged($model);
             \App\Services\ReverseLinkService::sync('products', self::PRODUCT_FIELD, (int) $model->id, \App\Services\ReverseLinkService::ids($model->finished_product_id), []);
             \App\Services\PurchaseTermService::recalcAll();
         });
 
         static::restored(function ($model) {
+            \App\Services\OneC\OneCExportService::markChanged($model);
             \App\Services\ReverseLinkService::sync('products', self::PRODUCT_FIELD, (int) $model->id, [], \App\Services\ReverseLinkService::ids($model->finished_product_id));
             \App\Services\PurchaseTermService::recalcAll();
         });
@@ -69,6 +73,7 @@ class Specification extends Model
             true
         );
         $this->saveQuietly();
+        \App\Services\OneC\OneCExportService::markChanged($this);
         \App\Services\PurchaseTermService::recalcAll();
     }
 

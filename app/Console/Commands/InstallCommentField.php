@@ -19,7 +19,7 @@ class InstallCommentField extends Command
         'deals', 'supplier_orders', 'logistic_tasks', 'pickups',
         'payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices',
         'addresses', 'warehouses', 'specifications', 'production_orders', 'productions',
-        'transfer_orders', 'transfers', 'cash_expenses', 'cash_incomes',
+        'transfer_orders', 'transfers', 'cash_expenses', 'cash_incomes', 'companies',
     ];
 
     public function handle(): int
@@ -76,7 +76,7 @@ class InstallCommentField extends Command
             }
             $row = $db->table('data_rows')->where('data_type_id', $typeId)->where('field', self::FIELD)->first();
             if ($row) {
-                $db->table('data_rows')->where('id', $row->id)->update(['type' => 'text', 'is_plural' => 1, 'is_remove' => 0]);
+                $db->table('data_rows')->where('id', $row->id)->update(['type' => 'text', 'is_plural' => 1, 'is_default' => 1, 'is_remove' => 0]);
                 $result[$slug] = 'updated';
             } else {
                 $sectionId = (int) ($db->table('field_sections')
@@ -90,9 +90,13 @@ class InstallCommentField extends Command
                     'type' => 'text',
                     'title' => self::TITLE,
                     'is_plural' => 1,
+                    'is_default' => 1,
                     'sort' => $maxSort + 1,
                 ]));
                 $result[$slug] = 'created';
+            }
+            if ($slug === 'logistic_tasks') {
+                $db->table('data_rows')->where('data_type_id', $typeId)->where('field', 'weight')->update(['only_read' => 1]);
             }
             try {
                 if ($sb->hasTable('local_cache')) {

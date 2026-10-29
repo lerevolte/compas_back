@@ -2301,6 +2301,7 @@ class EntityObject
                         $data['product_price'] = $product['price'];
                         $data['product_purchase_price'] = $product['purchase_price'] ?? null;
                         $data['product_count'] = $product['count'];
+                        $data[Table::ADDITIONAL_COUNT_KEY] = $product['additional_count'] ?? 0;
                         $data['product_weight'] = Product::unitValue($item->weight ?? null, $product['weight'] ?? null);
                         $data['product_volume'] = Product::unitValue($item->volume ?? null, $product['volume'] ?? 0);
                         $data['product_shipped'] = $product['shipped'] ?? 0;
@@ -2349,6 +2350,7 @@ class EntityObject
                             'product_price' => $product['price'] ?? null,
                             'product_purchase_price' => $product['purchase_price'] ?? null,
                             'product_count' => $product['count'] ?? null,
+                            Table::ADDITIONAL_COUNT_KEY => $product['additional_count'] ?? 0,
                             'product_weight' => $product['weight'] ?? null,
                             'product_volume' => $product['volume'] ?? 0,
                             'product_sum' => round(\App\Services\ShipmentService::lineParts($product, \App\Services\ShipmentService::linePriceKey((string) ($request->order_entity ?? ''), $product))['sum'], 2),

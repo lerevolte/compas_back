@@ -126,7 +126,7 @@ SQL);
 
     public static function markChangedById(string $slug, int $id): void
     {
-        if (!isset(self::DOCUMENTS[$slug]) || !$id) {
+        if ((!isset(self::DOCUMENTS[$slug]) && !isset(OneCProductionService::TYPES[$slug])) || !$id) {
             return;
         }
         try {
@@ -346,7 +346,7 @@ SQL);
     public static function assignStatus($model): void
     {
         $table = $model->getTable();
-        if ((!isset(self::DOCUMENTS[$table]) && $table !== OneCSupplierOrderService::SLUG) || !self::hasStatusColumn($table)) {
+        if ((!isset(self::DOCUMENTS[$table]) && $table !== OneCSupplierOrderService::SLUG && !isset(OneCProductionService::TYPES[$table])) || !self::hasStatusColumn($table)) {
             return;
         }
         if (trim((string) $model->getAttribute(self::STATUS_FIELD)) !== '') {

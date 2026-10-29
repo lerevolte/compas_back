@@ -229,6 +229,14 @@ class ObjectRelation extends Model
     public static function afterLink(string $sourceSlug, int $sourceId, string $targetSlug, int $targetId): void
     {
         \App\Services\ProductionService::afterLink($sourceSlug, $sourceId, $targetSlug, $targetId);
+        if ($targetSlug === 'productions' && $sourceSlug === 'production_orders') {
+            \App\Services\OneC\OneCExportService::markChangedById($targetSlug, $targetId);
+        }
+        foreach ([[$sourceSlug, $sourceId], [$targetSlug, $targetId]] as [$slug, $id]) {
+            if (\App\Services\TransferService::isEntity($slug)) {
+                \App\Services\TransferService::refresh($slug, $id);
+            }
+        }
         try {
             if ($sourceSlug === 'deals' && \App\Services\ShipmentService::isSource($targetSlug)) {
                 \App\Services\ShipmentService::setDealColumn($targetSlug, $targetId, $sourceId);
@@ -259,6 +267,16 @@ class ObjectRelation extends Model
     public static function afterUnlink(string $slugA, int $idA, string $slugB, int $idB): void
     {
         \App\Services\ProductionService::afterUnlink($slugA, $idA, $slugB, $idB);
+        if ($slugA === 'productions' && $slugB === 'production_orders') {
+            \App\Services\OneC\OneCExportService::markChangedById($slugA, $idA);
+        } elseif ($slugB === 'productions' && $slugA === 'production_orders') {
+            \App\Services\OneC\OneCExportService::markChangedById($slugB, $idB);
+        }
+        foreach ([[$slugA, $idA], [$slugB, $idB]] as [$slug, $id]) {
+            if (\App\Services\TransferService::isEntity($slug)) {
+                \App\Services\TransferService::refresh($slug, $id);
+            }
+        }
         \App\Services\CashExpenseTotalService::recalcAround($slugA, $idA);
         \App\Services\CashExpenseTotalService::recalcAround($slugB, $idB);
         \App\Services\DeliveryCostService::recalcAround($slugA, $idA);

@@ -142,6 +142,8 @@ Route::middleware([
         Route::get('supplier-orders', [App\Http\Controllers\Api\OneCController::class, 'supplierOrders'])->name('onec.supplier.orders');
         Route::match(['get', 'post'], 'supplier-orders/confirm', [App\Http\Controllers\Api\OneCController::class, 'supplierOrdersConfirm'])->name('onec.supplier.orders.confirm');
         Route::match(['get', 'post'], 'supplier-orders/state', [App\Http\Controllers\Api\OneCController::class, 'supplierOrdersState'])->name('onec.supplier.orders.state');
+        Route::get('production-documents', [App\Http\Controllers\Api\OneCController::class, 'productionDocuments'])->name('onec.production.documents');
+        Route::match(['get', 'post'], 'production-documents/confirm', [App\Http\Controllers\Api\OneCController::class, 'productionDocumentsConfirm'])->name('onec.production.documents.confirm');
 });
 
 Route::middleware([

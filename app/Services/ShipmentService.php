@@ -1074,15 +1074,27 @@ class ShipmentService
 
     public static function repriceForTarget(string $sourceSlug, string $targetSlug, array $products): array
     {
-        if (self::linePriceKey($sourceSlug) !== 'purchase_price' || self::linePriceKey($targetSlug) !== 'price') {
+        if (!in_array($targetSlug, ['logistic_tasks', 'pickups', self::RECEIPT_DOC], true)) {
             return $products;
         }
+        $ids = array_values(array_unique(array_filter(array_map(fn ($line) => is_array($line) ? (int) ($line['id'] ?? 0) : 0, $products))));
+        $cards = $ids && Schema::hasTable('products') ? DB::table('products')->whereIn('id', $ids)->get(['id', 'price', 'purchase_price'])->keyBy('id') : collect();
         foreach ($products as $i => $line) {
-            if (!is_array($line) || !is_numeric($line['purchase_price'] ?? null)) {
+            if (!is_array($line)) {
                 continue;
             }
-            $line['price'] = $line['purchase_price'];
-            $parts = self::lineParts($line);
+            $card = $cards->get((int) ($line['id'] ?? 0));
+            if ($sourceSlug === self::SUPPLIER) {
+                $line['purchase_price'] = $line['purchase_price'] ?? $line['price'] ?? null;
+                if ($targetSlug !== self::RECEIPT_DOC) {
+                    $line['price'] = $card->price ?? null;
+                }
+            } elseif ($sourceSlug === 'deals') {
+                $line['purchase_price'] = $card->purchase_price ?? null;
+            } elseif ($targetSlug === self::RECEIPT_DOC) {
+                $line['purchase_price'] = $line['purchase_price'] ?? ($card->purchase_price ?? null);
+            }
+            $parts = self::lineParts($line, self::linePriceKey($targetSlug, $line));
             $line['sum'] = round($parts['sum'], 2);
             $line['nds_sum'] = round($parts['vat'], 2);
             $line['total'] = round($parts['gross'], 2);
@@ -1137,7 +1149,8 @@ class ShipmentService
                 }
             }
             $match = $byId[$productId];
-            $price = $match[self::linePriceKey($parentSlug, $match)] ?? null;
+            $price = $parentSlug === self::SUPPLIER && $targetKey === 'price'
+                ? ($cardPrices[$productId] ?? null) : ($match[$targetKey] ?? null);
             if (!is_numeric($price) || (float) $price == 0.0) {
                 continue;
             }
@@ -1177,7 +1190,8 @@ class ShipmentService
             if (!$productId || isset($prices[$productId])) {
                 continue;
             }
-            $price = $line[self::linePriceKey($parentSlug, $line)] ?? null;
+            $price = $parentSlug === self::SUPPLIER && $targetKey === 'price' && Schema::hasTable('products')
+                ? DB::table('products')->where('id', $productId)->value('price') : ($line[$targetKey] ?? null);
             if (!is_numeric($price) || (float) $price == 0.0) {
                 continue;
             }
@@ -1238,7 +1252,8 @@ class ShipmentService
                 continue;
             }
             $targetKey = self::linePriceKey($targetSlug);
-            $sourcePrice = $match[self::linePriceKey($sourceSlug, $match)] ?? null;
+            $sourcePrice = $sourceSlug === self::SUPPLIER && $targetKey === 'price' && Schema::hasTable('products')
+                ? DB::table('products')->where('id', (int) ($match['id'] ?? 0))->value('price') : ($match[$targetKey] ?? null);
             if ($empty($sourcePrice) || (is_numeric($line[$targetKey] ?? null) && abs((float) $line[$targetKey] - (float) $sourcePrice) < 0.001)) {
                 continue;
             }

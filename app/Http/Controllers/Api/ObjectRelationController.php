@@ -65,7 +65,7 @@ class ObjectRelationController extends Controller
             }
         }
         $targetProducts = \App\Services\ShipmentService::productsOf($data['target_slug'], (int) $data['target_id']);
-        if (count($targetProducts)) {
+        if (count($targetProducts) && !\App\Services\TransferService::isEntity((string) $data['target_slug'])) {
             $linkErrors = \App\Services\ShipmentService::validateAgainstPair($data['source_slug'], (int) $data['source_id'], $data['target_slug'], (int) $data['target_id'], $targetProducts);
             if (count($linkErrors)) {
                 return response()->json([
@@ -116,6 +116,14 @@ class ObjectRelationController extends Controller
         }
 
         \App\Services\ProductionService::afterLink((string) $data['source_slug'], (int) $data['source_id'], (string) $data['target_slug'], (int) $data['target_id']);
+        if ($data['source_slug'] === 'production_orders' && $data['target_slug'] === 'productions') {
+            \App\Services\OneC\OneCExportService::markChangedById('productions', (int) $data['target_id']);
+        }
+        foreach ([[$data['source_slug'], $data['source_id']], [$data['target_slug'], $data['target_id']]] as [$slug, $id]) {
+            if (\App\Services\TransferService::isEntity((string) $slug)) {
+                \App\Services\TransferService::refresh((string) $slug, (int) $id);
+            }
+        }
 
         if ($data['target_slug'] === \App\Services\ShipmentService::DOCUMENT) {
             \App\Services\ShipmentService::recalcForDocument((int) $data['target_id']);
@@ -172,7 +180,7 @@ class ObjectRelationController extends Controller
                 return response()->json(['errors' => $singleErrors]);
             }
         }
-        $errors = \App\Services\ShipmentService::validateAgainstPair(
+        $errors = \App\Services\TransferService::isEntity((string) $data['target_slug']) ? [] : \App\Services\ShipmentService::validateAgainstPair(
             $data['source_slug'],
             (int) $data['source_id'],
             $data['target_slug'],

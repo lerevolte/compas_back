@@ -727,6 +727,7 @@ class Table
     }
 
     public const ORDER_PRODUCTS = 'order_products';
+    public const ADDITIONAL_COUNT_KEY = 'product_additional_count';
     public const OUTPUT_COUNT_KEY = 'product_output_count';
     public const OUTPUT_COUNT_TITLE = 'Кол-во продукции';
     public const OUTPUT_COUNT_ENTITIES = ['specifications'];
@@ -1306,6 +1307,36 @@ class Table
             foreach($table_columns as $i => $column) {
                 if(($column['key'] ?? null) == 'product_count' && empty($column['is_another_title']))
                     $table_columns[$i]['title'] = self::SHIPPED_TITLE;
+            }
+        }
+
+        if (\App\Services\TransferService::isEntity((string) $parentSlug)) {
+            $found = false;
+            foreach ($table_columns as &$column) {
+                $key = $column['key'] ?? null;
+                if ($key === self::ADDITIONAL_COUNT_KEY) {
+                    $found = true;
+                    $column['title'] = 'Дополнительно к отгрузке';
+                    $column['type'] = 'number';
+                    $column['read_only'] = 0;
+                    $column['can_edit'] = 1;
+                    $column['enabled'] = 1;
+                } else {
+                    $column['read_only'] = 1;
+                    $column['can_edit'] = 0;
+                    if (in_array($key, ['actions', 'iconDrag', 'iconDelete'], true)) {
+                        $column['enabled'] = 0;
+                    }
+                }
+            }
+            unset($column);
+            if (!$found) {
+                $table_columns[] = [
+                    'id' => null, 'title' => 'Дополнительно к отгрузке', 'key' => self::ADDITIONAL_COUNT_KEY,
+                    'width' => '200px', 'enabled' => 1, 'sort_order' => '', 'type' => 'number',
+                    'fixed' => '', 'index' => count($table_columns), 'fixTarget' => '0px',
+                    'read_only' => 0, 'can_edit' => 1, 'mask' => '', 'is_another_title' => 0,
+                ];
             }
         }
 

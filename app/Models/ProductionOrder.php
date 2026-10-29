@@ -24,7 +24,12 @@ class ProductionOrder extends Model
             if (!$model->user_id && $user) {
                 $model->user_id = $user->id;
             }
+            \App\Services\OneC\OneCExportService::assignStatus($model);
         });
+
+        static::saved(fn ($model) => \App\Services\OneC\OneCProductionService::changed($model));
+        static::deleted(fn ($model) => \App\Services\OneC\OneCExportService::markChanged($model));
+        static::restored(fn ($model) => \App\Services\OneC\OneCExportService::markChanged($model));
     }
 
     public function setProducts(array $products, $sum = null)
@@ -52,6 +57,7 @@ class ProductionOrder extends Model
             true
         );
         $this->saveQuietly();
+        \App\Services\OneC\OneCExportService::markChanged($this);
         try {
             \App\Events\ObjectUpdated::dispatch('ObjectUpdated', $this->getData($objects['changed_fields'] ?? []));
         } catch (\Throwable $e) {
