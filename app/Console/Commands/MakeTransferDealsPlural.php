@@ -12,7 +12,7 @@ class MakeTransferDealsPlural extends Command
 {
     protected $signature = 'transfers:plural-deals {target=all : seeds | all-tenants | all | <tenant_id>}';
 
-    protected $description = 'Сделать поле «Заказ покупателя» у перемещений множественным';
+    protected $description = 'Сделать поле «Заказ покупателя» у заказов на перемещение и перемещений множественным';
 
     public function handle(): int
     {
@@ -57,7 +57,18 @@ class MakeTransferDealsPlural extends Command
 
     private function updatePortal($db, string $label, bool $inTenant): void
     {
-        $typeId = $db->table('data_types')->where('slug', 'transfers')->value('id');
+        $updated = false;
+        foreach (['transfer_orders', 'transfers'] as $slug) {
+            $updated = $this->updateField($db, $label, $slug) || $updated;
+        }
+        if ($updated && $inTenant) {
+            Settings::clear_cache();
+        }
+    }
+
+    private function updateField($db, string $label, string $slug): bool
+    {
+        $typeId = $db->table('data_types')->where('slug', $slug)->value('id');
         $field = $typeId ? $db->table('data_rows')
             ->where('data_type_id', $typeId)
             ->where('field', 'related_deals')
@@ -66,38 +77,37 @@ class MakeTransferDealsPlural extends Command
             ->where('is_remove', 0)
             ->first() : null;
 
-        if (!$field || !$db->getSchemaBuilder()->hasColumn('transfers', 'related_deals')) {
-            $this->line("{$label}: поле не установлено, пропуск");
-            return;
+        if (!$field || !$db->getSchemaBuilder()->hasColumn($slug, 'related_deals')) {
+            $this->line("{$label} {$slug}: поле не установлено, пропуск");
+            return false;
         }
 
         $columnType = strtolower((string) $db->table('information_schema.COLUMNS')
             ->whereRaw('TABLE_SCHEMA = DATABASE()')
-            ->where('TABLE_NAME', 'transfers')
+            ->where('TABLE_NAME', $slug)
             ->where('COLUMN_NAME', 'related_deals')
             ->value('DATA_TYPE'));
 
         if ($columnType !== 'text') {
-            $db->statement('ALTER TABLE `transfers` MODIFY `related_deals` TEXT NULL');
+            $db->statement("ALTER TABLE `{$slug}` MODIFY `related_deals` TEXT NULL");
         }
 
-        $db->table('transfers')->whereNotNull('related_deals')->orderBy('id')->chunkById(500, function ($rows) use ($db) {
+        $db->table($slug)->whereNotNull('related_deals')->orderBy('id')->chunkById(500, function ($rows) use ($db, $slug) {
             foreach ($rows as $row) {
                 $ids = RelationFieldsService::ids($row->related_deals);
                 $value = json_encode($ids);
                 if ($row->related_deals !== $value) {
-                    $db->table('transfers')->where('id', $row->id)->update(['related_deals' => $value]);
+                    $db->table($slug)->where('id', $row->id)->update(['related_deals' => $value]);
                 }
             }
         });
 
         $db->table('data_rows')->where('id', $field->id)->update(['is_plural' => 1]);
         if ($db->getSchemaBuilder()->hasTable('local_cache')) {
-            $db->table('local_cache')->where('url', 'fields/transfers')->update(['updated_at' => now()]);
+            $db->table('local_cache')->where('url', 'fields/' . $slug)->update(['updated_at' => now()]);
         }
-        if ($inTenant) {
-            Settings::clear_cache();
-        }
-        $this->info("{$label}: поле «Заказ покупателя» множественное");
+        $this->info("{$label} {$slug}: поле «Заказ покупателя» множественное");
+
+        return true;
     }
 }

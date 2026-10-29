@@ -43,7 +43,7 @@ class RelationFieldsService
         'receipt_invoices' => [],
         'cash_expenses' => [],
         'cash_incomes' => [],
-        'transfer_orders' => ['logistic_tasks', 'transfers'],
+        'transfer_orders' => ['deals', 'logistic_tasks', 'transfers'],
         'transfers' => ['deals'],
     ];
 
