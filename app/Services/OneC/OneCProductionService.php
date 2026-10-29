@@ -44,7 +44,8 @@ class OneCProductionService
                 ->whereNull('s.confirmed_at')
                 ->where(fn ($q) => $q->whereNull('d.deleted_at')->orWhereNotNull('s.sent_at'))
                 ->where('d.updated_at', '<=', $settled);
-            if ($since = OneCExportService::sinceFor($config, $slug)) {
+            $since = OneCExportService::slugSince($config)[$slug] ?? ($config->since ?? null);
+            if ($since) {
                 $query->where('d.created_at', '>=', $since);
             }
             $columns = ['d.*', 's.onec_ref as onec_export_ref', 's.sent_at as onec_export_sent_at'];
