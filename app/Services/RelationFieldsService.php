@@ -44,7 +44,7 @@ class RelationFieldsService
         'cash_expenses' => [],
         'cash_incomes' => [],
         'transfer_orders' => ['logistic_tasks', 'transfers'],
-        'transfers' => [],
+        'transfers' => ['deals'],
     ];
 
     public const EXCLUDE = [
