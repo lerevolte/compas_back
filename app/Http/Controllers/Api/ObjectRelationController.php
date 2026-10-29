@@ -282,7 +282,7 @@ class ObjectRelationController extends Controller
                         'name' => \App\Services\ShipmentService::plainName($product['name'] ?? ''),
                         'is_service' => in_array((int) ($product['id'] ?? 0), $services, true),
                         'count' => (float) ($product['count'] ?? 0),
-                        'price' => (float) ($product['price'] ?? 0),
+                        'price' => (float) ($product[$parentSlug === 'supplier_orders' && \App\Services\ShipmentService::isSource((string) $slug) ? 'purchase_price' : 'price'] ?? 0),
                         'used_others' => \App\Services\ShipmentService::lookup($usedOthers, $product),
                         'used_others_price' => \App\Services\ShipmentService::lookupPrice($usedOthers, $product),
                     ];
@@ -296,6 +296,7 @@ class ObjectRelationController extends Controller
         return response()->json([
             'parent' => $parentInfo,
             'limits' => $limits,
+            'price_key' => ($parent[0] ?? null) === 'supplier_orders' && \App\Services\ShipmentService::isSource((string) $slug) ? 'product_purchase_price' : 'product_price',
             'usage' => $usage,
             'services' => \App\Services\ShipmentService::serviceIds(array_map(fn ($p) => (int) ($p['id'] ?? 0), $ownProducts)),
             'loading' => $loading,

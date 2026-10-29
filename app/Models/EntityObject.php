@@ -1889,6 +1889,9 @@ class EntityObject
             }
 
             if($order) {
+                $productPriceSlug = (in_array((string) $request->order_entity, ['logistic_tasks', 'pickups'], true)
+                    && (\App\Services\ShipmentService::parentOf((string) $request->order_entity, (int) $request->order_id)[0] ?? null) === 'supplier_orders')
+                    ? 'supplier_orders' : (string) ($request->order_entity ?? '');
                 $products = json_decode($order->products, true);
 
                 $product_ids = array();
@@ -2320,7 +2323,7 @@ class EntityObject
                         }
                         $data['product_nds'] = $line_nds;
                         $data['product_nds_included'] = $line_nds_included === null || $line_nds_included === '' ? '1' : (string) $line_nds_included;
-                        $line_parts = \App\Services\ShipmentService::lineParts(['nds' => $line_nds, 'nds_included' => $data['product_nds_included']] + $product, \App\Services\ShipmentService::linePriceKey((string) ($request->order_entity ?? ''), $product));
+                        $line_parts = \App\Services\ShipmentService::lineParts(['nds' => $line_nds, 'nds_included' => $data['product_nds_included']] + $product, \App\Services\ShipmentService::linePriceKey($productPriceSlug, $product));
                         $data['product_sum'] = round($line_parts['sum'], 2);
                         $data['product_nds_sum'] = round($line_parts['vat'], 2);
                         $data['product_total'] = round($line_parts['gross'], 2);
@@ -2353,9 +2356,9 @@ class EntityObject
                             Table::ADDITIONAL_COUNT_KEY => $product['additional_count'] ?? 0,
                             'product_weight' => $product['weight'] ?? null,
                             'product_volume' => $product['volume'] ?? 0,
-                            'product_sum' => round(\App\Services\ShipmentService::lineParts($product, \App\Services\ShipmentService::linePriceKey((string) ($request->order_entity ?? ''), $product))['sum'], 2),
-                            'product_nds_sum' => round(\App\Services\ShipmentService::lineParts($product, \App\Services\ShipmentService::linePriceKey((string) ($request->order_entity ?? ''), $product))['vat'], 2),
-                            'product_total' => round(\App\Services\ShipmentService::lineParts($product, \App\Services\ShipmentService::linePriceKey((string) ($request->order_entity ?? ''), $product))['gross'], 2),
+                            'product_sum' => round(\App\Services\ShipmentService::lineParts($product, \App\Services\ShipmentService::linePriceKey($productPriceSlug, $product))['sum'], 2),
+                            'product_nds_sum' => round(\App\Services\ShipmentService::lineParts($product, \App\Services\ShipmentService::linePriceKey($productPriceSlug, $product))['vat'], 2),
+                            'product_total' => round(\App\Services\ShipmentService::lineParts($product, \App\Services\ShipmentService::linePriceKey($productPriceSlug, $product))['gross'], 2),
                             'product_shipped' => $product['shipped'] ?? 0,
                             'product_output_count' => $product['output_count'] ?? null,
                             \App\Services\ProductionService::SPEC_KEY => \App\Services\ProductionService::specificationCell($product['specification_id'] ?? null),

@@ -1094,7 +1094,9 @@ class ShipmentService
             } elseif ($targetSlug === self::RECEIPT_DOC) {
                 $line['purchase_price'] = $line['purchase_price'] ?? ($card->purchase_price ?? null);
             }
-            $parts = self::lineParts($line, self::linePriceKey($targetSlug, $line));
+            $priceKey = $sourceSlug === self::SUPPLIER && self::isSource($targetSlug)
+                ? 'purchase_price' : self::linePriceKey($targetSlug, $line);
+            $parts = self::lineParts($line, $priceKey);
             $line['sum'] = round($parts['sum'], 2);
             $line['nds_sum'] = round($parts['vat'], 2);
             $line['total'] = round($parts['gross'], 2);
@@ -1117,7 +1119,7 @@ class ShipmentService
             return $lines;
         }
         $ownRow = Schema::hasTable($slug) ? DB::table($slug)->where('id', $id)->first(['products']) : null;
-        $targetKey = self::linePriceKey($slug);
+        $targetKey = $parentSlug === self::SUPPLIER && self::isSource($slug) ? 'purchase_price' : self::linePriceKey($slug);
         $known = [];
         foreach (self::decode($ownRow->products ?? null) as $line) {
             if (is_array($line) && (int) ($line['id'] ?? 0) && !isset($known[(int) $line['id']])) {
@@ -1160,7 +1162,7 @@ class ShipmentService
                     $line[$key] = $match[$key];
                 }
             }
-            $parts = self::lineParts($line, self::linePriceKey($slug, $line));
+            $parts = self::lineParts($line, $targetKey);
             $line['sum'] = round($parts['sum'], 2);
             $line['nds_sum'] = round($parts['vat'], 2);
             $line['total'] = round($parts['gross'], 2);
@@ -1183,6 +1185,8 @@ class ShipmentService
             return $result;
         }
         [$parentSlug, $parentId] = $parent;
+        $targetKey = $parentSlug === self::SUPPLIER && self::isSource($slug) ? 'purchase_price' : $targetKey;
+        $result['key'] = $targetKey;
         $row = DB::table($parentSlug)->where('id', $parentId)->first(['products']);
         $prices = [];
         foreach (self::decode($row->products ?? null) as $line) {
@@ -1251,7 +1255,7 @@ class ShipmentService
             if (!$match) {
                 continue;
             }
-            $targetKey = self::linePriceKey($targetSlug);
+            $targetKey = $sourceSlug === self::SUPPLIER && self::isSource($targetSlug) ? 'purchase_price' : self::linePriceKey($targetSlug);
             $sourcePrice = $sourceSlug === self::SUPPLIER && $targetKey === 'price' && Schema::hasTable('products')
                 ? DB::table('products')->where('id', (int) ($match['id'] ?? 0))->value('price') : ($match[$targetKey] ?? null);
             if ($empty($sourcePrice) || (is_numeric($line[$targetKey] ?? null) && abs((float) $line[$targetKey] - (float) $sourcePrice) < 0.001)) {
@@ -1263,7 +1267,7 @@ class ShipmentService
                     $line[$key] = $match[$key];
                 }
             }
-            $parts = self::lineParts($line, self::linePriceKey($targetSlug, $line));
+            $parts = self::lineParts($line, $targetKey);
             $line['sum'] = round($parts['sum'], 2);
             $line['nds_sum'] = round($parts['vat'], 2);
             $line['total'] = round($parts['gross'], 2);
@@ -1546,7 +1550,10 @@ class ShipmentService
                 $count = (float) ($product['count'] ?? 0);
                 $childKey = self::linePriceKey($childSlug, $product);
                 $limitKey = self::linePriceKey($parentSlug, $limit);
-                if ($childKey !== $limitKey) {
+                if (($parentSlug === self::SUPPLIER && self::isSource($childSlug))
+                    || (self::isSource($parentSlug) && $childSlug === self::RECEIPT_DOC && self::isLoading($parentSlug, $parentId))) {
+                    $childKey = $limitKey = 'purchase_price';
+                } elseif ($childKey !== $limitKey) {
                     $childKey = $limitKey = 'price';
                 }
                 $price = (float) ($product[$childKey] ?? 0);

@@ -809,7 +809,7 @@ class Table
         return null;
     }
 
-    public static function get_order_products($parentSlug = null)
+    public static function get_order_products($parentSlug = null, $sourceSlug = null)
     {
         $user = \Auth::user();
         if(!$user)
@@ -1278,7 +1278,8 @@ class Table
                 $table_columns[$i]['index'] = $i;
         }
 
-        $isSupplierOrder = in_array((string) $parentSlug, ['supplier_orders', 'receipt_invoices'], true);
+        $isSupplierOrder = in_array((string) $parentSlug, ['supplier_orders', 'receipt_invoices'], true)
+            || (in_array((string) $parentSlug, ['logistic_tasks', 'pickups'], true) && $sourceSlug === 'supplier_orders');
         foreach($table_columns as $i => $column) {
             $key = $column['key'] ?? null;
             if($key == 'product_price' && empty($column['is_another_title']))
@@ -1293,6 +1294,8 @@ class Table
                 $table_columns[$i]['read_only'] = $isSupplierOrder ? 1 : 0;
             if($key == 'product_price' && $isSupplierOrder && empty($column['is_another_title']))
                 $table_columns[$i]['title'] = self::AVG_SALE_PRICE_TITLE;
+            if($key == 'product_price' && $sourceSlug === 'supplier_orders' && in_array((string) $parentSlug, ['logistic_tasks', 'pickups'], true))
+                $table_columns[$i]['enabled'] = 0;
             if($key == 'product_sum')
                 $table_columns[$i]['read_only'] = 0;
             if(in_array($key, ['product_nds_sum', 'product_total'], true)) {

@@ -205,7 +205,7 @@ class TaskController extends Controller
         return response()->json(['success' => true]);
     }
 
-    private function compositionLines($slug, array $rows): array
+    private function compositionLines($slug, array $rows, ?string $priceSlug = null): array
     {
         $products = array();
         foreach ($rows as $product) {
@@ -238,7 +238,7 @@ class TaskController extends Controller
                     $line['specification_id'] = $specificationId;
                 }
             }
-            $parts = \App\Services\ShipmentService::lineParts($line, \App\Services\ShipmentService::linePriceKey((string) $slug, $line));
+            $parts = \App\Services\ShipmentService::lineParts($line, \App\Services\ShipmentService::linePriceKey($priceSlug ?? (string) $slug, $line));
             $line['sum'] = round($parts['sum'], 2);
             $line['nds_sum'] = round($parts['vat'], 2);
             $line['total'] = round($parts['gross'], 2);
@@ -274,7 +274,10 @@ class TaskController extends Controller
             }
             $products = \App\Services\TransferService::compose((string) $slug, (int) $id, \App\Services\ShipmentService::decode($object->products), $additional);
         } else {
-            $products = $this->compositionLines($slug, (array) ($request->products ?? []));
+            $source = \App\Services\ShipmentService::parentOf((string) $slug, (int) $id);
+            $priceSlug = ($source[0] ?? null) === 'supplier_orders' && \App\Services\ShipmentService::isSource((string) $slug)
+                ? 'supplier_orders' : (string) $slug;
+            $products = $this->compositionLines($slug, (array) ($request->products ?? []), $priceSlug);
         }
         if (!\App\Services\TransferService::isEntity((string) $slug)) {
             try {

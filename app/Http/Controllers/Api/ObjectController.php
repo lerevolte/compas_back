@@ -391,11 +391,16 @@ class ObjectController extends Controller
 
         $products = [];
         $tableKeys = [];
+        $productSource = $id && in_array($slug, ['logistic_tasks', 'pickups'], true)
+            ? \App\Services\ShipmentService::parentOf($slug, (int) $id) : null;
+        if (!$productSource && $request->source_slug === 'supplier_orders') {
+            $productSource = ['supplier_orders', (int) $request->source_id];
+        }
 
         if (in_array($slug, ['logistic_tasks', 'pickups', 'deals', 'supplier_orders', 'payment_invoices', 'expense_invoices', 'product_returns', 'receipt_invoices', 'addresses', 'specifications', 'production_orders', 'productions', 'transfer_orders', 'transfers'], true)) {
             $productsPerms = $this->getProductsFieldPerms($user, $entity->id, $isExternalAccess, $slug);
             if ($productsPerms['read']) {
-                $tableKeys = Table::get_order_products($slug);
+                $tableKeys = Table::get_order_products($slug, $productSource[0] ?? null);
                 if (!$productsPerms['write']) {
                     foreach ($tableKeys as $tk => $tableKey) {
                         $tableKeys[$tk]['read_only'] = 1;
@@ -438,7 +443,8 @@ class ObjectController extends Controller
             'detail'         => $detail,
             'table'          => [
                 'tableKeys' => $tableKeys,
-                'tableBody' => $products
+                'tableBody' => $products,
+                'priceSlug' => ($productSource[0] ?? null) === 'supplier_orders' ? 'supplier_orders' : $slug
             ],
             'materials_table' => $materialsTable,
             'history_events' => $history_events,
