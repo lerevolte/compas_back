@@ -159,7 +159,7 @@ SQL);
             'comment' => ['type' => 'text', 'title' => 'Примечание', 'is_plural' => 1],
             'photo' => ['type' => 'file', 'title' => 'Файлы', 'show_file_name' => 1],
             'user_id' => ['type' => 'relation', 'title' => 'Ответственный', 'details' => '{"table":"users"}', 'is_link' => 1, 'required' => 1, 'relation_table' => 'users', 'is_inactive' => 1],
-            'weight' => ['type' => 'number', 'title' => 'Вес', 'hide' => 1],
+            'weight' => ['type' => 'number', 'title' => 'Вес', 'hide' => 1, 'only_read' => 1],
             'volume' => ['type' => 'number', 'title' => 'Объем', 'hide' => 1],
             'created_at' => ['type' => 'date', 'title' => 'Дата создания', 'only_read' => 1, 'is_default' => 1, 'hide' => 1, 'mobile_pages' => '0'],
             'updated_at' => ['type' => 'date', 'title' => 'Дата изменения', 'only_read' => 1, 'is_default' => 1, 'hide' => 1, 'mobile_pages' => '0'],

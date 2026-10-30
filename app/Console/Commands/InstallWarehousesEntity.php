@@ -6,26 +6,6 @@ use Illuminate\Console\Command;
 use Illuminate\Database\ConnectionInterface;
 use App\Models\Tenant;
 
-/**
- * Устанавливает сущность «Быстрые задачи» (warehouses) в портал — полный
- * аналог «Библиотеки задач» (addresses), но с собственной таблицей warehouses.
- *
- * Что ставит (живёт в каждой тенант-БД, копируется в новые порталы из
- * admin_seeds функцией TenantService::create):
- *   - data_types        — сама сущность warehouses (модель App\Models\Warehouse);
- *   - field_sections    — два раздела: «Информация» и «Используемые поля в модуле»;
- *   - data_rows         — поля сущности (клонируются из logistic_tasks);
- *   - sidebar_items     — пункт сайдбара «Быстрые задачи»;
- *   - settings(menu)    — меню вкладок карточки.
- * Плюс гарантирует наличие таблицы warehouses.
- *
- * Команда ИДЕМПОТЕНТНА.
- *
- * Порядок выкатки:
- *   1) php artisan entity:install-warehouses seeds
- *   2) php artisan entity:install-warehouses admin_test4
- *   3) php artisan entity:install-warehouses all-tenants
- */
 class InstallWarehousesEntity extends Command
 {
     protected $signature = 'entity:install-warehouses
@@ -257,7 +237,7 @@ class InstallWarehousesEntity extends Command
             'user_id'               => $base(['field' => 'user_id', 'type' => 'relation', 'title' => 'Ответственный', 'sort' => 12, 'required' => 1, 'details' => '{"table":"users"}', 'is_link' => 1, 'relation_table' => 'users', 'related_field' => 'task_id', 'is_inactive' => 1]),
             'comment'               => $base(['field' => 'comment', 'type' => 'text', 'title' => 'Примечание', 'sort' => 50]),
             'contact'               => $base(['field' => 'contact', 'type' => 'text', 'title' => 'Контактное лицо', 'sort' => 51]),
-            'weight'                => $base(['field' => 'weight', 'type' => 'number', 'title' => 'Вес', 'unit' => 'кг', 'sort' => 52]),
+            'weight'                => $base(['field' => 'weight', 'type' => 'number', 'title' => 'Вес', 'unit' => 'кг', 'sort' => 52, 'only_read' => 1]),
             'delivery_price'        => $base(['field' => 'delivery_price', 'type' => 'number', 'title' => 'Цена доставки', 'unit' => 'руб', 'sort' => 53]),
             'volume'                => $base(['field' => 'volume', 'type' => 'number', 'title' => 'Объем', 'unit' => 'л', 'sort' => 54]),
             'company_id'            => $base(['field' => 'company_id', 'type' => 'relation', 'title' => 'Компания', 'sort' => 54, 'details' => '{"table":"companies"}', 'relation_table' => 'companies']),

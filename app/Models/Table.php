@@ -729,7 +729,7 @@ class Table
     public const ORDER_PRODUCTS = 'order_products';
     public const ADDITIONAL_COUNT_KEY = 'product_additional_count';
     public const OUTPUT_COUNT_KEY = 'product_output_count';
-    public const OUTPUT_COUNT_TITLE = 'Кол-во продукции';
+    public const OUTPUT_COUNT_TITLE = 'Кол-во готовой продукции';
     public const OUTPUT_COUNT_ENTITIES = ['specifications'];
 
     private static function withOutputCountColumn(array $columns, $parentSlug): array
@@ -867,7 +867,7 @@ class Table
             $table_columns = collect($layout['fields']);
             $table_columns = $table_columns->keyBy('key')->toArray();
             foreach($table_columns as $key => $column) {
-                if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'remnant_name' && $key != 'product_name' && $key != 'product_id' && $key != 'product_price' && $key != 'product_purchase_price' && $key != 'product_count' && $key != 'product_weight' && $key != 'product_volume' && $key != 'product_sum' && $key != 'product_shipped' && $key != 'product_nds' && $key != 'product_nds_included' && $key != 'product_nds_sum' && $key != 'product_total' && $key != self::OUTPUT_COUNT_KEY && $key != 'iconDrag' || $key == 'price' || $key == 'name' || $key == 'weight' || $key == 'volume' || $key == 'purchase_price' || $key == 'nds' || $key == 'nds_included')
+                if(!$model_fields->contains('field', $key) && $key != 'isChoose' && $key != 'actions' && $key != 'remnant_name' && $key != 'product_name' && $key != 'product_id' && $key != 'product_price' && $key != 'product_purchase_price' && $key != 'product_count' && $key != 'product_weight' && $key != 'product_volume' && $key != 'product_sum' && $key != 'product_shipped' && $key != 'product_additional_count' && $key != 'product_nds' && $key != 'product_nds_included' && $key != 'product_nds_sum' && $key != 'product_total' && $key != self::OUTPUT_COUNT_KEY && $key != 'iconDrag' || $key == 'price' || $key == 'name' || $key == 'weight' || $key == 'volume' || $key == 'purchase_price' || $key == 'nds' || $key == 'nds_included')
                     unset($table_columns[$key]);
             }
             unset($table_columns['iconDelete']);

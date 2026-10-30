@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Schema;
 class ImportSpecifications extends Command
 {
     protected $signature = 'specifications:import
-        {file : JSON-выгрузка из 1С (naim, id_1c, idgp_1c, sostav[id_1c, B24_ID, kolvo])}
+        {file : JSON-выгрузка из 1С (naim, id_1c, idgp_1c, sostav[id_1c, B24_ID, kolvo, kolvo_gp])}
         {target=avixo : <tenant_id>}
         {--dry-run : только показать сопоставление}
         {--report= : путь к CSV с несопоставленными позициями}';
@@ -151,7 +151,7 @@ class ImportSpecifications extends Command
                     continue;
                 }
                 $seen[$dup] = true;
-                $lines[] = $this->productLine($product, $row['kolvo'] ?? 0);
+                $lines[] = $this->productLine($product, $row['kolvo'] ?? 0, $row['kolvo_gp'] ?? null);
             }
             if ($dryRun) {
                 continue;
@@ -302,7 +302,7 @@ class ImportSpecifications extends Command
         return '1С ' . trim((string) ($row['id_1c'] ?? '')) . ' / B24_ID ' . trim((string) ($row['B24_ID'] ?? ''));
     }
 
-    private function productLine(object $product, $count): array
+    private function productLine(object $product, $count, $outputCount = null): array
     {
         $count = is_numeric($count) ? $count + 0 : 0;
         $line = [
@@ -316,6 +316,9 @@ class ImportSpecifications extends Command
             'nds' => $this->first($product->nds ?? null),
             'nds_included' => $this->first($product->nds_included ?? null),
         ];
+        if ($outputCount !== null && $outputCount !== '') {
+            $line['output_count'] = is_numeric($outputCount) ? $outputCount + 0 : $outputCount;
+        }
         $parts = ShipmentService::lineParts($line, 'price');
         $line['sum'] = round($parts['sum'], 2);
         $line['nds_sum'] = round($parts['vat'], 2);

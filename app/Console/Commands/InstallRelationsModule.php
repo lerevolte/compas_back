@@ -92,9 +92,9 @@ class InstallRelationsModule extends Command
                     $this->convertColumn($db, $slug, $field, $single, $label);
                 }
                 $title = $single ? (string) $present[$target]->title_singular : (string) $present[$target]->title_plural;
-                if ($slug === 'logistic_tasks' || $slug === 'pickups' || $slug === 'transfer_orders' || $slug === 'transfers') {
+                if ($slug === 'transfer_orders' || $slug === 'transfers') {
                     if ($target === 'deals') {
-                        $title = 'Заказ покупателя';
+                        $title = 'Заказы покупателей на перемещение';
                     }
                 }
                 $attrs = [

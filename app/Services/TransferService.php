@@ -44,11 +44,12 @@ class TransferService
 
     public static function compose(string $slug, int $id, array $current, array $additional = []): array
     {
+        $current = ShipmentService::withoutServices($current);
         $ids = self::dealIds($slug, $id);
         $lines = [];
         if ($ids && Schema::hasTable('deals')) {
             foreach (DB::table('deals')->whereIn('id', $ids)->whereNull('deleted_at')->pluck('products') as $json) {
-                foreach (ShipmentService::decode($json) as $line) {
+                foreach (ShipmentService::withoutServices(ShipmentService::decode($json)) as $line) {
                     if (!is_array($line)) {
                         continue;
                     }

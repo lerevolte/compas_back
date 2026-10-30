@@ -176,7 +176,7 @@ SQL);
             }
             $fields += [
                 'products' => ['type' => 'json', 'title' => 'Состав', 'only_read' => 1, 'is_default' => 1],
-                'weight' => ['type' => 'number', 'title' => 'Вес'],
+                'weight' => ['type' => 'number', 'title' => 'Вес', 'only_read' => 1],
                 'comment' => ['type' => 'text', 'title' => 'Примечание', 'is_plural' => 1],
                 'photo' => ['type' => 'file', 'title' => 'Файлы', 'show_file_name' => 1],
                 'user_id' => ['type' => 'relation', 'title' => 'Ответственный', 'details' => '{"table":"users"}', 'is_link' => 1, 'required' => 1, 'relation_table' => 'users', 'is_inactive' => 1],
