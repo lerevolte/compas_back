@@ -20,7 +20,7 @@ class B24ProductSync
     private array $params;
     private ?bool $catalogScope = null;
 
-    public const PUSH_PRODUCT_FIELDS = ['name', 'price', 'weight', 'category_id', 'product_type', 'fact_product_id'];
+    public const PUSH_PRODUCT_FIELDS = ['name', 'price', 'weight', 'category_id', 'product_type', 'fact_product_id', 'nds'];
     public const PUSH_CATEGORY_FIELDS = ['name', 'parent_id'];
 
     private const LINK_PROPERTY = 'PROPERTY_132';
@@ -842,12 +842,8 @@ class B24ProductSync
 
     private ?array $vatRates = null;
 
-    private function ndsFromVatId($vatId): ?string
+    private function vatRates(): array
     {
-        $vatId = (string) $vatId;
-        if ($vatId === '' || $vatId === '0') {
-            return null;
-        }
         if ($this->vatRates === null) {
             $this->vatRates = [];
             try {
@@ -859,12 +855,38 @@ class B24ProductSync
                 Log::channel('bitrix24')->warning('product-sync: crm.vat.list failed', ['error' => $e->getMessage()]);
             }
         }
+
+        return $this->vatRates;
+    }
+
+    private function ndsFromVatId($vatId): ?string
+    {
+        $vatId = (string) $vatId;
+        if ($vatId === '' || $vatId === '0') {
+            return null;
+        }
+        $this->vatRates();
         if (!array_key_exists($vatId, $this->vatRates)) {
             return null;
         }
         $rate = $this->vatRates[$vatId];
 
         return $rate > 0 ? rtrim(rtrim(number_format($rate, 2, '.', ''), '0'), '.') : 'none';
+    }
+
+    private function vatIdFromNds($nds): ?string
+    {
+        if ($nds === null || $nds === '') {
+            return '0';
+        }
+        $rate = $nds === 'none' ? 0.0 : (float) $nds;
+        foreach ($this->vatRates() as $id => $availableRate) {
+            if ($availableRate === $rate) {
+                return $id;
+            }
+        }
+
+        return null;
     }
 
     private function propertyValue($raw): ?string
@@ -1143,6 +1165,14 @@ class B24ProductSync
         if ($all || in_array('price', $changed, true)) {
             $fields['PRICE'] = (float) $product->price;
             $fields['CURRENCY_ID'] = 'RUB';
+        }
+        if (($all || in_array('nds', $changed, true)) && $this->hasColumn('nds')) {
+            $vatId = $this->vatIdFromNds($product->nds);
+            if ($vatId !== null) {
+                $fields['VAT_ID'] = $vatId;
+            } else {
+                Log::channel('bitrix24')->warning('product-sync: VAT rate not found', ['product_id' => $product->id, 'nds' => $product->nds]);
+            }
         }
         if ($all || in_array('category_id', $changed, true)) {
             $sectionId = 0;
